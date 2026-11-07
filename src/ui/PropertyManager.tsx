@@ -1,6 +1,7 @@
-import type { JSX } from "preact";
+import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { dist } from "../geom/vec";
+import { measure } from "../model/dimensions";
 import { entityLabel, ptv } from "../model/sketch";
 import type { Entity, Id, Sketch } from "../model/types";
 import { fmt } from "../tools/line";
@@ -10,7 +11,7 @@ import css from "./ui.module.css";
 import { ConflictList, RelationsSections, RelationsPanel } from "./RelationsUi";
 import { VariablesPanel } from "./VariablesPanel";
 
-export function Section({ title, children, open = true }: { title: string; children: JSX.Element | JSX.Element[] | null | false; open?: boolean }) {
+export function Section({ title, children, open = true }: { title: string; children: ComponentChildren; open?: boolean }) {
   const [isOpen, setOpen] = useState(open);
   return (
     <div class={css.section}>
@@ -197,6 +198,8 @@ export function PropertyManager() {
     );
   }
   const single = ents.length === 1 ? ents[0] : null;
+  const dim = ui.selection.length === 1 ? s.dimensions[ui.selection[0]] : undefined;
+  if (dim) return <DimensionPm id={dim.id} />;
   return (
     <div class={css.pm}>
       <div class={css.pmTitle}>{single ? entityLabel(single) : `${ui.selection.length} items selected`}</div>
@@ -227,8 +230,58 @@ export function PropertyManager() {
   );
 }
 
+function DimensionPm({ id }: { id: string }) {
+  const app = useApp();
+  const ui = useUi();
+  const s = app.sketch();
+  const d = s.dimensions[id];
+  const [text, setText] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  if (!d) return null;
+  const typeName = { distance: "Linear (aligned)", distanceX: "Horizontal", distanceY: "Vertical", pointLine: "Point to line", angle: "Angle", radius: "Radius", diameter: "Diameter", arcLength: "Arc length" }[d.type];
+  const measured = Math.abs(measure(s, d));
+  const commit = () => {
+    if (text === null) return;
+    const e = app.setDimensionText(id, text);
+    setErr(e);
+    if (!e) setText(null);
+  };
+  return (
+    <div class={css.pm}>
+      <div class={css.pmTitle}>Dimension</div>
+      <ConflictList />
+      <Section title="Primary Value">
+        <div class={css.info}>{typeName}</div>
+        <label class={css.field}>
+          <span>Value</span>
+          <input
+            class={err ? css.inputErr : ""}
+            value={text ?? (d.driven ? fmt(measured) : d.expr)}
+            readOnly={d.driven}
+            onInput={(e) => setText((e.target as HTMLInputElement).value)}
+            onBlur={commit}
+            onKeyDown={(e) => e.key === "Enter" && commit()}
+          />
+        </label>
+        {err && <div class={css.conflict}>{err}</div>}
+        {!d.driven && d.expr.startsWith("=") && <div class={css.info}>= {fmt(d.value)}</div>}
+        <label class={css.check}>
+          <input type="checkbox" checked={d.driven} onChange={(e) => app.setDimensionDriven(id, (e.target as HTMLInputElement).checked)} /> Driven
+        </label>
+        <button class={css.small} onClick={() => app.openModify(id, false)}>
+          Modify…
+        </button>{" "}
+        <button class={css.small} onClick={() => (app.commit("Delete", (ed) => ed.deleteAny([id])), app.select([]))}>
+          Delete
+        </button>
+      </Section>
+      <div class={css.info}>{ui.status.conflicts.includes(id) ? "This dimension over-defines the sketch." : ""}</div>
+    </div>
+  );
+}
+
 function SketchSummary({ s }: { s: Sketch }) {
-  const n = Object.values(s.entities).filter((e) => e.type !== "point").length;
+  const n = Object.values(s.entities).filter((e) => e.id !== "origin" && (e.type !== "point" || !e.owner)).length;
   return (
     <div class={css.info}>
       {n} entities · {Object.keys(s.relations).length} relations · {Object.keys(s.dimensions).length} dimensions

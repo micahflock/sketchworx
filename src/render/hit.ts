@@ -78,6 +78,7 @@ export function entitySamples(s: Sketch, e: Entity): Vec2[] {
 export function boxSelect(s: Sketch, box: Box, crossing: boolean): Id[] {
   const out: Id[] = [];
   for (const e of Object.values(s.entities)) {
+    if (e.id === "origin") continue;
     const pts = entitySamples(s, e);
     if (e.type === "point") {
       if (inBox(pts[0], box)) out.push(e.id);

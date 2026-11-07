@@ -75,6 +75,10 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
   }
   const groups = CoincidenceGroups.of(s);
   const constraints: SolverConstraint[] = [];
+  if (s.entities.origin) {
+    constraints.push({ id: "origin#x", owner: "origin", kind: "coordX", p: "origin", v: 0 });
+    constraints.push({ id: "origin#y", owner: "origin", kind: "coordY", p: "origin", v: 0 });
+  }
   const unsupported: Id[] = [];
   for (const r of Object.values(s.relations)) {
     const out = relationConstraints(s, r, groups);

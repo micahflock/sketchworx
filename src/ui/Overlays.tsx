@@ -3,7 +3,7 @@ import { useApp, useUi } from "./hooks";
 import { Icon } from "./icons";
 import css from "./ui.module.css";
 import { ContextBar } from "./ContextBar";
-import { ModifyBox } from "./ModifyBox";
+import { ConfirmDialog, ModifyBox } from "./ModifyBox";
 
 const shortcutItems: { action: string; icon: string }[] = [
   { action: "tool:line", icon: "line" },
@@ -47,6 +47,7 @@ export function Overlays() {
       )}
       <ContextBar />
       <ModifyBox />
+      <ConfirmDialog />
     </>
   );
 }

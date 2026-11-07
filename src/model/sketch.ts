@@ -2,8 +2,12 @@ import type { Vec2 } from "../geom/vec";
 import { DOC_VERSION } from "./types";
 import type { ArcEntity, CircleEntity, Doc, Entity, Id, LineEntity, PointEntity, Sketch, SplineEntity } from "./types";
 
+/** Every sketch has a fixed origin point that can be related and dimensioned to. */
+export const ORIGIN = "origin";
+export const originPoint = (): PointEntity => ({ id: ORIGIN, type: "point", x: 0, y: 0 });
+
 export function createSketch(id: Id, name: string): Sketch {
-  return { id, name, advance: 600, entities: {}, relations: {}, dimensions: {} };
+  return { id, name, advance: 600, entities: { [ORIGIN]: originPoint() }, relations: {}, dimensions: {} };
 }
 
 export function createDoc(): Doc {
@@ -93,7 +97,7 @@ export function entityLabel(e: Entity): string {
   const n = e.id;
   switch (e.type) {
     case "point":
-      return e.owner ? `Point (${n})` : `Point${n}`;
+      return e.id === ORIGIN ? "Origin" : e.owner ? `Point (${n})` : `Point${n}`;
     case "line":
       return e.construction ? `Centerline ${n}` : `Line ${n}`;
     case "circle":

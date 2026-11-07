@@ -30,7 +30,7 @@ export function toSketchStatus(s: Sketch, r: SolveResult, unsupported: string[])
     } else entity[e.id] = r.entityStatus[e.id] ?? "under";
   }
   const conflicts = Array.from(new Set([...r.conflicts, ...r.redundant, ...unsupported]));
-  const hasGeom = Object.values(s.entities).some((e) => e.type !== "point") || Object.keys(s.entities).length > 0;
+  const hasGeom = Object.keys(s.entities).some((id) => id !== "origin");
   let state: SketchStatus["state"];
   if (!hasGeom) state = "empty";
   else if (conflicts.length) state = "over";
@@ -51,7 +51,15 @@ export class SolverService {
   /** Extra hook so later milestones can post-process a solved doc (driven dimensions). */
   postSolve: ((doc: Doc) => Doc) | null = null;
 
+  private waiters: (() => void)[] = [];
+
   constructor(private store: Store, private solver: Solver) {}
+
+  /** Resolves once the current document has been solved. */
+  settled(): Promise<void> {
+    if (!this.inFlight && !this.dirty) return Promise.resolve();
+    return new Promise((r) => this.waiters.push(r));
+  }
 
   requestSolve() {
     this.dirty = true;
@@ -79,6 +87,11 @@ export class SolverService {
       } finally {
         this.inFlight = false;
       }
+    }
+    if (!this.dirty && !this.inFlight) {
+      const w = this.waiters;
+      this.waiters = [];
+      for (const f of w) f();
     }
   }
 

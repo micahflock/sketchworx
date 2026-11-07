@@ -1,5 +1,6 @@
 import { DOC_VERSION } from "../model/types";
 import type { Doc, Entity, Sketch } from "../model/types";
+import { ORIGIN, originPoint } from "../model/sketch";
 
 export const FILE_EXT = ".sketch.json";
 
@@ -39,6 +40,7 @@ export function parseDoc(text: string): Doc {
     throw new FileFormatError(`Unsupported file version ${raw.version}`);
   const slots: Sketch[] = raw.slots.map((s: any, i: number) => {
     const entities: Record<string, Entity> = {};
+    if (!(s.entities ?? []).some((e: Entity) => e.id === ORIGIN)) entities[ORIGIN] = originPoint();
     for (const e of s.entities ?? []) entities[e.id] = e;
     const relations: Sketch["relations"] = {};
     for (const r of s.relations ?? []) relations[r.id] = r;

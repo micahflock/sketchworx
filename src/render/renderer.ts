@@ -113,6 +113,10 @@ export function drawSketch(p: Painter, s: Sketch, opts: SceneOptions) {
     if (e.type !== "point") continue;
     const color = entityColor(e.id, opts);
     const emph = opts.selection.has(e.id) || opts.hover === e.id;
+    if (e.id === "origin") {
+      if (emph || opts.related?.has(e.id)) p.ring(e, 6, color, 2);
+      continue;
+    }
     if (e.owner) {
       const owner = s.entities[e.owner];
       // Centers of arcs/circles drawn as small crosses, endpoints as dots.

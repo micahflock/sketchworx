@@ -22,6 +22,8 @@ export interface UiState {
   /** Modify box for a dimension being edited. */
   modify: { dimId: Id; x: number; y: number; isNew: boolean } | null;
   message: { text: string; kind: "info" | "error" } | null;
+  /** Modal question (SolidWorks-style prompts such as "Make this dimension driven?"). */
+  confirm: { title: string; message: string; buttons: { label: string; run: () => void }[] } | null;
   fileName: string | null;
   /** True while Ctrl is held (suppresses auto relations), or the on-screen Ctrl is latched. */
   ctrl: boolean;
@@ -56,6 +58,7 @@ export class Store {
       contextBar: null,
       modify: null,
       message: null,
+      confirm: null,
       fileName: null,
       ctrl: false,
       touchCtrl: false,

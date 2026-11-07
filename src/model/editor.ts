@@ -1,4 +1,4 @@
-import { definingPoints } from "./sketch";
+import { definingPoints, ORIGIN } from "./sketch";
 import type { Dimension, Doc, Entity, Id, Relation, Sketch, Variable } from "./types";
 
 /**
@@ -101,7 +101,7 @@ export class Editor {
     const kill = new Set<Id>();
     for (const id of ids) {
       const e = this.sketch.entities[id];
-      if (!e) continue;
+      if (!e || id === ORIGIN) continue;
       if (e.type === "point" && e.owner && this.sketch.entities[e.owner]) continue; // endpoints go with their curve
       kill.add(id);
       if (e.type !== "point") {

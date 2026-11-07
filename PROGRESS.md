@@ -11,6 +11,33 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
 | Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or a local file server |
 
+## Milestone 3 — Smart Dimension and variables ✅
+
+- One Smart Dimension tool (D). Type inferred from the picks and the label position: aligned / horizontal /
+  vertical (cursor along the normal, straight up/down, or to the side), point-point, point-line, line-line
+  (parallel → distance, otherwise angle with the quadrant under the cursor), radius (arcs), diameter
+  (circles), arc length (arc + both endpoints), center distances for circles/arcs. Style-spline polygon sides
+  are point-point distances between control vertices.
+- Modify box: value focused, Enter/✓ applies, Esc/✕ cancels, ▲▼ (and arrow keys / wheel, Shift ×10) spin,
+  accepts expressions (`=stem*1.5`, SolidWorks-style `="stem"` too). Double-click any dimension to reopen.
+- Over-defining dimension → "Make Dimension Driven?" prompt (driven or leave driving). Driven dimensions are
+  measurements of solved geometry (not solver constraints), drawn gray in parentheses.
+- Global Variables panel: add, rename (rewrites references), edit, delete; dependency order and cycle errors.
+  Variables are document-wide (shared by all future glyph slots). Changing one re-evaluates every dimension
+  expression and re-solves.
+- Expression parser (`model/expr.ts`): `+ - * / ( )`, unary minus, `min max sqrt sin cos` (degrees). No `eval`.
+- Sketch origin is now a fixed, selectable point (relate/dimension to it like the SolidWorks origin).
+- Dimension labels are stored relative to their anchor so they follow the geometry; drag a label to move it.
+- PropertyManager shows a Dimension section (value/expression, Driven checkbox) for a selected dimension.
+
+Acceptance (Playwright):
+- Fully dimensioned slot (sample in `src/io/samples.ts`, `=width` diameter and `=len` center distance) shows
+  Fully Defined, 0 DOF, all black. Changing `width` 40 → 70 in the Variables panel updates the arcs to R35 live
+  and stays fully defined.
+- A radius dimension on the second (equal) arc triggers the driven prompt; choosing driven keeps the sketch
+  fully defined and shows (R35).
+- Unit tests: `tests/dimensions.test.ts` (expressions, inference, slot DOF 0, variable change, redundancy).
+
 ## Milestone 2 — Solver and relations ✅
 
 - `solver/` exposes one interface (`Solver.solve(params, constraints, drag?) → { params, entityStatus, conflicts, … }`

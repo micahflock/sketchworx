@@ -15,6 +15,12 @@ import { theme } from "../render/theme";
 import { View } from "../render/view";
 import type { DragTarget } from "../solver/types";
 import { LineTool } from "../tools/line";
+import { DimensionTool } from "../tools/dimension";
+import { drawDimensions } from "../render/dimensions";
+import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
+import { fmt } from "../tools/line";
+import type { Dimension, Variable } from "../model/types";
+import { isExpression } from "../model/expr";
 import { SelectTool } from "../tools/select";
 import { ArcTool, CircleTool, PointTool, RectTool } from "../tools/shapes";
 import type { PEvent, Tool, ToolHost } from "../tools/tool";
@@ -63,6 +69,7 @@ export class App implements ToolHost {
     reg(new ArcTool(this, "center"));
     reg(new ArcTool(this, "threepoint"));
     for (const m of ["corner", "center", "3corner", "3center", "parallelogram"] as const) reg(new RectTool(this, m));
+    reg(new DimensionTool(this));
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
   }
@@ -185,7 +192,92 @@ export class App implements ToolHost {
   showContextBar(screen: Vec2 | null) {
     this.store.set({ contextBar: screen && this.store.state.selection.length ? screen : null });
   }
-  openModify(_dimId: Id, _isNew: boolean) {}
+  openModify(dimId: Id, isNew: boolean) {
+    const d = this.sketch().dimensions[dimId];
+    if (!d) return;
+    const at = this.view.toScreen(labelPos(this.sketch(), d));
+    this.store.set({ modify: { dimId, x: at.x, y: at.y, isNew }, selection: [dimId] });
+  }
+
+  /** Place a new dimension; prompt for driven if it would over-define the sketch. */
+  async placeDimension(draft: Omit<Dimension, "id">) {
+    let id = "";
+    this.commit("Smart Dimension", (ed) => (id = ed.addDimension(draft)));
+    await this.solver.settled();
+    const s = this.sketch();
+    if (!s.dimensions[id]) return;
+    if (this.store.state.status.conflicts.includes(id)) {
+      this.store.set({
+        confirm: {
+          title: "Make Dimension Driven?",
+          message: "Adding this dimension will make the sketch over defined or unable to solve. Do you want to add it as a driven dimension instead?",
+          buttons: [
+            { label: "Make this dimension driven", run: () => this.setDimensionDriven(id, true) },
+            { label: "Leave this dimension driving", run: () => this.openModify(id, true) },
+          ],
+        },
+      });
+      return;
+    }
+    this.openModify(id, true);
+  }
+
+  /** Apply Modify-box text (number or expression). Returns an error message or null. */
+  setDimensionText(id: Id, text: string): string | null {
+    try {
+      const { value, expr } = evaluateDimText(this.store.doc, text);
+      const d = this.sketch().dimensions[id];
+      if (!d) return null;
+      if (d.type !== "angle" && value <= 0 && d.type !== "distanceX" && d.type !== "distanceY") return "Value must be positive";
+      if (d.expr === expr && d.value === value) return null;
+      this.commit("Edit Dimension", (ed) => ed.updateDimension(id, { expr, value }));
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  }
+
+  setDimensionDriven(id: Id, driven: boolean) {
+    const s = this.sketch();
+    const d = s.dimensions[id];
+    if (!d || d.driven === driven) return;
+    const value = Math.abs(measure(s, d));
+    this.commit(driven ? "Make Driven" : "Make Driving", (ed) =>
+      ed.updateDimension(id, driven ? { driven } : { driven, value, expr: isExpression(d.expr) ? d.expr : fmt(value) }),
+    );
+  }
+
+  /** Rename a variable and every reference to it (dimensions in all slots, other variables). */
+  renameVariable(from: string, to: string) {
+    const re = new RegExp(`\\b${from}\\b`, "g");
+    const doc = this.store.doc;
+    const next: Doc = {
+      ...doc,
+      variables: doc.variables.map((v) => ({ ...v, name: v.name === from ? to : v.name, expr: v.expr.replace(re, to) })),
+      slots: doc.slots.map((s) => {
+        const dims = { ...s.dimensions };
+        let changed = false;
+        for (const d of Object.values(dims))
+          if (re.test(d.expr)) {
+            re.lastIndex = 0;
+            dims[d.id] = { ...d, expr: d.expr.replace(re, to) };
+            changed = true;
+          }
+        return changed ? { ...s, dimensions: dims } : s;
+      }),
+    };
+    this.commitDoc(refreshExpressions(next), "Rename Variable");
+  }
+
+  /** Replace the global variables and re-evaluate every expression that uses them. */
+  setVariables(vars: Variable[]) {
+    this.commit("Edit Variables", (ed) => ed.setVariables(vars));
+    const refreshed = refreshExpressions(this.store.doc);
+    if (refreshed !== this.store.doc) {
+      this.store.amendDoc(refreshed);
+      this.afterChange();
+    }
+  }
 
   // ---- dragging through the solver
   dragBegin(targets: DragTarget[]) {
@@ -436,8 +528,9 @@ export class App implements ToolHost {
 
   escape() {
     const st = this.store.state;
+    if (st.confirm) return;
     if (st.showShortcutBar || st.contextBar || st.modify) {
-      this.store.set({ showShortcutBar: null, contextBar: null });
+      this.store.set({ showShortcutBar: null, contextBar: null, modify: null });
       return;
     }
     if (this.tool.cancel()) return;
@@ -531,6 +624,10 @@ export class App implements ToolHost {
   /** Overridable layer drawing (relations, dimensions, fills are added later). */
   drawLayers(p: Painter, s: Sketch, opts: SceneOptions) {
     drawSketch(p, s, opts);
-    this.annotationHits = drawRelationGlyphs(p, s, new Set(this.store.state.status.conflicts), this.store.state.hover, opts.selection);
+    const conflicts = new Set(this.store.state.status.conflicts);
+    const glyphs = drawRelationGlyphs(p, s, conflicts, this.store.state.hover, opts.selection);
+    const sel = this.tools.get("select") as SelectTool;
+    const dims = drawDimensions(p, s, { conflicts, hover: this.store.state.hover, selection: opts.selection, labelOffset: (id) => sel.dimOffset(id) });
+    this.annotationHits = [...glyphs, ...dims];
   }
 }

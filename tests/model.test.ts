@@ -24,8 +24,8 @@ describe("editor", () => {
   it("is copy-on-write", () => {
     const d0 = createDoc();
     const d1 = applyCommand(d0, (ed) => addLine(ed, { x: 0, y: 0 }, { x: 1, y: 1 }));
-    expect(Object.keys(activeSketch(d0).entities)).toHaveLength(0);
-    expect(Object.keys(activeSketch(d1).entities)).toHaveLength(3);
+    expect(Object.keys(activeSketch(d0).entities)).toHaveLength(1); // origin
+    expect(Object.keys(activeSketch(d1).entities)).toHaveLength(4);
     const d2 = applyCommand(d1, () => {});
     expect(d2).toBe(d1);
   });
