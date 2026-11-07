@@ -1,4 +1,5 @@
 import { dist } from "../geom/vec";
+import { bezierClosest } from "../geom/bezier";
 import { definingPoints, endPoints, ptv } from "../model/sketch";
 import type { Entity, Id, Relation, Sketch } from "../model/types";
 import type { SolverConstraint, SolverGeom, SolverParams, SolverPoint } from "./types";
@@ -103,7 +104,13 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
       if (out === null) unsupported.push(d.id);
       else constraints.push(...out);
     }
-  return { params: { points, geoms }, constraints, unsupported };
+  const extras: { id: Id; value: number }[] = [];
+  for (const c of constraints)
+    if (c.kind === "pointOnBezier") {
+      const cps = c.cps.map((id) => ptv(s, id));
+      extras.push({ id: c.t, value: bezierClosest(cps, ptv(s, c.p)).t });
+    }
+  return { params: { points, geoms, ...(extras.length ? { extras } : {}) }, constraints, unsupported };
 }
 
 type C = SolverConstraint;
@@ -142,7 +149,8 @@ function relationConstraints(s: Sketch, r: Relation, groups: CoincidenceGroups):
       const curve = ents.find((e) => e.type !== "point")!;
       if (curve.type === "line") add({ kind: "pointOnLine", p, a: curve.p1, b: curve.p2 });
       else if (curve.type === "circle" || curve.type === "arc") add({ kind: "pointOnCircle", p, g: curve.id });
-      else return null; // point on spline: milestone 7
+      else if (curve.type === "spline" && !curve.derived) add({ kind: "pointOnBezier", p, cps: curve.cps, t: `${r.id}#t` });
+      else return null;
       return out;
     }
     case "horizontal":
@@ -239,6 +247,13 @@ function relationConstraints(s: Sketch, r: Relation, groups: CoincidenceGroups):
     }
     case "tangent":
       return tangentConstraints(s, ents, groups, add) ? out : null;
+    case "equalCurvature": {
+      if (!tangentConstraints(s, ents, groups, add)) return null;
+      const g2 = curvatureConstraint(ents, groups);
+      if (!g2) return null;
+      add(g2);
+      return out;
+    }
   }
 }
 
@@ -292,6 +307,28 @@ function tangentConstraints(s: Sketch, ents: Entity[], groups: CoincidenceGroups
     }
   }
   return false;
+}
+
+/** The joint and the next two control points of a spline end, leaving the joint. */
+function splineEnd(sp: Extract<Entity, { type: "spline" }>, joint: Id) {
+  const n = sp.cps.length - 1;
+  return sp.cps[0] === joint ? { j: sp.cps[0], q1: sp.cps[1], q2: sp.cps[2], n } : { j: sp.cps[n], q1: sp.cps[n - 1], q2: sp.cps[n - 2], n };
+}
+
+function curvatureConstraint(ents: Entity[], groups: CoincidenceGroups): Body | null {
+  let [a, b] = ents;
+  if (a.type !== "spline") [a, b] = [b, a];
+  if (a.type !== "spline" || a.cps.length < 3) return null;
+  const shared = sharedEnd(groups, a, b);
+  if (!shared) return null;
+  const A = splineEnd(a, shared[0]);
+  if (b.type === "spline") {
+    if (b.cps.length < 3) return null;
+    const B = splineEnd(b, shared[1]);
+    return { kind: "equalCurvatureBB", ja: A.j, a1: A.q1, a2: A.q2, na: A.n, jb: B.j, b1: B.q1, b2: B.q2, nb: B.n };
+  }
+  if (b.type === "arc") return { kind: "equalCurvatureBA", ja: A.j, a1: A.q1, a2: A.q2, na: A.n, arc: b.id, arcSign: shared[1] === b.s ? 1 : -1 };
+  return null;
 }
 
 function mirrorPoint(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) {

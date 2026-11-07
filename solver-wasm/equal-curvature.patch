@@ -1,0 +1,223 @@
+diff --git a/planegcs/Constraints.cpp b/planegcs/Constraints.cpp
+index 336d20e..c250e54 100644
+--- a/planegcs/Constraints.cpp
++++ b/planegcs/Constraints.cpp
+@@ -3497,6 +3497,98 @@ double ConstraintP2CDistance::grad(double* param)
+ }
+ 
+ // --------------------------------------------------------
++// ConstraintEqualCurvature
++ConstraintEqualCurvature::ConstraintEqualCurvature(Point& ja,
++                                                   Point& a1,
++                                                   Point& a2,
++                                                   int na_,
++                                                   Point& jb,
++                                                   Point& b1,
++                                                   Point& b2,
++                                                   int nb_)
++    : na(na_)
++    , nb(nb_)
++    , sb(0.)
++{
++    for (Point* p : {&ja, &a1, &a2, &jb, &b1, &b2}) {
++        pvec.push_back(p->x);
++        pvec.push_back(p->y);
++    }
++    origpvec = pvec;
++    double la = std::hypot(*a1.x - *ja.x, *a1.y - *ja.y);
++    double lb = std::hypot(*b1.x - *jb.x, *b1.y - *jb.y);
++    lref = std::max(1e-9, 0.5 * (la + lb));
++    rescale();
++}
++
++ConstraintEqualCurvature::ConstraintEqualCurvature(Point& ja, Point& a1, Point& a2, int na_, Arc& b, int arcSign)
++    : na(na_)
++    , nb(0)
++    , sb(arcSign >= 0 ? 1. : -1.)
++{
++    for (Point* p : {&ja, &a1, &a2}) {
++        pvec.push_back(p->x);
++        pvec.push_back(p->y);
++    }
++    pvec.push_back(b.rad);
++    origpvec = pvec;
++    lref = std::max(1e-9, std::fabs(*b.rad));
++    rescale();
++}
++
++ConstraintType ConstraintEqualCurvature::getTypeId()
++{
++    return EqualCurvature;
++}
++
++void ConstraintEqualCurvature::rescale(double coef)
++{
++    scale = coef * lref;
++}
++
++// Signed curvature of a Bezier end, leaving the joint. i is the pvec offset of the joint.
++double ConstraintEqualCurvature::kappaBezier(int i, int n)
++{
++    double jx = *pvec[i], jy = *pvec[i + 1];
++    double ux = *pvec[i + 2] - jx, uy = *pvec[i + 3] - jy;
++    double vx = *pvec[i + 4] - *pvec[i + 2], vy = *pvec[i + 5] - *pvec[i + 3];
++    double l = std::hypot(ux, uy);
++    if (l < 1e-12 || n < 2) {
++        return 0.;
++    }
++    return (double(n - 1) / double(n)) * (ux * vy - uy * vx) / (l * l * l);
++}
++
++double ConstraintEqualCurvature::error()
++{
++    double ka = kappaBezier(0, na);
++    double kb = nb > 0 ? kappaBezier(6, nb) : sb / *pvec[6];
++    return scale * (ka + kb);
++}
++
++double ConstraintEqualCurvature::grad(double* param)
++{
++    bool found = false;
++    for (double* p : pvec) {
++        if (p == param) {
++            found = true;
++            break;
++        }
++    }
++    if (!found) {
++        return 0.;
++    }
++    // Central differences: the expression is smooth away from degenerate (zero-length) handles.
++    double v = *param;
++    double h = 1e-7 * std::max(1., std::fabs(v));
++    *param = v + h;
++    double ep = error();
++    *param = v - h;
++    double em = error();
++    *param = v;
++    return (ep - em) / (2. * h);
++}
++
+ // ConstraintArcLength
+ ConstraintArcLength::ConstraintArcLength(Arc& a, double* d)
+ {
+diff --git a/planegcs/Constraints.h b/planegcs/Constraints.h
+index c7dc8c9..e3a14a0 100644
+--- a/planegcs/Constraints.h
++++ b/planegcs/Constraints.h
+@@ -82,6 +82,7 @@ enum ConstraintType
+     AngleViaPointAndTwoParams = 34,
+     AngleViaTwoPoints = 35,
+     ArcLength = 36,
++    EqualCurvature = 37,
+ };
+ 
+ enum InternalAlignmentType
+@@ -419,6 +420,34 @@ public:
+     double maxStep(MAP_pD_D& dir, double lim = 1.) override;
+ };
+ 
++// EqualCurvature (G2 continuity, added for Sketchworx)
++// Equal signed curvature where two curves meet. Each side is described "away from the joint":
++// a Bezier end (joint J, next control point Q1, the one after Q2, degree n) or a circular arc
++// (center, radius, and +1/-1 for CCW/CW travel away from the joint).
++// kappa_away(Bezier) = (n-1)/n * cross(Q1-J, Q2-Q1) / |Q1-J|^3, kappa_away(arc) = sign / r.
++// Two curves passing through the joint have equal curvature when kappa_a + kappa_b = 0.
++class ConstraintEqualCurvature: public Constraint
++{
++private:
++    int na;      // degree of side a (always a Bezier)
++    int nb;      // degree of side b, 0 when side b is an arc
++    double sb;   // arc side: +1 if travel away from the joint is CCW
++    double lref; // length scale so the error is dimensionless
++    double kappaBezier(int i, int n);
++
++public:
++    ConstraintEqualCurvature(Point& ja, Point& a1, Point& a2, int na, Point& jb, Point& b1, Point& b2, int nb);
++    ConstraintEqualCurvature(Point& ja, Point& a1, Point& a2, int na, Arc& b, int arcSign);
++#ifdef _GCS_EXTRACT_SOLVER_SUBSYSTEM_
++    inline ConstraintEqualCurvature()
++    {}
++#endif
++    ConstraintType getTypeId() override;
++    void rescale(double coef = 1.) override;
++    double error() override;
++    double grad(double*) override;
++};
++
+ // P2PAngle
+ class ConstraintP2PAngle: public Constraint
+ {
+diff --git a/planegcs/GCS.cpp b/planegcs/GCS.cpp
+index d48236b..48ea510 100644
+--- a/planegcs/GCS.cpp
++++ b/planegcs/GCS.cpp
+@@ -890,6 +890,38 @@ int System::addConstraintP2CDistance(Point& p, Circle& c, double* distance, int
+     return addConstraint(constr);
+ }
+ 
++int System::addConstraintEqualCurvatureBB(Point& ja,
++                                          Point& a1,
++                                          Point& a2,
++                                          int na,
++                                          Point& jb,
++                                          Point& b1,
++                                          Point& b2,
++                                          int nb,
++                                          int tagId,
++                                          bool driving)
++{
++    Constraint* constr = new ConstraintEqualCurvature(ja, a1, a2, na, jb, b1, b2, nb);
++    constr->setTag(tagId);
++    constr->setDriving(driving);
++    return addConstraint(constr);
++}
++
++int System::addConstraintEqualCurvatureBA(Point& ja,
++                                          Point& a1,
++                                          Point& a2,
++                                          int na,
++                                          Arc& b,
++                                          int arcSign,
++                                          int tagId,
++                                          bool driving)
++{
++    Constraint* constr = new ConstraintEqualCurvature(ja, a1, a2, na, b, arcSign);
++    constr->setTag(tagId);
++    constr->setDriving(driving);
++    return addConstraint(constr);
++}
++
+ int System::addConstraintArcLength(Arc& a, double* distance, int tagId, bool driving)
+ {
+     Constraint* constr = new ConstraintArcLength(a, distance);
+diff --git a/planegcs/GCS.h b/planegcs/GCS.h
+index f35b31e..f9285c7 100644
+--- a/planegcs/GCS.h
++++ b/planegcs/GCS.h
+@@ -462,6 +462,25 @@ public:
+                                  int tagId = 0,
+                                  bool driving = true);
+     int addConstraintArcLength(Arc& a, double* dist, int tagId, bool driving = true);
++    // Sketchworx: equal curvature (G2) where two curves meet
++    int addConstraintEqualCurvatureBB(Point& ja,
++                                      Point& a1,
++                                      Point& a2,
++                                      int na,
++                                      Point& jb,
++                                      Point& b1,
++                                      Point& b2,
++                                      int nb,
++                                      int tagId,
++                                      bool driving = true);
++    int addConstraintEqualCurvatureBA(Point& ja,
++                                      Point& a1,
++                                      Point& a2,
++                                      int na,
++                                      Arc& b,
++                                      int arcSign,
++                                      int tagId,
++                                      bool driving = true);
+ 
+     // internal alignment constraints
+     int addConstraintInternalAlignmentPoint2Ellipse(Ellipse& e,

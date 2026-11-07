@@ -34,6 +34,7 @@ import { buildSolverInput } from "../solver/build";
 import { applySolved } from "./solverService";
 import { PictureScaleTool } from "../tools/picture";
 import { extremaWithoutPoints } from "../model/hygiene";
+import { drawCurvatureCombs } from "../render/combs";
 import { SelectTool } from "../tools/select";
 import { ArcTool, CircleTool, PointTool, RectTool } from "../tools/shapes";
 import type { PEvent, Tool, ToolHost } from "../tools/tool";
@@ -877,6 +878,8 @@ export class App implements ToolHost {
         return void this.openFile();
       case "toggleGuides":
         return this.toggleGuides();
+      case "combs":
+        return this.store.set({ combs: !this.store.state.combs });
       case "toggleSlots":
         return this.store.set({ showSlots: !this.store.state.showSlots });
       case "hygiene": {
@@ -1008,6 +1011,7 @@ export class App implements ToolHost {
     const live = this.store.inTransient;
     const { o, path } = outlineOf(s, !live);
     fillOutline(p.ctx, p.view, path, "rgba(30,40,70,0.10)");
+    if (this.store.state.combs) drawCurvatureCombs(p, s);
     drawSketch(p, s, opts);
     if (!live) drawDiagnostics(p, o);
     if (this.store.state.hygiene)

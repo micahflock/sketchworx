@@ -36,7 +36,7 @@ export function slotSample(): Doc {
   return refreshExpressions(doc);
 }
 
-/** Letter "O" from four style splines with tangent joints, the left half mirrored. */
+/** Letter "O" from four style splines, curvature-continuous (G2) joints, the left half mirrored. */
 export function letterOSample(): Doc {
   return applyCommand(createDoc(), (ed) => {
     const axis = addLine(ed, { x: 0, y: -40 }, { x: 0, y: 740 }, true);
@@ -53,7 +53,8 @@ export function letterOSample(): Doc {
       { x: 0, y: 0 },
     ]);
     ed.addRelation({ type: "coincident", refs: [tr.cps[3], br.cps[0]] });
-    ed.addRelation({ type: "tangent", refs: [tr.spline, br.spline] });
+    // G2 at the right extreme; the mirror makes the left, top and bottom joints G2 by symmetry.
+    ed.addRelation({ type: "equalCurvature", refs: [tr.spline, br.spline] });
     ed.addRelation({ type: "coincident", refs: [tr.cps[0], axis.line] });
     ed.addRelation({ type: "coincident", refs: [br.cps[3], axis.line] });
     ed.addRelation({ type: "coincident", refs: [axis.p1, "origin"] });

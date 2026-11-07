@@ -68,7 +68,9 @@ export type RelationType =
   | "coradial"
   | "midpoint"
   | "symmetric"
-  | "fix";
+  | "fix"
+  /** G2: tangent plus equal curvature where a style spline meets a spline or arc. */
+  | "equalCurvature";
 
 export interface Relation {
   id: Id;

@@ -23,6 +23,10 @@ export function indexParams(p: SolverParams): ParamIndex {
     index.set(`${pt.id}.y`, vals.length);
     vals.push(pt.y);
   }
+  for (const e of p.extras ?? []) {
+    index.set(e.id, vals.length);
+    vals.push(e.value);
+  }
   const geom = new Map<string, SolverParams["geoms"][number]>();
   for (const g of p.geoms) {
     geom.set(g.id, g);
@@ -265,6 +269,44 @@ export function buildResiduals(pi: ParamIndex, cons: SolverConstraint[]): Residu
         const r1 = round(c.g1);
         const r2 = round(c.g2);
         push(o, [...r1.deps, ...r2.deps], (x) => [r2.r(x) - r1.r(x) - c.v]);
+        break;
+      }
+      case "equalCurvatureBB":
+      case "equalCurvatureBA": {
+        const ja = P(c.ja);
+        const a1 = P(c.a1);
+        const a2 = P(c.a2);
+        const kappa = (x: Float64Array, j: typeof ja, q1: typeof ja, q2: typeof ja, n: number) => {
+          const u = sub(pv(x, q1), pv(x, j));
+          const w = sub(pv(x, q2), pv(x, q1));
+          const l = Math.hypot(u.x, u.y);
+          return l < 1e-12 ? 0 : (((n - 1) / n) * (u.x * w.y - u.y * w.x)) / (l * l * l);
+        };
+        if (c.kind === "equalCurvatureBB") {
+          const jb = P(c.jb);
+          const b1 = P(c.b1);
+          const b2 = P(c.b2);
+          push(o, dp(ja, a1, a2, jb, b1, b2), (x) => [kappa(x, ja, a1, a2, c.na) + kappa(x, jb, b1, b2, c.nb)]);
+        } else {
+          const r = round(c.arc);
+          push(o, [...dp(ja, a1, a2), ...r.deps], (x) => [kappa(x, ja, a1, a2, c.na) + c.arcSign / r.r(x)]);
+        }
+        break;
+      }
+      case "pointOnBezier": {
+        const p = P(c.p);
+        const cps = c.cps.map(P);
+        const it = I(c.t);
+        push(o, [...dp(p, ...cps), it], (x) => {
+          const t = x[it];
+          const pts = cps.map((q) => ({ x: x[q.ix], y: x[q.iy] }));
+          for (let k = pts.length - 1; k > 0; k--)
+            for (let i = 0; i < k; i++) {
+              pts[i].x += (pts[i + 1].x - pts[i].x) * t;
+              pts[i].y += (pts[i + 1].y - pts[i].y) * t;
+            }
+          return [pts[0].x - x[p.ix], pts[0].y - x[p.iy]];
+        });
         break;
       }
       case "arcLength": {

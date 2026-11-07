@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import wasmUrl from "@salusoft89/planegcs/dist/planegcs_dist/planegcs.wasm?url";
+import wasmUrl from "./planegcs/planegcs_dist/planegcs.wasm?url";
 import { GcsCore } from "./gcs";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 

@@ -9,7 +9,39 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | App name | **Sketchworx** (repo name) | Placeholder until Micah picks one |
 | Preact vs React | **Preact** | Lighter; the UI chrome is simple and needs no component library |
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
-| Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or a local file server |
+| Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or any static server; installable PWA |
+| Spike blocker → TS solver or patch bindings? | Moot: no blocker. Per-entity status is computed in TS; the G2 constraint was added by patching the C++ | |
+| UFO font export in v1? | Not done; SVG covers v1 | Natural next step (metric guides + slots already map onto UFO) |
+
+## Milestone 7 — Curvature continuity ✅
+
+- **Custom PlaneGCS constraint**: `ConstraintEqualCurvature` added to the PlaneGCS C++ (`solver-wasm/equal-curvature.patch`)
+  with `addConstraintEqualCurvatureBB` (spline end ↔ spline end) and `addConstraintEqualCurvatureBA`
+  (spline end ↔ arc end). Error = sum of the signed curvatures measured leaving the joint, scaled by a reference
+  length; gradient by central differences. It reads every value through `pvec`, so it survives PlaneGCS's
+  subsystem parameter redirection.
+- **WASM built in this repo**: `solver-wasm/build.sh` clones planegcs 1.3.0, applies the patch, regenerates the
+  bindings and compiles with Emscripten 4.0.10. The result (and the port's TypeScript wrapper, vendored from the
+  same revision) lives in `src/solver/planegcs/`; the npm package is no longer used. A clean run of the script
+  reproduces the committed `planegcs.wasm` byte for byte.
+- **Equal Curvature relation** (glyph κ): offered for a style spline meeting another spline (degree ≥ 2) or an arc at a
+  shared end. It includes tangency and replaces an existing Tangent relation between the same pair, as in SolidWorks.
+- **Point on spline**: Coincident between a point and a style spline. No C++ needed: a single-span Bézier is a clamped
+  B-spline, so it uses PlaneGCS's existing point-on-B-spline constraint with the curve parameter as an extra *free*
+  solver parameter (B-splines are pushed straight after the points because the wrapper re-registers their poles).
+- **Curvature combs** (View → Curvature Combs): teeth on splines and arcs, one scale for the whole sketch so a G2 joint
+  shows no step.
+- The letter-O sample now has a G2 right-hand joint; the mirror makes the other three joints G2 by symmetry (adding Equal
+  Curvature there too would be redundant and is reported as such).
+
+Acceptance:
+- `tests/curvature.test.ts`: the "O" with a G2 joint keeps equal curvature through all four joints (relative error
+  < 1e-6) over 12 drag frames of a control vertex; without G2 the same drag produces a curvature jump. Spline-to-arc G2
+  gives curvature 1/r at the joint. A point stays on a spline (error < 1e-7) and removes exactly one DOF.
+- In the browser (dev and production build): load the O, turn on combs, drag a control vertex; the comb is continuous
+  across every joint (measured curvature jumps ≤ 2e-18), no conflicts.
+
+Note: `spike/*.mjs` import the npm package that the spike used. To rerun them: `npm i --no-save @salusoft89/planegcs@1.3.0`.
 
 ## Milestone 6 — Art output and iPad polish ✅ (emulated iPad; see notes)
 

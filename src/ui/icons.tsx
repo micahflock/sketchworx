@@ -250,6 +250,12 @@ export const icons: Record<string, () => JSX.Element> = {
       <path d="M12 7.5l2 2-2 2-2-2z" fill="currentColor" />
     </S>
   ),
+  combs: () => (
+    <S>
+      <path d="M3 19C7 9 17 9 21 19" />
+      <path d="M5 14l-1-4M9 11.5l-.5-5M13 11l.5-5M17 12.5l1.5-4.5" stroke-width="1.1" />
+    </S>
+  ),
   keys: () => (
     <S>
       <rect x="3" y="7" width="18" height="11" rx="2" />

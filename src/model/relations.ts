@@ -16,6 +16,7 @@ export const relationNames: Record<RelationType, string> = {
   midpoint: "Midpoint",
   symmetric: "Symmetric",
   fix: "Fix",
+  equalCurvature: "Equal Curvature",
 };
 
 /** Short glyph text drawn in the green relation badges. */
@@ -33,6 +34,7 @@ export const relationGlyphs: Record<RelationType, string> = {
   midpoint: "M",
   symmetric: "⫼",
   fix: "⚓",
+  equalCurvature: "κ",
 };
 
 /** Display order in Add Relations (most common first, as in SolidWorks). */
@@ -41,6 +43,7 @@ export const relationOrder: RelationType[] = [
   "vertical",
   "coincident",
   "tangent",
+  "equalCurvature",
   "equal",
   "parallel",
   "perpendicular",
@@ -72,7 +75,7 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
     out.add("horizontal");
     out.add("vertical");
   }
-  if (P.length === 1 && n === 2 && L.length + R.length === 1) {
+  if (P.length === 1 && n === 2 && L.length + R.length + S.filter((e) => !e.derived).length === 1) {
     const curve = ents.find((e) => e.type !== "point")!;
     const own = definingPoints(curve).includes(P[0].id);
     if (!own) {
@@ -103,7 +106,12 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
       // Spline tangency needs a shared endpoint.
       const sp = S[0];
       const other = ents.find((e) => e !== sp)!;
-      if (other.type !== "circle" && sharesEndpoint(s, sp, other)) out.add("tangent");
+      if (other.type !== "circle" && sharesEndpoint(s, sp, other)) {
+        out.add("tangent");
+        // G2 needs curvature on the spline side (degree ≥ 2) and a curved partner.
+        const deg = (e: Entity) => (e.type === "spline" ? e.cps.length - 1 : 0);
+        if (deg(sp) >= 2 && (other.type === "arc" || deg(other) >= 2)) out.add("equalCurvature");
+      }
     }
   }
   if (n === 3) {
@@ -146,6 +154,10 @@ export function addRelationCmd(ed: Editor, type: RelationType, ids: Id[]): Id[] 
       return ed.addRelation({ type, refs: [id], values });
     });
   }
+  // Equal Curvature includes tangency: it replaces a Tangent relation between the same pair.
+  if (type === "equalCurvature")
+    for (const r of Object.values(s.relations))
+      if (r.type === "tangent" && r.refs.length === 2 && ids.every((id) => r.refs.includes(id))) ed.deleteRelation(r.id);
   // Horizontal/Vertical on lines is a single-entity relation: one per line, as in SolidWorks.
   if ((type === "horizontal" || type === "vertical") && ids.every((id) => s.entities[id]?.type === "line"))
     return ids.map((id) => ed.addRelation({ type, refs: [id] }));

@@ -11,4 +11,11 @@ npm test         # unit tests (Vitest)
 npm run build    # static build in dist/
 ```
 
-See `PROGRESS.md` for milestone status and decisions.
+See `PROGRESS.md` for milestone status, decisions and known gaps.
+
+- `src/model` document, relations, dimensions, expressions, outlines (pure data, no DOM)
+- `src/solver` solver interface, relation → constraint translation, DOF analysis, PlaneGCS adapter + worker
+- `src/solver/planegcs` vendored PlaneGCS WebAssembly build with the Equal Curvature constraint (`solver-wasm/` rebuilds it)
+- `src/tools`, `src/inference`, `src/render`, `src/ui`, `src/io` as in the spec
+
+Samples for a quick look (browser console): `sketchworx.loadDoc(sketchworxSamples.slot())` or `sketchworxSamples.o()`.

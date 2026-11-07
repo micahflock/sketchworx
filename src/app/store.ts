@@ -38,6 +38,8 @@ export interface UiState {
   showSlots: boolean;
   /** Show handle-hygiene markers (extrema without on-curve points). */
   hygiene: boolean;
+  /** Curvature combs on splines and arcs. */
+  combs: boolean;
 }
 
 type Listener = () => void;
@@ -74,6 +76,7 @@ export class Store {
       dynamicMirror: null,
       showSlots: false,
       hygiene: false,
+      combs: false,
     };
   }
 

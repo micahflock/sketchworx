@@ -2,7 +2,7 @@
  * PlaneGCS adapter. The ONLY module that imports planegcs. Runs inside the
  * solver worker (or directly in tests).
  */
-import { Algorithm, DebugMode, GcsWrapper, init_planegcs_module } from "@salusoft89/planegcs";
+import { Algorithm, DebugMode, GcsWrapper, init_planegcs_module } from "./planegcs/index";
 import { analyse } from "./analysis";
 import { buildResiduals, indexParams } from "./residuals";
 import type { DragTarget, EntityState, SolveResult, SolverConstraint, SolverParams } from "./types";
@@ -15,6 +15,17 @@ function toPrimitives(params: SolverParams, cons: SolverConstraint[]): Prim[] {
   const prims: Prim[] = [];
   for (const p of params.points) prims.push({ id: p.id, type: "point", x: p.x, y: p.y, fixed: false });
   const pos = new Map(params.points.map((p) => [p.id, p]));
+  // B-splines must come straight after the points: the wrapper re-registers their poles.
+  const bsplines = new Map<string, string>();
+  for (const c of cons) {
+    if (c.kind !== "pointOnBezier") continue;
+    const key = c.cps.join(",");
+    if (bsplines.has(key)) continue;
+    const id = `#bs${bsplines.size}`;
+    bsplines.set(key, id);
+    const n = c.cps.length - 1;
+    prims.push({ id, type: "bspline", pole_ids: c.cps, weights: c.cps.map(() => 1), knots: [0, 1], mult: [n + 1, n + 1], degree: n, periodic: false });
+  }
   const geomKind = new Map<string, string>();
   for (const g of params.geoms) {
     geomKind.set(g.id, g.kind);
@@ -115,6 +126,15 @@ function toPrimitives(params: SolverParams, cons: SolverConstraint[]): Prim[] {
       case "radiusDiff":
         prims.push({ ...base, type: "difference", param1: radiusRef(c.g1), param2: radiusRef(c.g2), difference: c.v });
         break;
+      case "equalCurvatureBB":
+        prims.push({ ...base, type: "equal_curvature_bb", ja_id: c.ja, a1_id: c.a1, a2_id: c.a2, na: c.na, jb_id: c.jb, b1_id: c.b1, b2_id: c.b2, nb: c.nb });
+        break;
+      case "equalCurvatureBA":
+        prims.push({ ...base, type: "equal_curvature_ba", ja_id: c.ja, a1_id: c.a1, a2_id: c.a2, na: c.na, b_id: c.arc, arcSign: c.arcSign });
+        break;
+      case "pointOnBezier":
+        prims.push({ ...base, type: "point_on_bspline", p_id: c.p, b_id: bsplines.get(c.cps.join(","))!, pointparam: c.t });
+        break;
     }
   }
   return prims;
@@ -141,6 +161,11 @@ function dragPrims(targets: DragTarget[], params: SolverParams): { prims: Prim[]
 
 const ownerOf = (cid: string) => cid.split("#")[0];
 
+/** Extra scalars are free solver parameters (not fixed like ordinary sketch params). */
+function pushExtras(w: GcsWrapper, params: SolverParams) {
+  for (const e of params.extras ?? []) w.push_sketch_param(e.id, e.value, false);
+}
+
 export class GcsCore {
   private dragSession: { gcs: GcsWrapper; params: SolverParams; n: number } | null = null;
 
@@ -152,7 +177,7 @@ export class GcsCore {
   }
 
   private newWrapper(): GcsWrapper {
-    const w = new GcsWrapper(new this.mod.GcsSystem());
+    const w = new GcsWrapper(new this.mod.GcsSystem(), this.mod);
     w.debug_mode = DebugMode.NoDebug;
     return w;
   }
@@ -167,7 +192,8 @@ export class GcsCore {
       const q = w.sketch_index.get_primitive(g.id) as { radius: number } | undefined;
       return q ? { ...g, r: Math.abs(q.radius) } : g;
     });
-    return { points, geoms };
+    const extras = params.extras?.map((e) => ({ id: e.id, value: w.get_sketch_param_value(e.id) ?? e.value }));
+    return { points, geoms, ...(extras ? { extras } : {}) };
   }
 
   /** Full solve: two passes so that redundancy is diagnosed at the solved geometry. */
@@ -177,12 +203,14 @@ export class GcsCore {
     try {
       if (drag && drag.length) {
         const d = dragPrims(drag, params);
+        pushExtras(w, params);
         w.push_primitives_and_params([...d.sketchParams, ...toPrimitives(params, cons), ...d.prims] as any);
         const st = w.solve(Algorithm.DogLeg);
         const ok = st === 0 || st === 1;
         if (ok) w.apply_solution();
         return this.finish(ok ? this.read(w, params) : params, cons, ok, [], [], t0);
       }
+      pushExtras(w, params);
       w.push_primitives_and_params(toPrimitives(params, cons) as any);
       const st1 = w.solve(Algorithm.DogLeg);
       if (!(st1 === 0 || st1 === 1)) {
@@ -194,6 +222,7 @@ export class GcsCore {
       const solved1 = this.read(w, params);
       // Pass 2 at the solved geometry for an accurate redundancy diagnosis.
       w.clear_data();
+      pushExtras(w, solved1);
       w.push_primitives_and_params(toPrimitives(solved1, cons) as any);
       const st2 = w.solve(Algorithm.DogLeg);
       const ok2 = st2 === 0 || st2 === 1;
@@ -238,6 +267,7 @@ export class GcsCore {
     this.dragEnd();
     const w = this.newWrapper();
     const d = dragPrims(targets, params);
+    pushExtras(w, params);
     w.push_primitives_and_params([...d.sketchParams, ...toPrimitives(params, cons), ...d.prims] as any);
     this.dragSession = { gcs: w, params, n: targets.length };
     return this.dragSolve();
@@ -281,8 +311,9 @@ function touchedIds(params: SolverParams, cons: SolverConstraint[], owners: Set<
   for (const c of cons) {
     if (!owners.has(c.owner)) continue;
     for (const [k, v] of Object.entries(c)) {
-      if (k === "id" || k === "owner" || k === "kind" || typeof v !== "string") continue;
-      out.add(v);
+      if (k === "id" || k === "owner" || k === "kind") continue;
+      if (typeof v === "string") out.add(v);
+      else if (Array.isArray(v)) for (const x of v) if (typeof x === "string") out.add(x);
     }
   }
   // A line/arc whose point is involved is involved too.

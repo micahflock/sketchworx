@@ -20,6 +20,8 @@ export type SolverGeom =
 export interface SolverParams {
   points: SolverPoint[];
   geoms: SolverGeom[];
+  /** Extra free scalars (e.g. the curve parameter of a point on a spline). */
+  extras?: { id: SId; value: number }[];
 }
 
 /** Constraint vocabulary. `owner` is the relation or dimension id it came from. */
@@ -55,6 +57,15 @@ export type SolverConstraint = { id: SId; owner: SId } & (
   | { kind: "arcLength"; g: SId; v: number }
   /** radius(g2) - radius(g1) = v */
   | { kind: "radiusDiff"; g1: SId; g2: SId; v: number }
+  /**
+   * Equal curvature (G2) where two Béziers meet: each side is the joint, the next two control
+   * points (leaving the joint) and the degree. Custom PlaneGCS constraint.
+   */
+  | { kind: "equalCurvatureBB"; ja: SId; a1: SId; a2: SId; na: number; jb: SId; b1: SId; b2: SId; nb: number }
+  /** Equal curvature between a Bézier end and an arc; arcSign +1 when the arc runs CCW away from the joint. */
+  | { kind: "equalCurvatureBA"; ja: SId; a1: SId; a2: SId; na: number; arc: SId; arcSign: number }
+  /** Point lies on the Bézier with control points cps at parameter `t` (an extra). */
+  | { kind: "pointOnBezier"; p: SId; cps: SId[]; t: SId }
 );
 
 export type ConstraintKind = SolverConstraint["kind"];

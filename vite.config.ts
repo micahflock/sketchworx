@@ -24,7 +24,6 @@ export default defineConfig({
   base: "./",
   plugins: [preact(), serviceWorker()],
   worker: { format: "es" },
-  optimizeDeps: { exclude: ["@salusoft89/planegcs"] },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
