@@ -483,48 +483,6 @@
   font-weight: 600;
 }
 
-.slots {
-  flex: none;
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  background: #f1f3f6;
-  border-top: 1px solid #c8cfd9;
-  overflow-x: auto;
-  align-items: stretch;
-}
-.slot {
-  flex: none;
-  width: 76px;
-  border: 1px solid #c8cfd9;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  padding: 3px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-size: 11px;
-}
-.slot canvas {
-  width: 68px;
-  height: 56px;
-}
-.slot.active {
-  border-color: #3b74d6;
-  box-shadow: 0 0 0 2px #cfe0fa;
-}
-.slotAdd {
-  flex: none;
-  width: 44px;
-  border: 1px dashed #9aa8bd;
-  border-radius: 6px;
-  background: none;
-  font-size: 22px;
-  color: #556;
-  cursor: pointer;
-}
-
 /* ---------------- Status bar */
 .status {
   flex: none;

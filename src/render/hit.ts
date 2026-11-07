@@ -1,6 +1,6 @@
 import { bezierClosest, bezierPolyline } from "../geom/bezier";
 import type { Box, Vec2 } from "../geom/vec";
-import { angleInSweep, dist, distToLineInf, distToSegment, inBox, polar, segmentHitsBox } from "../geom/vec";
+import { angleInSweep, dist, distToSegment, inBox, polar, segmentHitsBox } from "../geom/vec";
 import { arcGeom, ptv, splinePts } from "../model/sketch";
 import type { Entity, Id, Sketch } from "../model/types";
 
@@ -17,7 +17,7 @@ export function distToEntity(s: Sketch, e: Entity, p: Vec2): number {
     case "point":
       return dist(p, e);
     case "line":
-      return e.guide ? distToLineInf(p, ptv(s, e.p1), ptv(s, e.p2)) : distToSegment(p, ptv(s, e.p1), ptv(s, e.p2));
+      return distToSegment(p, ptv(s, e.p1), ptv(s, e.p2));
     case "circle": {
       const c = ptv(s, e.c);
       return Math.abs(dist(p, c) - e.r);
@@ -46,7 +46,6 @@ export function hitTest(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>, filter?
     if (e.type === "point" && e.owner) {
       const o = s.entities[e.owner];
       if (o?.type === "spline" && o.derived) continue;
-      if (o?.type === "line" && o.guide) continue;
     }
     const d = distToEntity(s, e, p);
     if (d > tol) continue;
@@ -86,8 +85,7 @@ export function entitySamples(s: Sketch, e: Entity): Vec2[] {
 export function boxSelect(s: Sketch, box: Box, crossing: boolean): Id[] {
   const out: Id[] = [];
   for (const e of Object.values(s.entities)) {
-    if (e.id === "origin" || (e.type === "line" && e.guide)) continue;
-    if (e.type === "point" && e.owner && (s.entities[e.owner] as { guide?: string })?.guide) continue;
+    if (e.id === "origin") continue;
     const pts = entitySamples(s, e);
     if (e.type === "point") {
       if (inBox(pts[0], box)) out.push(e.id);

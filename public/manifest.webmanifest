@@ -1,7 +1,7 @@
 {
   "name": "Sketchworx",
   "short_name": "Sketchworx",
-  "description": "SolidWorks-style 2D constraint sketcher for logos and letterforms",
+  "description": "SolidWorks-style 2D constraint sketcher for logos and vector art",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

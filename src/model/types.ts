@@ -22,8 +22,6 @@ export interface LineEntity extends EntityBase {
   p2: Id;
   /** Set for a style spline's control-polygon side (always construction). */
   owner?: Id;
-  /** Metric guide (horizontal, fixed) whose height is this variable. */
-  guide?: string;
 }
 
 export interface CircleEntity extends EntityBase {
@@ -97,7 +95,7 @@ export interface Dimension {
   id: Id;
   type: DimensionType;
   refs: Id[];
-  /** Value or expression as typed ("88", "=stem*1.5"). */
+  /** Value or expression as typed ("88", "=width*1.5"). */
   expr: string;
   /** Evaluated value (driving) or measured value (driven). */
   value: number;
@@ -130,9 +128,6 @@ export interface Picture {
 }
 
 export interface Sketch {
-  id: Id;
-  name: string;
-  advance: number;
   entities: Record<Id, Entity>;
   relations: Record<Id, Relation>;
   dimensions: Record<Id, Dimension>;
@@ -142,10 +137,8 @@ export interface Sketch {
 export interface Doc {
   version: number;
   nextId: number;
-  unitsPerEm?: number;
   variables: Variable[];
-  slots: Sketch[];
-  activeSlot: number;
+  sketch: Sketch;
 }
 
-export const DOC_VERSION = 1;
+export const DOC_VERSION = 2;

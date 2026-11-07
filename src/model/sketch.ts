@@ -6,8 +6,8 @@ import type { ArcEntity, CircleEntity, Doc, Entity, Id, LineEntity, PointEntity,
 export const ORIGIN = "origin";
 export const originPoint = (): PointEntity => ({ id: ORIGIN, type: "point", x: 0, y: 0 });
 
-export function createSketch(id: Id, name: string): Sketch {
-  return { id, name, advance: 600, entities: { [ORIGIN]: originPoint() }, relations: {}, dimensions: {} };
+export function createSketch(): Sketch {
+  return { entities: { [ORIGIN]: originPoint() }, relations: {}, dimensions: {} };
 }
 
 export function createDoc(): Doc {
@@ -15,12 +15,11 @@ export function createDoc(): Doc {
     version: DOC_VERSION,
     nextId: 2,
     variables: [],
-    slots: [createSketch("s1", "Sketch1")],
-    activeSlot: 0,
+    sketch: createSketch(),
   };
 }
 
-export const activeSketch = (doc: Doc): Sketch => doc.slots[doc.activeSlot];
+export const activeSketch = (doc: Doc): Sketch => doc.sketch;
 
 export function pt(s: Sketch, id: Id): PointEntity {
   const e = s.entities[id];

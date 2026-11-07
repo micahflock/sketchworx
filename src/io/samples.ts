@@ -36,8 +36,8 @@ export function slotSample(): Doc {
   return refreshExpressions(doc);
 }
 
-/** Letter "O" from four style splines, curvature-continuous (G2) joints, the left half mirrored. */
-export function letterOSample(): Doc {
+/** Oval ("O" shape) from four style splines, curvature-continuous (G2) joints, the left half mirrored. */
+export function ovalSample(): Doc {
   return applyCommand(createDoc(), (ed) => {
     const axis = addLine(ed, { x: 0, y: -40 }, { x: 0, y: 740 }, true);
     const tr = addSpline(ed, [

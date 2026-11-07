@@ -98,7 +98,7 @@ export class SolverService {
     }
   }
 
-  /** Solve arbitrary input without touching the store (other glyph slots). */
+  /** Solve arbitrary input without touching the store. */
   solveRaw(params: SolverParams, constraints: Parameters<Solver["solve"]>[1]): Promise<SolveResult> {
     return this.solver.solve(params, constraints);
   }

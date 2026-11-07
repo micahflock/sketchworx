@@ -12,7 +12,7 @@ export class Editor {
 
   constructor(base: Doc) {
     this.doc = base;
-    this.sketch = base.slots[base.activeSlot];
+    this.sketch = base.sketch;
   }
 
   get s(): Sketch {
@@ -24,7 +24,7 @@ export class Editor {
 
   private ensureDoc() {
     if (!this.copied.doc) {
-      this.doc = { ...this.doc, slots: [...this.doc.slots] };
+      this.doc = { ...this.doc };
       this.copied.doc = true;
     }
   }
@@ -32,7 +32,7 @@ export class Editor {
     this.ensureDoc();
     if (!this.copied.sketch) {
       this.sketch = { ...this.sketch };
-      this.doc.slots[this.doc.activeSlot] = this.sketch;
+      this.doc.sketch = this.sketch;
       this.copied.sketch = true;
     }
   }
@@ -189,7 +189,7 @@ export class Editor {
     this.doc.variables = vars;
   }
 
-  // ---- slots
+  // ---- document / sketch fields
   setDocField<K extends keyof Doc>(key: K, value: Doc[K]) {
     this.ensureDoc();
     this.doc[key] = value;

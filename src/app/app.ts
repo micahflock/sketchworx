@@ -26,14 +26,10 @@ import { fmt } from "../tools/line";
 import type { Dimension, Variable } from "../model/types";
 import { isExpression } from "../model/expr";
 import { drawDiagnostics, fillOutline, outlineOf } from "../render/art";
-import { outlineBounds, exportSvg, exportPng, guideMetrics } from "../io/svg";
+import { outlineBounds, exportSvg, exportPng } from "../io/svg";
 import type { SvgOptions } from "../io/svg";
 import { downloadBlob, pickFile } from "../io/storage";
-import { createSketch } from "../model/sketch";
-import { buildSolverInput } from "../solver/build";
-import { applySolved } from "./solverService";
 import { PictureScaleTool } from "../tools/picture";
-import { extremaWithoutPoints } from "../model/hygiene";
 import { drawCurvatureCombs } from "../render/combs";
 import { SelectTool } from "../tools/select";
 import { ArcTool, CircleTool, PointTool, RectTool } from "../tools/shapes";
@@ -56,27 +52,6 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Could not read the image"));
     img.src = url;
   });
-}
-
-/** Metric guide lines (and their variables if missing), per font conventions for 1000 units/em. */
-function addGuides(ed: import("../model/editor").Editor) {
-  const defaults: [string, number][] = [
-    ["baseline", 0],
-    ["xheight", 500],
-    ["capheight", 700],
-    ["ascender", 750],
-    ["descender", -250],
-  ];
-  const vars = [...ed.d.variables];
-  for (const [name, v] of defaults) if (!vars.some((x) => x.name === name)) vars.push({ name, expr: String(v), value: v });
-  ed.setVariables(vars);
-  for (const [name] of defaults) {
-    const val = vars.find((x) => x.name === name)!.value;
-    const line = ed.newId("e");
-    const p1 = ed.addPoint(0, val, line);
-    const p2 = ed.addPoint(ed.s.advance, val, line);
-    ed.put({ id: line, type: "line", p1, p2, construction: true, guide: name });
-  }
 }
 
 /** Commands whose new entities Dynamic Mirror copies. */
@@ -331,24 +306,20 @@ export class App implements ToolHost {
     );
   }
 
-  /** Rename a variable and every reference to it (dimensions in all slots, other variables). */
+  /** Rename a variable and every reference to it (dimensions and other variables). */
   renameVariable(from: string, to: string) {
     const re = new RegExp(`\\b${from}\\b`, "g");
     const doc = this.store.doc;
+    const dims = { ...doc.sketch.dimensions };
+    for (const d of Object.values(dims))
+      if (re.test(d.expr)) {
+        re.lastIndex = 0;
+        dims[d.id] = { ...d, expr: d.expr.replace(re, to) };
+      }
     const next: Doc = {
       ...doc,
       variables: doc.variables.map((v) => ({ ...v, name: v.name === from ? to : v.name, expr: v.expr.replace(re, to) })),
-      slots: doc.slots.map((s) => {
-        const dims = { ...s.dimensions };
-        let changed = false;
-        for (const d of Object.values(dims))
-          if (re.test(d.expr)) {
-            re.lastIndex = 0;
-            dims[d.id] = { ...d, expr: d.expr.replace(re, to) };
-            changed = true;
-          }
-        return changed ? { ...s, dimensions: dims } : s;
-      }),
+      sketch: { ...doc.sketch, dimensions: dims },
     };
     this.commitDoc(refreshExpressions(next), "Rename Variable");
   }
@@ -361,91 +332,6 @@ export class App implements ToolHost {
       this.store.amendDoc(refreshed);
       this.afterChange();
     }
-    void this.solveOtherSlots();
-  }
-
-  /** Variables are shared: re-solve every other slot in the background so all glyphs update. */
-  async solveOtherSlots() {
-    const doc = this.store.doc;
-    const results = await Promise.all(
-      doc.slots.map(async (s, i) => {
-        if (i === doc.activeSlot || Object.keys(s.entities).length <= 1) return null;
-        const inp = buildSolverInput(s);
-        const r = await this.solver.solveRaw(inp.params, inp.constraints);
-        return r.ok ? { i, params: r.params } : null;
-      }),
-    );
-    if (this.store.doc !== doc) return; // superseded by a newer edit
-    let next = doc;
-    for (const r of results) {
-      if (!r) continue;
-      const tmp = applySolved({ ...next, activeSlot: r.i }, r.params);
-      next = this.solver.postSolve ? { ...this.solver.postSolve(tmp), activeSlot: doc.activeSlot } : { ...tmp, activeSlot: doc.activeSlot };
-    }
-    if (next !== doc) this.store.amendDoc(next);
-  }
-
-  // ---- glyph slots
-  setActiveSlot(i: number) {
-    const doc = this.store.doc;
-    if (i === doc.activeSlot || i < 0 || i >= doc.slots.length) return;
-    this.tool.cancel();
-    this.store.amendDoc({ ...doc, activeSlot: i });
-    this.store.set({ selection: [], hover: null, contextBar: null });
-    this.afterChange();
-    this.zoomToFit();
-  }
-  addSlot() {
-    const doc = this.store.doc;
-    const id = `s${doc.nextId}`;
-    const s = createSketch(id, `Glyph${doc.slots.length + 1}`);
-    s.advance = doc.slots[doc.activeSlot]?.advance ?? 600;
-    // New slots get the metric guides when the current one has them.
-    let next: Doc = { ...doc, nextId: doc.nextId + 1, slots: [...doc.slots, s], activeSlot: doc.slots.length };
-    if (Object.values(doc.slots[doc.activeSlot].entities).some((e) => e.type === "line" && e.guide)) next = applyCommand(next, (ed) => addGuides(ed));
-    this.commitDoc(refreshExpressions(next), "Add Glyph");
-    this.store.set({ selection: [] });
-  }
-  renameSlot(i: number, name: string) {
-    const doc = this.store.doc;
-    if (!name.trim() || doc.slots[i]?.name === name) return;
-    this.commitDoc({ ...doc, slots: doc.slots.map((s, k) => (k === i ? { ...s, name: name.trim() } : s)) }, "Rename Glyph");
-  }
-  deleteSlot(i: number) {
-    const doc = this.store.doc;
-    if (doc.slots.length <= 1) return this.flash("A file needs at least one sketch", "error");
-    const slots = doc.slots.filter((_, k) => k !== i);
-    this.commitDoc({ ...doc, slots, activeSlot: Math.min(doc.activeSlot >= i ? Math.max(0, doc.activeSlot - 1) : doc.activeSlot, slots.length - 1) }, "Delete Glyph");
-  }
-  setAdvance(v: number) {
-    if (!(v > 0)) return;
-    this.commit("Advance Width", (ed) => ed.setSketchField("advance", v));
-    const refreshed = refreshExpressions(this.store.doc);
-    if (refreshed !== this.store.doc) {
-      this.store.amendDoc(refreshed);
-      this.afterChange();
-    }
-  }
-
-  // ---- metric guides
-  hasGuides(): boolean {
-    return Object.values(this.sketch().entities).some((e) => e.type === "line" && e.guide);
-  }
-  toggleGuides() {
-    if (this.hasGuides()) {
-      const ids = Object.values(this.sketch().entities)
-        .filter((e) => e.type === "line" && e.guide)
-        .map((e) => e.id);
-      this.commit("Hide Metric Guides", (ed) => ed.deleteEntities(ids));
-      return;
-    }
-    this.commit("Metric Guides", (ed) => addGuides(ed));
-    const refreshed = refreshExpressions(this.store.doc);
-    if (refreshed !== this.store.doc) {
-      this.store.amendDoc(refreshed);
-      this.afterChange();
-    }
-    this.flash("Metric guides are driven by the baseline, xheight, capheight, ascender and descender variables");
   }
 
   // ---- sketch picture
@@ -487,12 +373,14 @@ export class App implements ToolHost {
   // ---- export
   async exportSvgFile(opts: SvgOptions) {
     const svg = exportSvg(this.store.doc, opts);
-    const base = opts.slots === "all" ? (this.store.state.fileName ?? "glyphs").replace(/(\.sketch)?\.json$/, "") : this.sketch().name;
-    downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${base}.svg`);
+    downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${this.baseName()}.svg`);
   }
   async exportPngFile(size: number) {
     const blob = await exportPng(this.store.doc, size);
-    downloadBlob(blob, `${this.sketch().name}.png`);
+    downloadBlob(blob, `${this.baseName()}.png`);
+  }
+  private baseName() {
+    return (this.store.state.fileName ?? "sketch").replace(/(\.sketch)?\.json$/, "");
   }
 
   // ---- multi-step edits (Power Trim strokes): one undo step
@@ -608,16 +496,10 @@ export class App implements ToolHost {
     const s = this.sketch();
     const b = emptyBox();
     for (const e of Object.values(s.entities)) {
-      if (e.id === "origin" || (e.type === "line" && e.guide)) continue;
-      if (e.type === "point" && e.owner && (s.entities[e.owner] as { guide?: string } | undefined)?.guide) continue;
+      if (e.id === "origin") continue;
       for (const p of entitySamples(s, e)) boxAdd(b, p);
     }
     if (!boxValid(b)) {
-      const m = guideMetrics(this.store.doc);
-      if (m) {
-        this.view.fit({ minX: 0, minY: m.bottom, maxX: s.advance, maxY: m.top });
-        return this.requestRender();
-      }
       this.view.cx = 0;
       this.view.cy = 0;
       this.view.scale = 1;
@@ -876,21 +758,8 @@ export class App implements ToolHost {
         return this.store.set({ gridSnap: !this.store.state.gridSnap });
       case "open":
         return void this.openFile();
-      case "toggleGuides":
-        return this.toggleGuides();
       case "combs":
         return this.store.set({ combs: !this.store.state.combs });
-      case "toggleSlots":
-        return this.store.set({ showSlots: !this.store.state.showSlots });
-      case "hygiene": {
-        const on = !this.store.state.hygiene;
-        this.store.set({ hygiene: on });
-        if (on) {
-          const n = extremaWithoutPoints(this.sketch()).length;
-          this.flash(n ? `${n} extrema without on-curve points (orange diamonds)` : "All curve extrema sit on on-curve points");
-        }
-        return;
-      }
       case "picture":
         return void this.importPicture();
       case "exportSvg":
@@ -965,9 +834,7 @@ export class App implements ToolHost {
       art.dpr = v.dpr;
       const { o } = outlineOf(s, false);
       const b = outlineBounds(o);
-      const m = guideMetrics(this.store.doc);
-      if (m) art.fit({ minX: Math.min(0, boxValid(b) ? b.minX : 0), minY: m.bottom, maxX: Math.max(s.advance, boxValid(b) ? b.maxX : 0), maxY: m.top }, 30);
-      else if (boxValid(b)) art.fit(b, 30);
+      if (boxValid(b)) art.fit(b, 30);
       ctx.save();
       ctx.translate(v.width, 0);
       ctx.beginPath();
@@ -1014,19 +881,6 @@ export class App implements ToolHost {
     if (this.store.state.combs) drawCurvatureCombs(p, s);
     drawSketch(p, s, opts);
     if (!live) drawDiagnostics(p, o);
-    if (this.store.state.hygiene)
-      for (const x of extremaWithoutPoints(s)) {
-        const S = p.s(x.at);
-        const c = p.ctx;
-        c.fillStyle = theme.openEnd;
-        c.beginPath();
-        c.moveTo(S.x, S.y - 6);
-        c.lineTo(S.x + 6, S.y);
-        c.lineTo(S.x, S.y + 6);
-        c.lineTo(S.x - 6, S.y);
-        c.closePath();
-        c.fill();
-      }
     const conflicts = new Set(this.store.state.status.conflicts);
     const glyphs = drawRelationGlyphs(p, s, conflicts, this.store.state.hover, opts.selection);
     const sel = this.tools.get("select") as SelectTool;

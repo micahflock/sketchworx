@@ -27,5 +27,4 @@ export const theme = {
   fill: "#141414",
   boxWindow: "rgba(0,120,255,0.12)",
   boxCrossing: "rgba(0,180,80,0.12)",
-  guide: "rgba(200,60,160,0.55)",
 };

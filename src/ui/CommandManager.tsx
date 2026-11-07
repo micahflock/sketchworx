@@ -59,10 +59,7 @@ export const groups: Group[] = [
       a("sketchView", "Sketch View", "sketchView", "view:sketch"),
       a("artView", "Art View", "artView", "view:art"),
       a("splitView", "Split View", "splitView", "view:split"),
-      a("guides", "Metric Guides", "guides", "toggleGuides"),
       a("picture", "Sketch Picture", "picture", "picture"),
-      a("slots", "Glyph Slots", "slots", "toggleSlots"),
-      a("hygiene", "Extrema Check", "hygiene", "hygiene"),
       a("combs", "Curvature Combs", "combs", "combs"),
       a("grid", "Grid Snap", "grid", "toggleGridSnap"),
     ],
@@ -115,9 +112,6 @@ export function CommandManager() {
     (b.action === "keyboardPanel" && ui.panel === "keyboard") ||
     (b.action === "toggleGridSnap" && ui.gridSnap) ||
     (b.id === "dynamicMirror" && !!ui.dynamicMirror) ||
-    (b.action === "toggleGuides" && app.hasGuides()) ||
-    (b.action === "toggleSlots" && (ui.showSlots || ui.history.present.slots.length > 1)) ||
-    (b.action === "hygiene" && ui.hygiene) ||
     (b.action === "combs" && ui.combs) ||
     (b.action === "exportSvg" && ui.panel === "export");
   return (

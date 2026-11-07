@@ -2,6 +2,14 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Scope change (after milestone 7)
+
+No font features: no font export toolkits or UI. Removed metric guides, glyph slots and advance widths, the
+extrema ("handle hygiene") check, units-per-em, and the font-specific SVG options (metric-guide viewBox, all glyphs
+in a row). A document is now a single sketch (file format version 2). Version 1 files still open: the active
+sketch is loaded and metric-guide lines are dropped. Font wording was removed from the app, samples and tests.
+The notes below describe each milestone as built; items struck by this change are marked *(removed)*.
+
 ## Decisions on open questions
 
 | Question | Decision (for now) | Why |
@@ -11,7 +19,7 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
 | Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or any static server; installable PWA |
 | Spike blocker → TS solver or patch bindings? | Moot: no blocker. Per-entity status is computed in TS; the G2 constraint was added by patching the C++ | |
-| UFO font export in v1? | Not done; SVG covers v1 | Natural next step (metric guides + slots already map onto UFO) |
+| UFO font export in v1? | No font export at all (scope change) | SVG and PNG only |
 
 ## Milestone 7 — Curvature continuity ✅
 
@@ -31,7 +39,7 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
   solver parameter (B-splines are pushed straight after the points because the wrapper re-registers their poles).
 - **Curvature combs** (View → Curvature Combs): teeth on splines and arcs, one scale for the whole sketch so a G2 joint
   shows no step.
-- The letter-O sample now has a G2 right-hand joint; the mirror makes the other three joints G2 by symmetry (adding Equal
+- The O-shape sample (`sketchworxSamples.oval()`) now has a G2 right-hand joint; the mirror makes the other three joints G2 by symmetry (adding Equal
   Curvature there too would be redundant and is reported as such).
 
 Acceptance:
@@ -51,18 +59,12 @@ Note: `spike/*.mjs` import the npm package that the spike used. To rerun them: `
   no chrome. Split view puts the editable sketch on the left and a fitted Art preview on the right.
 - Loop diagnostics: open endpoints (orange rings) and self-intersections (orange crosses). Skipped during
   drags to stay fast.
-- Metric guides (View → Metric Guides, or the Glyph section): baseline, xheight, capheight, ascender,
-  descender lines driven by variables of those names (defaults for 1000 units/em). They are real fixed
-  construction lines, so points and curves can be made Coincident with them.
-- Glyph slots: strip of thumbnails at the bottom (View → Glyph Slots), add, click to switch, double-click to
-  rename, per-slot advance width. Variables are shared; changing one re-solves every slot in the background.
+- *(removed)* Metric guides and glyph slots with advance widths.
 - Sketch Picture: insert PNG/JPG as a background with opacity/position/scale, and "Calibrate scale" (draw a
   line over a known feature, enter its length).
-- Handle hygiene: View → Extrema Check marks horizontal/vertical extrema of splines and arcs that have no
-  on-curve point.
-- Export panel: SVG (current glyph or all glyphs in a row, arcs as `A` or cubics, viewBox from bounds or metric
-  guides + advance, optional construction for presentation; splines above degree 3 become cubics) and PNG of
-  the Art view at a chosen size.
+- *(removed)* Extrema ("handle hygiene") check.
+- Export panel: SVG (one path, arcs as `A` or cubics, viewBox from the geometry bounds, optional construction
+  for presentation; splines above degree 3 become cubics) and PNG of the Art view at a chosen size.
 - PWA: manifest, icons, and a service worker generated at build time that precaches every built file
   (including the solver WASM), then serves cache-first.
 - Touch: one finger pans, two fingers pinch-zoom/pan, two-finger tap undoes, long-press opens the context
@@ -74,7 +76,7 @@ Note: `spike/*.mjs` import the npm package that the spike used. To rerun them: `
   result is superseded instead of dropping it.
 
 Acceptance:
-- SVG: the outlined "O" (letter-O skeleton offset 40 both ways, base geometry → construction) exports as one
+- SVG: the outlined "O" (O-shape skeleton offset 40 both ways, base geometry → construction) exports as one
   path with two subpaths. Rendered with Chromium and with resvg (an independent renderer), the filled
   outlines differ in 0.12% of pixels (anti-aliased edges only). The slot sample differs in 0.32% (arcs as `A`)
   and 0.28% (as cubics). **Inkscape is not installed in this environment**, so it was not used; please open
@@ -84,7 +86,7 @@ Acceptance:
 - Touch gestures checked with emulated iPad Pro multi-touch (CDP touch events). **Not yet tried on a real
   iPad with Apple Pencil.**
 - Unit tests: `tests/outline.test.ts` (loops, hole orientation, open ends, self-intersections, SVG arcs vs
-  cubics, cubic arc accuracy, extrema check).
+  cubics, cubic arc accuracy).
 
 ## Milestone 5 — Style splines and tools ✅
 
@@ -92,7 +94,7 @@ Acceptance:
   or Enter finishes early. Single-span Bézier, degree = vertices − 1.
 - Control-polygon sides are real construction lines owned by the spline (not just solver-internal), so they
   take Horizontal/Vertical/Parallel/Equal relations and dimensions directly: the usual way to set horizontal
-  tangents at extrema. H/V inferred while placing a vertex is applied to that side. Deleting the spline
+  tangents at curve extremes. H/V inferred while placing a vertex is applied to that side. Deleting the spline
   deletes its vertices and sides.
 - Spline tangency (line, arc, spline at a shared end) maps onto polygon-side constraints as the spec says.
 - Power Trim: drag a stroke across segments (one undo step) or click. Trimming keeps the entity's other
@@ -114,7 +116,7 @@ Acceptance:
   intersections by polyline + Newton refinement).
 
 Acceptance:
-- `tests/edits.test.ts` "letter O": four style splines, tangent joints, right half mirrored about a
+- `tests/edits.test.ts` "O shape": four style splines, tangent joints, right half mirrored about a
   centerline, no redundant or conflicting relations; dragging a control vertex 15 frames keeps all four
   joints tangent to < 1e-6 rad. Also available as a sample (`window.sketchworxSamples.o()`), checked
   interactively in the browser.
@@ -146,11 +148,11 @@ Acceptance (Playwright):
   (circles), arc length (arc + both endpoints), center distances for circles/arcs. Style-spline polygon sides
   are point-point distances between control vertices.
 - Modify box: value focused, Enter/✓ applies, Esc/✕ cancels, ▲▼ (and arrow keys / wheel, Shift ×10) spin,
-  accepts expressions (`=stem*1.5`, SolidWorks-style `="stem"` too). Double-click any dimension to reopen.
+  accepts expressions (`=width*1.5`, SolidWorks-style `="width"` too). Double-click any dimension to reopen.
 - Over-defining dimension → "Make Dimension Driven?" prompt (driven or leave driving). Driven dimensions are
   measurements of solved geometry (not solver constraints), drawn gray in parentheses.
 - Global Variables panel: add, rename (rewrites references), edit, delete; dependency order and cycle errors.
-  Variables are document-wide (shared by all future glyph slots). Changing one re-evaluates every dimension
+  Variables are document-wide. Changing one re-evaluates every dimension
   expression and re-solves.
 - Expression parser (`model/expr.ts`): `+ - * / ( )`, unary minus, `min max sqrt sin cos` (degrees). No `eval`.
 - Sketch origin is now a fixed, selectable point (relate/dimension to it like the SolidWorks origin).

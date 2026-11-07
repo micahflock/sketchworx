@@ -34,10 +34,6 @@ export interface UiState {
   touchUi: boolean;
   /** Centerline used by Dynamic Mirror, when active. */
   dynamicMirror: Id | null;
-  /** Show the glyph-slot strip even with a single slot. */
-  showSlots: boolean;
-  /** Show handle-hygiene markers (extrema without on-curve points). */
-  hygiene: boolean;
   /** Curvature combs on splines and arcs. */
   combs: boolean;
 }
@@ -74,8 +70,6 @@ export class Store {
       showGrid: true,
       touchUi: false,
       dynamicMirror: null,
-      showSlots: false,
-      hygiene: false,
       combs: false,
     };
   }

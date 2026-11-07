@@ -24,8 +24,8 @@ describe("expressions", () => {
     expect(ev("cos(60)")).toBeCloseTo(0.5, 12);
   });
   it("variables, including SolidWorks quoted names", () => {
-    expect(ev("=stem*1.5", { stem: 88 })).toBe(132);
-    expect(ev('="stem" + 2', { stem: 88 })).toBe(90);
+    expect(ev("=width*1.5", { width: 88 })).toBe(132);
+    expect(ev('="width" + 2', { width: 88 })).toBe(90);
   });
   it("errors", () => {
     expect(() => ev("1 +")).toThrow();

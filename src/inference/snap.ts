@@ -49,7 +49,6 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
     if (e.owner) {
       const own = s.entities[e.owner];
       if (own?.type === "spline" && own.derived) continue;
-      if (own?.type === "line" && own.guide) continue;
     }
     const d = dist(raw, e);
     if (d <= tol && (!best || d < best.d)) best = { id: e.id, d };
@@ -161,11 +160,7 @@ export function closestCurve(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>): {
   for (const e of Object.values(s.entities)) {
     if (e.type === "point" || skip?.has(e.id)) continue;
     let pt: Vec2 | null = null;
-    if (e.type === "line") {
-      const a = ptv(s, e.p1);
-      const b = ptv(s, e.p2);
-      pt = e.guide ? { x: p.x, y: a.y + ((b.y - a.y) * (p.x - a.x)) / (b.x - a.x || 1) } : closestOnSegment(p, a, b);
-    }
+    if (e.type === "line") pt = closestOnSegment(p, ptv(s, e.p1), ptv(s, e.p2));
     else if (e.type === "circle") {
       const c = ptv(s, e.c);
       pt = polar(c, e.r, Math.atan2(p.y - c.y, p.x - c.x));

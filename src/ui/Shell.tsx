@@ -4,7 +4,6 @@ import { useApp, useUi } from "./hooks";
 import { PropertyManager } from "./PropertyManager";
 import { StatusBar } from "./StatusBar";
 import { Overlays } from "./Overlays";
-import { SlotStrip } from "./SlotStrip";
 import css from "./ui.module.css";
 
 export function Shell() {
@@ -31,7 +30,6 @@ export function Shell() {
           {ui.touchUi && <TouchKeys />}
         </div>
       </div>
-      <SlotStrip />
       <StatusBar />
     </div>
   );

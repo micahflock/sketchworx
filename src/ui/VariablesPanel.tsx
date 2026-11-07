@@ -5,7 +5,7 @@ import { fmt } from "../tools/line";
 import { useApp, useUi } from "./hooks";
 import css from "./ui.module.css";
 
-/** Global Variables (SolidWorks Equations, simplified). Shared across all glyph slots. */
+/** Global Variables (SolidWorks Equations, simplified). */
 export function VariablesPanel() {
   const app = useApp();
   const ui = useUi();
@@ -31,7 +31,7 @@ export function VariablesPanel() {
     setErr(null);
   };
   const usage = (name: string) =>
-    doc.slots.reduce((n, s) => n + Object.values(s.dimensions).filter((d) => new RegExp(`\\b${name}\\b`).test(d.expr)).length, 0);
+    Object.values(doc.sketch.dimensions).filter((d) => new RegExp(`\\b${name}\\b`).test(d.expr)).length;
 
   return (
     <div class={css.pm}>
@@ -41,7 +41,7 @@ export function VariablesPanel() {
           Close
         </button>
       </div>
-      <div class={css.info}>Use in dimensions as =name, e.g. =stem*1.5. Functions: min, max, sqrt, sin, cos (degrees).</div>
+      <div class={css.info}>Use in dimensions as =name, e.g. =width*1.5. Functions: min, max, sqrt, sin, cos (degrees).</div>
       <div class={css.varRow} style={{ fontWeight: 600, fontSize: "12px" }}>
         <span>Name</span>
         <span>Value / expression</span>

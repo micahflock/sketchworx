@@ -148,8 +148,8 @@ describe("offset", () => {
   });
 });
 
-/** Letter "O": four style splines, tangent joints, right half mirrored about a centerline. */
-function letterO(): { doc: Doc; tr: Id; br: Id; tl: Id; bl: Id } {
+/** Oval ("O" shape): four style splines, tangent joints, right half mirrored about a centerline. */
+function ovalShape(): { doc: Doc; tr: Id; br: Id; tl: Id; bl: Id } {
   const out = { tr: "", br: "", tl: "", bl: "" };
   const doc = applyCommand(createDoc(), (ed: Editor) => {
     const axis = addLine(ed, { x: 0, y: -150 }, { x: 0, y: 150 }, true);
@@ -194,9 +194,9 @@ function jointKink(s: Sketch, a: Id, b: Id, ptsOverride?: Map<Id, Vec2>): number
   return Math.abs(Math.asin(Math.max(-1, Math.min(1, cross(ta, tb) / (Math.hypot(ta.x, ta.y) * Math.hypot(tb.x, tb.y))))));
 }
 
-describe("milestone 5: letter O", () => {
+describe("milestone 5: O shape", () => {
   it("solves without conflicts and stays tangent while a control vertex is dragged", () => {
-    const { doc, tr, br, tl, bl } = letterO();
+    const { doc, tr, br, tl, bl } = ovalShape();
     const s = activeSketch(doc);
     const inp = buildSolverInput(s);
     expect(inp.unsupported).toEqual([]);

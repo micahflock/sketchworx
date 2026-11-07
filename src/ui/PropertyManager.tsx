@@ -194,16 +194,10 @@ export function PropertyManager() {
   if (!ui.selection.length) {
     return (
       <div class={css.pm}>
-        <div class={css.pmTitle}>{s.name}</div>
+        <div class={css.pmTitle}>Sketch</div>
         <ConflictList />
         <div class={css.info}>{ui.prompt}</div>
         <SketchSummary s={s} />
-        <Section title="Glyph">
-          <NumField label="Advance width" value={s.advance} onCommit={(v) => app.setAdvance(v)} />
-          <label class={css.check}>
-            <input type="checkbox" checked={app.hasGuides()} onChange={() => app.toggleGuides()} /> Metric guides
-          </label>
-        </Section>
         <PictureSection />
       </div>
     );

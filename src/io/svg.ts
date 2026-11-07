@@ -7,15 +7,12 @@ import { arcGeom, ptv } from "../model/sketch";
 import type { Doc, Sketch } from "../model/types";
 
 export interface SvgOptions {
-  /** Which slots: the active one, or all laid out by advance width. */
-  slots: "active" | "all";
   arcs: "arc" | "cubic";
-  viewBox: "bounds" | "guides";
   /** Presentation export: also stroke construction geometry. */
   construction: boolean;
 }
 
-export const defaultSvgOptions: SvgOptions = { slots: "active", arcs: "arc", viewBox: "bounds", construction: false };
+export const defaultSvgOptions: SvgOptions = { arcs: "arc", construction: false };
 
 const n = (v: number) => {
   const r = Math.round(v * 10000) / 10000;
@@ -105,45 +102,21 @@ export function outlineBounds(o: Outline): Box {
   return b;
 }
 
-/** Vertical metrics from the metric-guide variables, if present. */
-export function guideMetrics(doc: Doc): { top: number; bottom: number } | null {
-  const v = new Map(doc.variables.map((x) => [x.name, x.value]));
-  const top = v.get("ascender") ?? v.get("capheight");
-  const bottom = v.get("descender") ?? v.get("baseline");
-  return top !== undefined && bottom !== undefined && top > bottom ? { top, bottom } : null;
-}
-
+/** Filled outlines as SVG: one path, nonzero fill, viewBox from the geometry bounds. */
 export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
-  const slots = o.slots === "all" ? doc.slots : [doc.slots[doc.activeSlot]];
-  const paths: string[] = [];
-  const box = emptyBox();
-  let x = 0;
-  for (const s of slots) {
-    const outline = buildOutline(s);
-    const ob = outlineBounds(outline);
-    const dx = o.slots === "all" ? x : 0;
-    const d = loopsToPathData(outline.loops, o.arcs, dx);
-    const id = s.name.replace(/[^A-Za-z0-9_-]/g, "_") || s.id;
-    paths.push(`  <path id="${id}" d="${d}" fill="#000" fill-rule="nonzero"/>`);
-    if (o.construction) {
-      const cd = constructionPath(s, dx);
-      if (cd) paths.push(`  <path d="${cd}" fill="none" stroke="#3f6fd8" stroke-width="1" stroke-dasharray="8 3 2 3" vector-effect="non-scaling-stroke"/>`);
-    }
-    if (boxValid(ob)) {
-      boxAdd(box, { x: ob.minX + dx, y: ob.minY });
-      boxAdd(box, { x: ob.maxX + dx, y: ob.maxY });
-    }
-    x += s.advance;
+  const s = doc.sketch;
+  const outline = buildOutline(s);
+  const box = outlineBounds(outline);
+  const paths = [`  <path d="${loopsToPathData(outline.loops, o.arcs)}" fill="#000" fill-rule="nonzero"/>`];
+  if (o.construction) {
+    const cd = constructionPath(s, 0);
+    if (cd) paths.push(`  <path d="${cd}" fill="none" stroke="#3f6fd8" stroke-width="1" stroke-dasharray="8 3 2 3" vector-effect="non-scaling-stroke"/>`);
   }
-  let vb: { x: number; y: number; w: number; h: number };
-  const metrics = o.viewBox === "guides" ? guideMetrics(doc) : null;
-  if (metrics) {
-    const w = o.slots === "all" ? x : slots[0].advance;
-    vb = { x: 0, y: -metrics.top, w, h: metrics.top - metrics.bottom };
-  } else if (boxValid(box)) {
+  let vb = { x: 0, y: 0, w: 100, h: 100 };
+  if (boxValid(box)) {
     const m = Math.max(box.maxX - box.minX, box.maxY - box.minY) * 0.02;
     vb = { x: box.minX - m, y: -box.maxY - m, w: box.maxX - box.minX + 2 * m, h: box.maxY - box.minY + 2 * m };
-  } else vb = { x: 0, y: 0, w: 100, h: 100 };
+  }
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(vb.x)} ${n(vb.y)} ${n(vb.w)} ${n(vb.h)}" width="${n(vb.w)}" height="${n(vb.h)}">`,
@@ -153,10 +126,9 @@ export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
   ].join("\n");
 }
 
-/** Art view (black fills) of the active slot as a PNG of the given size. */
+/** Art view (black fills) of the sketch as a PNG of the given size. */
 export async function exportPng(doc: Doc, size: number): Promise<Blob> {
-  const s = doc.slots[doc.activeSlot];
-  const outline = buildOutline(s);
+  const outline = buildOutline(doc.sketch);
   const b = outlineBounds(outline);
   const canvas = document.createElement("canvas");
   canvas.width = size;

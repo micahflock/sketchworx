@@ -31,7 +31,7 @@ function jointCurvatures(s: Sketch, a: Id, b: Id, pos: Map<Id, Vec2>): [number, 
   return [bezierCurvature(oa, 1), bezierCurvature(ob, 0)];
 }
 
-function letterO(g2: boolean) {
+function ovalShape(g2: boolean) {
   const ids = { tr: "", br: "", tl: "", bl: "" };
   const doc = applyCommand(createDoc(), (ed) => {
     const axis = addLine(ed, { x: 0, y: -150 }, { x: 0, y: 150 }, true);
@@ -79,12 +79,12 @@ function dragAndCheck(doc: Doc, handle: Id) {
 
 describe("milestone 7: equal curvature", () => {
   it("is offered for two splines meeting at an end", () => {
-    const { doc, tr, br } = letterO(false);
+    const { doc, tr, br } = ovalShape(false);
     expect(validRelations(activeSketch(doc), [tr, br])).toContain("equalCurvature");
   });
 
-  it("the O with a G2 joint keeps continuous curvature at every joint while dragging", () => {
-    const { doc, tr, br, tl, bl } = letterO(true);
+  it("the O shape with a G2 joint keeps continuous curvature at every joint while dragging", () => {
+    const { doc, tr, br, tl, bl } = ovalShape(true);
     const s = activeSketch(doc);
     // Equal Curvature replaced the Tangent relation between tr and br.
     expect(Object.values(s.relations).filter((r) => r.type === "tangent" && r.refs.includes(tr) && r.refs.includes(br))).toHaveLength(0);
@@ -105,7 +105,7 @@ describe("milestone 7: equal curvature", () => {
   });
 
   it("without G2 the right joint has a curvature jump after dragging", () => {
-    const { doc, tr, br } = letterO(false);
+    const { doc, tr, br } = ovalShape(false);
     const s = activeSketch(doc);
     const { frames } = dragAndCheck(doc, (s.entities[tr] as SplineEntity).cps[1]);
     const [ka, kb] = jointCurvatures(s, tr, br, frames[frames.length - 1]);

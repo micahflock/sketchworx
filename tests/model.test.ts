@@ -72,6 +72,42 @@ describe("native file", () => {
     expect(serializeDoc(back)).toBe(text);
   });
 
+  it("opens version 1 files (active sketch, metric guides dropped)", () => {
+    const v1 = {
+      version: 1,
+      nextId: 20,
+      activeSlot: 1,
+      variables: [{ name: "w", expr: "5", value: 5 }],
+      slots: [
+        { id: "s1", name: "A", advance: 600, entities: [], relations: [], dimensions: [] },
+        {
+          id: "s2",
+          name: "B",
+          advance: 600,
+          entities: [
+            { id: "p1", type: "point", x: 0, y: 0, owner: "e3" },
+            { id: "p2", type: "point", x: 10, y: 0, owner: "e3" },
+            { id: "e3", type: "line", p1: "p1", p2: "p2" },
+            { id: "p4", type: "point", x: 0, y: 500, owner: "e6" },
+            { id: "p5", type: "point", x: 600, y: 500, owner: "e6" },
+            { id: "e6", type: "line", p1: "p4", p2: "p5", construction: true, guide: "xheight" },
+          ],
+          relations: [
+            { id: "r7", type: "horizontal", refs: ["e3"] },
+            { id: "r8", type: "coincident", refs: ["p2", "e6"] },
+          ],
+          dimensions: [],
+        },
+      ],
+    };
+    const d = parseDoc(JSON.stringify(v1));
+    const s = activeSketch(d);
+    expect(Object.keys(s.entities).sort()).toEqual(["e3", "origin", "p1", "p2"]);
+    expect(Object.keys(s.relations)).toEqual(["r7"]);
+    expect(d.variables).toHaveLength(1);
+    expect(d.nextId).toBeGreaterThanOrEqual(20);
+  });
+
   it("rejects garbage", () => {
     expect(() => parseDoc("nope")).toThrow();
     expect(() => parseDoc("{}")).toThrow();

@@ -227,27 +227,9 @@ export const icons: Record<string, () => JSX.Element> = {
       <circle cx="16" cy="9" r="1.5" />
     </S>
   ),
-  guides: () => (
-    <S>
-      <path d="M3 6h18M3 11h18M3 18h18" stroke-dasharray="3 2" />
-    </S>
-  ),
   check: () => (
     <S>
       <path d="M5 12l5 5 9-10" />
-    </S>
-  ),
-  slots: () => (
-    <S>
-      <rect x="2" y="7" width="6" height="10" rx="1" />
-      <rect x="9" y="7" width="6" height="10" rx="1" />
-      <rect x="16" y="7" width="6" height="10" rx="1" />
-    </S>
-  ),
-  hygiene: () => (
-    <S>
-      <path d="M3 17C3 7 21 7 21 17" />
-      <path d="M12 7.5l2 2-2 2-2-2z" fill="currentColor" />
     </S>
   ),
   combs: () => (

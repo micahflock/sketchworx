@@ -1,8 +1,8 @@
 # Sketchworx
 
-A browser-based 2D constraint sketcher that behaves like the SolidWorks sketch environment, aimed at logo and
-letterform design. Lines, arcs and style splines, SolidWorks relations and Smart Dimension, unitless values, and
-clean filled SVG export.
+A browser-based 2D constraint sketcher that behaves like the SolidWorks sketch environment, for logos and vector
+art. Lines, arcs and style splines, SolidWorks relations and Smart Dimension, unitless values, and clean filled SVG
+export.
 
 ```sh
 npm install
@@ -18,4 +18,4 @@ See `PROGRESS.md` for milestone status, decisions and known gaps.
 - `src/solver/planegcs` vendored PlaneGCS WebAssembly build with the Equal Curvature constraint (`solver-wasm/` rebuilds it)
 - `src/tools`, `src/inference`, `src/render`, `src/ui`, `src/io` as in the spec
 
-Samples for a quick look (browser console): `sketchworx.loadDoc(sketchworxSamples.slot())` or `sketchworxSamples.o()`.
+Samples for a quick look (browser console): `sketchworx.loadDoc(sketchworxSamples.slot())` or `sketchworxSamples.oval()`.

@@ -52,7 +52,7 @@ function tokenize(src: string): Tok[] {
       i++;
       continue;
     }
-    // Allow SolidWorks-style quoted names: "stem"
+    // Allow SolidWorks-style quoted names: "width"
     if (c === '"') {
       const j = src.indexOf('"', i + 1);
       if (j < 0) throw new ExprError("Unclosed quote");
