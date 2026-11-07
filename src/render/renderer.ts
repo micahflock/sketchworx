@@ -75,6 +75,7 @@ export function strokeFor(e: Entity, opts: SceneOptions): StrokeStyle {
   const color = entityColor(e.id, opts);
   const emph = opts.selection.has(e.id) || opts.hover === e.id;
   if (e.type === "line" && e.owner) return { color, width: emph ? 2 : 0.9, dash: [4, 3] }; // spline control polygon
+  if (e.type === "line" && e.guide) return { color: emph ? color : theme.guide, width: emph ? 2 : 1, dash: [10, 5] };
   if (e.type === "spline" && e.derived) return { color: emph ? color : "#6b6b8a", width: emph ? 2.5 : 1.6 };
   return {
     color,
@@ -86,6 +87,15 @@ export function strokeFor(e: Entity, opts: SceneOptions): StrokeStyle {
 export function drawEntity(p: Painter, s: Sketch, e: Entity, st: StrokeStyle) {
   switch (e.type) {
     case "line":
+      if (e.guide) {
+        // Metric guides run across the whole view.
+        const y = ptv(s, e.p1).y;
+        const b = p.view.visibleBox();
+        p.line({ x: b.minX, y }, { x: b.maxX, y }, st);
+        const S = p.s({ x: b.minX, y });
+        p.textScreen(e.guide, S.x + 6, S.y - 8, st.color, "11px system-ui, sans-serif", "left");
+        break;
+      }
       p.line(ptv(s, e.p1), ptv(s, e.p2), st);
       break;
     case "circle":
@@ -118,6 +128,7 @@ export function drawSketch(p: Painter, s: Sketch, opts: SceneOptions) {
       if (emph || opts.related?.has(e.id)) p.ring(e, 6, color, 2);
       continue;
     }
+    if (e.owner && (s.entities[e.owner] as { guide?: string } | undefined)?.guide) continue;
     if (e.owner) {
       const owner = s.entities[e.owner];
       // Centers of arcs/circles drawn as small crosses, endpoints as dots.

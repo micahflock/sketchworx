@@ -66,7 +66,7 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
   const R = ents.filter((e) => e.type === "circle" || e.type === "arc");
   const S = ents.filter((e) => e.type === "spline");
   const out = new Set<RelationType>();
-  out.add("fix");
+  if (!ids.includes("origin")) out.add("fix"); // the origin is already fixed
   if (P.length === n && n >= 2) {
     out.add("coincident");
     out.add("horizontal");

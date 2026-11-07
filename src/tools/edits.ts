@@ -513,6 +513,8 @@ export interface OffsetOptions {
   cap: "none" | "arcs" | "lines";
   /** Variable that drives the offset (created if missing). */
   link: string;
+  /** SolidWorks "Base geometry: Construction": turn the source chain into construction. */
+  baseConstruction?: boolean;
 }
 
 /** Offset Entities on the chain through `id`. Returns created entity ids. */
@@ -597,6 +599,7 @@ export function offsetChain(ed: Editor, id: Id, o: OffsetOptions): { created: Id
     }
     created.push(...pieces.map((p) => p.id));
   }
+  if (o.baseConstruction) for (const seg of chain.segs) ed.update(seg.id, { construction: true });
   // Cap ends (both directions, open chain).
   if (o.both && o.cap !== "none" && ends.length === 2) {
     const [L, R] = ends;

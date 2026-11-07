@@ -15,7 +15,7 @@ export interface UiState {
   /** Short instruction for the status bar ("Click to set the end point"). */
   prompt: string;
   status: SketchStatus;
-  panel: "auto" | "relations" | "variables" | "keyboard";
+  panel: "auto" | "relations" | "variables" | "keyboard" | "export";
   viewMode: ViewMode;
   showShortcutBar: { x: number; y: number } | null;
   contextBar: { x: number; y: number } | null;
@@ -34,6 +34,10 @@ export interface UiState {
   touchUi: boolean;
   /** Centerline used by Dynamic Mirror, when active. */
   dynamicMirror: Id | null;
+  /** Show the glyph-slot strip even with a single slot. */
+  showSlots: boolean;
+  /** Show handle-hygiene markers (extrema without on-curve points). */
+  hygiene: boolean;
 }
 
 type Listener = () => void;
@@ -68,6 +72,8 @@ export class Store {
       showGrid: true,
       touchUi: false,
       dynamicMirror: null,
+      showSlots: false,
+      hygiene: false,
     };
   }
 

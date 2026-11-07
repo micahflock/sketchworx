@@ -25,6 +25,15 @@ import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model
 import { fmt } from "../tools/line";
 import type { Dimension, Variable } from "../model/types";
 import { isExpression } from "../model/expr";
+import { drawDiagnostics, fillOutline, outlineOf } from "../render/art";
+import { outlineBounds, exportSvg, exportPng, guideMetrics } from "../io/svg";
+import type { SvgOptions } from "../io/svg";
+import { downloadBlob, pickFile } from "../io/storage";
+import { createSketch } from "../model/sketch";
+import { buildSolverInput } from "../solver/build";
+import { applySolved } from "./solverService";
+import { PictureScaleTool } from "../tools/picture";
+import { extremaWithoutPoints } from "../model/hygiene";
 import { SelectTool } from "../tools/select";
 import { ArcTool, CircleTool, PointTool, RectTool } from "../tools/shapes";
 import type { PEvent, Tool, ToolHost } from "../tools/tool";
@@ -38,6 +47,36 @@ import { drawRelationGlyphs, hitAnnotations } from "../render/annotations";
 import type { AnnotationHit } from "../render/annotations";
 import { addRelationCmd, validRelations } from "../model/relations";
 import type { RelationType } from "../model/types";
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Could not read the image"));
+    img.src = url;
+  });
+}
+
+/** Metric guide lines (and their variables if missing), per font conventions for 1000 units/em. */
+function addGuides(ed: import("../model/editor").Editor) {
+  const defaults: [string, number][] = [
+    ["baseline", 0],
+    ["xheight", 500],
+    ["capheight", 700],
+    ["ascender", 750],
+    ["descender", -250],
+  ];
+  const vars = [...ed.d.variables];
+  for (const [name, v] of defaults) if (!vars.some((x) => x.name === name)) vars.push({ name, expr: String(v), value: v });
+  ed.setVariables(vars);
+  for (const [name] of defaults) {
+    const val = vars.find((x) => x.name === name)!.value;
+    const line = ed.newId("e");
+    const p1 = ed.addPoint(0, val, line);
+    const p2 = ed.addPoint(ed.s.advance, val, line);
+    ed.put({ id: line, type: "line", p1, p2, construction: true, guide: name });
+  }
+}
 
 /** Commands whose new entities Dynamic Mirror copies. */
 const DRAW_COMMANDS = new Set(["Line", "Centerline", "Arc", "Tangent Arc", "Circle", "Point", "Style Spline", "Rectangle"]);
@@ -59,6 +98,13 @@ export class App implements ToolHost {
   /** Remembered variant per flyout group. */
   flyoutLast: Record<string, string> = {};
   private autosaveTimer: number | undefined;
+  /** Canvas size in CSS px (the view may use half of it in split mode). */
+  private canvasW = 800;
+  private canvasH = 600;
+  private images = new Map<string, HTMLImageElement>();
+  private touches = new Map<number, { start: Vec2; last: Vec2; t0: number }>();
+  private pinch: { dist: number; mid: Vec2; moved: number; t0: number } | null = null;
+  private longPress: number | undefined;
   /** Status bar cursor readout hook. */
   onCursor: ((p: Vec2) => void) | null = null;
 
@@ -84,6 +130,7 @@ export class App implements ToolHost {
     reg(new OffsetTool(this));
     reg(new MirrorTool(this));
     reg(new DynamicMirrorTool(this));
+    reg(new PictureScaleTool(this));
     this.solver.postSolve = (doc) => applyCommand(doc, recomputeDerived);
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
@@ -115,12 +162,20 @@ export class App implements ToolHost {
     const c = this.canvas!;
     const r = c.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    this.view.width = r.width;
-    this.view.height = r.height;
+    this.canvasW = r.width;
+    this.canvasH = r.height;
     this.view.dpr = dpr;
     c.width = Math.round(r.width * dpr);
     c.height = Math.round(r.height * dpr);
+    this.layoutViews();
     this.requestRender();
+  }
+
+  /** In split view the editable sketch uses the left half; the art preview the right. */
+  layoutViews() {
+    const split = this.store.state.viewMode === "split";
+    this.view.width = split ? this.canvasW / 2 : this.canvasW;
+    this.view.height = this.canvasH;
   }
 
   async restoreAutosave() {
@@ -305,6 +360,138 @@ export class App implements ToolHost {
       this.store.amendDoc(refreshed);
       this.afterChange();
     }
+    void this.solveOtherSlots();
+  }
+
+  /** Variables are shared: re-solve every other slot in the background so all glyphs update. */
+  async solveOtherSlots() {
+    const doc = this.store.doc;
+    const results = await Promise.all(
+      doc.slots.map(async (s, i) => {
+        if (i === doc.activeSlot || Object.keys(s.entities).length <= 1) return null;
+        const inp = buildSolverInput(s);
+        const r = await this.solver.solveRaw(inp.params, inp.constraints);
+        return r.ok ? { i, params: r.params } : null;
+      }),
+    );
+    if (this.store.doc !== doc) return; // superseded by a newer edit
+    let next = doc;
+    for (const r of results) {
+      if (!r) continue;
+      const tmp = applySolved({ ...next, activeSlot: r.i }, r.params);
+      next = this.solver.postSolve ? { ...this.solver.postSolve(tmp), activeSlot: doc.activeSlot } : { ...tmp, activeSlot: doc.activeSlot };
+    }
+    if (next !== doc) this.store.amendDoc(next);
+  }
+
+  // ---- glyph slots
+  setActiveSlot(i: number) {
+    const doc = this.store.doc;
+    if (i === doc.activeSlot || i < 0 || i >= doc.slots.length) return;
+    this.tool.cancel();
+    this.store.amendDoc({ ...doc, activeSlot: i });
+    this.store.set({ selection: [], hover: null, contextBar: null });
+    this.afterChange();
+    this.zoomToFit();
+  }
+  addSlot() {
+    const doc = this.store.doc;
+    const id = `s${doc.nextId}`;
+    const s = createSketch(id, `Glyph${doc.slots.length + 1}`);
+    s.advance = doc.slots[doc.activeSlot]?.advance ?? 600;
+    // New slots get the metric guides when the current one has them.
+    let next: Doc = { ...doc, nextId: doc.nextId + 1, slots: [...doc.slots, s], activeSlot: doc.slots.length };
+    if (Object.values(doc.slots[doc.activeSlot].entities).some((e) => e.type === "line" && e.guide)) next = applyCommand(next, (ed) => addGuides(ed));
+    this.commitDoc(refreshExpressions(next), "Add Glyph");
+    this.store.set({ selection: [] });
+  }
+  renameSlot(i: number, name: string) {
+    const doc = this.store.doc;
+    if (!name.trim() || doc.slots[i]?.name === name) return;
+    this.commitDoc({ ...doc, slots: doc.slots.map((s, k) => (k === i ? { ...s, name: name.trim() } : s)) }, "Rename Glyph");
+  }
+  deleteSlot(i: number) {
+    const doc = this.store.doc;
+    if (doc.slots.length <= 1) return this.flash("A file needs at least one sketch", "error");
+    const slots = doc.slots.filter((_, k) => k !== i);
+    this.commitDoc({ ...doc, slots, activeSlot: Math.min(doc.activeSlot >= i ? Math.max(0, doc.activeSlot - 1) : doc.activeSlot, slots.length - 1) }, "Delete Glyph");
+  }
+  setAdvance(v: number) {
+    if (!(v > 0)) return;
+    this.commit("Advance Width", (ed) => ed.setSketchField("advance", v));
+    const refreshed = refreshExpressions(this.store.doc);
+    if (refreshed !== this.store.doc) {
+      this.store.amendDoc(refreshed);
+      this.afterChange();
+    }
+  }
+
+  // ---- metric guides
+  hasGuides(): boolean {
+    return Object.values(this.sketch().entities).some((e) => e.type === "line" && e.guide);
+  }
+  toggleGuides() {
+    if (this.hasGuides()) {
+      const ids = Object.values(this.sketch().entities)
+        .filter((e) => e.type === "line" && e.guide)
+        .map((e) => e.id);
+      this.commit("Hide Metric Guides", (ed) => ed.deleteEntities(ids));
+      return;
+    }
+    this.commit("Metric Guides", (ed) => addGuides(ed));
+    const refreshed = refreshExpressions(this.store.doc);
+    if (refreshed !== this.store.doc) {
+      this.store.amendDoc(refreshed);
+      this.afterChange();
+    }
+    this.flash("Metric guides are driven by the baseline, xheight, capheight, ascender and descender variables");
+  }
+
+  // ---- sketch picture
+  async importPicture() {
+    const f = await pickFile("image/png,image/jpeg");
+    if (!f) return;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(f);
+    });
+    const img = await loadImage(dataUrl);
+    // Start at roughly the size of the current view.
+    const b = this.view.visibleBox();
+    const scale = ((b.maxX - b.minX) * 0.6) / img.naturalWidth;
+    this.commit("Sketch Picture", (ed) =>
+      ed.setSketchField("picture", { dataUrl, x: b.minX + (b.maxX - b.minX) * 0.2, y: b.minY + (b.maxY - b.minY) * 0.2, scale, opacity: 0.5 }),
+    );
+    this.flash("Picture added. Use Calibrate scale in the PropertyManager to set its size from a known feature");
+  }
+  setPicture(patch: Partial<NonNullable<Sketch["picture"]>> | null) {
+    const pic = this.sketch().picture;
+    if (patch === null) return void this.commit("Remove Picture", (ed) => ed.setSketchField("picture", undefined));
+    if (!pic) return;
+    this.commit("Edit Picture", (ed) => ed.setSketchField("picture", { ...pic, ...patch }));
+  }
+  private imageFor(url: string): HTMLImageElement | null {
+    let img = this.images.get(url);
+    if (!img) {
+      img = new Image();
+      img.onload = () => this.requestRender();
+      img.src = url;
+      this.images.set(url, img);
+    }
+    return img.complete && img.naturalWidth ? img : null;
+  }
+
+  // ---- export
+  async exportSvgFile(opts: SvgOptions) {
+    const svg = exportSvg(this.store.doc, opts);
+    const base = opts.slots === "all" ? (this.store.state.fileName ?? "glyphs").replace(/(\.sketch)?\.json$/, "") : this.sketch().name;
+    downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${base}.svg`);
+  }
+  async exportPngFile(size: number) {
+    const blob = await exportPng(this.store.doc, size);
+    downloadBlob(blob, `${this.sketch().name}.png`);
   }
 
   // ---- multi-step edits (Power Trim strokes): one undo step
@@ -419,8 +606,17 @@ export class App implements ToolHost {
   zoomToFit() {
     const s = this.sketch();
     const b = emptyBox();
-    for (const e of Object.values(s.entities)) for (const p of entitySamples(s, e)) boxAdd(b, p);
+    for (const e of Object.values(s.entities)) {
+      if (e.id === "origin" || (e.type === "line" && e.guide)) continue;
+      if (e.type === "point" && e.owner && (s.entities[e.owner] as { guide?: string } | undefined)?.guide) continue;
+      for (const p of entitySamples(s, e)) boxAdd(b, p);
+    }
     if (!boxValid(b)) {
+      const m = guideMetrics(this.store.doc);
+      if (m) {
+        this.view.fit({ minX: 0, minY: m.bottom, maxX: s.advance, maxY: m.top });
+        return this.requestRender();
+      }
       this.view.cx = 0;
       this.view.cy = 0;
       this.view.scale = 1;
@@ -484,6 +680,9 @@ export class App implements ToolHost {
       c.setPointerCapture(e.pointerId);
       const pe = this.toEvent(e);
       this.lastPointer = pe;
+      if (pe.pointerType !== "mouse" && !this.store.state.touchUi) this.store.set({ touchUi: true });
+      if (this.store.state.viewMode === "split" && pe.screen.x > this.view.width) return;
+      if (pe.pointerType === "touch") return this.touchDown(e, pe);
       if (e.button === 1 || (e.button === 0 && e.altKey && pe.pointerType === "mouse")) {
         this.panning = { last: pe.screen };
         e.preventDefault();
@@ -496,6 +695,7 @@ export class App implements ToolHost {
     c.addEventListener("pointermove", (e) => {
       const pe = this.toEvent(e);
       this.lastPointer = pe;
+      if (pe.pointerType === "touch") return this.touchMove(e, pe);
       if (this.panning) {
         this.view.panBy(pe.screen.x - this.panning.last.x, pe.screen.y - this.panning.last.y);
         this.panning.last = pe.screen;
@@ -507,6 +707,7 @@ export class App implements ToolHost {
     });
     const up = (e: PointerEvent) => {
       const pe = this.toEvent(e);
+      if (pe.pointerType === "touch") return this.touchUp(e, pe);
       if (this.panning) {
         this.panning = null;
         return;
@@ -536,7 +737,59 @@ export class App implements ToolHost {
     window.addEventListener("blur", () => this.store.set({ ctrl: false }));
   }
 
+  // ---- touch: one finger pans, two fingers pinch-zoom, two-finger tap undoes, long-press opens the menu
+  private touchDown(e: PointerEvent, pe: PEvent) {
+    this.touches.set(e.pointerId, { start: pe.screen, last: pe.screen, t0: performance.now() });
+    clearTimeout(this.longPress);
+    if (this.touches.size === 1) {
+      this.longPress = window.setTimeout(() => {
+        const t = this.touches.get(e.pointerId);
+        if (!t || this.touches.size !== 1 || Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) > 10) return;
+        const w = this.view.toWorld(t.last);
+        const h = this.hit(w, "touch");
+        if (h) {
+          if (!this.store.state.selection.includes(h.id)) this.select([...this.store.state.selection, h.id]);
+          this.showContextBar(t.last);
+        } else this.store.set({ showShortcutBar: t.last });
+      }, 500);
+    } else if (this.touches.size === 2) {
+      const [a, b] = [...this.touches.values()];
+      this.pinch = { dist: Math.hypot(a.last.x - b.last.x, a.last.y - b.last.y), mid: { x: (a.last.x + b.last.x) / 2, y: (a.last.y + b.last.y) / 2 }, moved: 0, t0: performance.now() };
+    }
+  }
+  private touchMove(e: PointerEvent, pe: PEvent) {
+    const t = this.touches.get(e.pointerId);
+    if (!t) return;
+    const dx = pe.screen.x - t.last.x;
+    const dy = pe.screen.y - t.last.y;
+    t.last = pe.screen;
+    if (this.touches.size === 1) {
+      this.view.panBy(dx, dy);
+      this.requestRender();
+    } else if (this.touches.size === 2 && this.pinch) {
+      const [a, b] = [...this.touches.values()];
+      const d = Math.hypot(a.last.x - b.last.x, a.last.y - b.last.y);
+      const mid = { x: (a.last.x + b.last.x) / 2, y: (a.last.y + b.last.y) / 2 };
+      this.view.panBy(mid.x - this.pinch.mid.x, mid.y - this.pinch.mid.y);
+      if (this.pinch.dist > 0) this.view.zoomAt(mid, d / this.pinch.dist);
+      this.pinch.moved += Math.abs(d - this.pinch.dist) + Math.hypot(mid.x - this.pinch.mid.x, mid.y - this.pinch.mid.y);
+      this.pinch.dist = d;
+      this.pinch.mid = mid;
+      this.requestRender();
+    }
+  }
+  private touchUp(e: PointerEvent, _pe: PEvent) {
+    clearTimeout(this.longPress);
+    this.touches.delete(e.pointerId);
+    if (this.pinch && this.touches.size < 2) {
+      const tap = performance.now() - this.pinch.t0 < 300 && this.pinch.moved < 12;
+      this.pinch = null;
+      if (tap) this.undo();
+    }
+  }
+
   onKeyDown(e: KeyboardEvent) {
+    if (this.store.state.touchUi && e.key.length === 1) this.store.set({ touchUi: false }); // a keyboard is attached
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
     if (e.key === "Control" || e.key === "Meta") {
@@ -613,12 +866,32 @@ export class App implements ToolHost {
         return this.store.set({ panel: "auto" });
       case "view:sketch":
       case "view:art":
-      case "view:split":
-        return this.store.set({ viewMode: action.slice(5) as any });
+      case "view:split": {
+        this.store.set({ viewMode: action.slice(5) as "sketch" | "art" | "split" });
+        this.layoutViews();
+        return this.requestRender();
+      }
       case "toggleGridSnap":
         return this.store.set({ gridSnap: !this.store.state.gridSnap });
       case "open":
         return void this.openFile();
+      case "toggleGuides":
+        return this.toggleGuides();
+      case "toggleSlots":
+        return this.store.set({ showSlots: !this.store.state.showSlots });
+      case "hygiene": {
+        const on = !this.store.state.hygiene;
+        this.store.set({ hygiene: on });
+        if (on) {
+          const n = extremaWithoutPoints(this.sketch()).length;
+          this.flash(n ? `${n} extrema without on-curve points (orange diamonds)` : "All curve extrema sit on on-curve points");
+        }
+        return;
+      }
+      case "picture":
+        return void this.importPicture();
+      case "exportSvg":
+        return this.store.set({ panel: this.store.state.panel === "export" ? "auto" : "export" });
       case "save":
         return void this.saveFile();
       case "keyboardPanel":
@@ -662,20 +935,94 @@ export class App implements ToolHost {
     const ctx = this.ctx;
     if (!ctx) return;
     const v = this.view;
-    ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-    ctx.fillStyle = theme.bg;
-    ctx.fillRect(0, 0, v.width, v.height);
-    const p = new Painter(ctx, v);
+    const mode = this.store.state.viewMode;
     const s = this.sketch();
-    const opts = this.sceneOptions();
-    if (opts.showGrid) drawGrid(p);
-    this.drawLayers(p, s, opts);
-    this.tool.draw?.(p);
+    ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, v.width, v.height);
+    ctx.clip();
+    if (mode === "art") this.drawArt(ctx, v, s);
+    else {
+      ctx.fillStyle = theme.bg;
+      ctx.fillRect(0, 0, v.width, v.height);
+      const p = new Painter(ctx, v);
+      const opts = this.sceneOptions();
+      this.drawPicture(ctx, v, s);
+      if (opts.showGrid) drawGrid(p);
+      this.drawLayers(p, s, opts);
+      this.tool.draw?.(p);
+    }
+    ctx.restore();
+    if (mode === "split") {
+      // Art preview on the right, fitted to the glyph.
+      const art = new View();
+      art.width = this.canvasW - v.width;
+      art.height = v.height;
+      art.dpr = v.dpr;
+      const { o } = outlineOf(s, false);
+      const b = outlineBounds(o);
+      const m = guideMetrics(this.store.doc);
+      if (m) art.fit({ minX: Math.min(0, boxValid(b) ? b.minX : 0), minY: m.bottom, maxX: Math.max(s.advance, boxValid(b) ? b.maxX : 0), maxY: m.top }, 30);
+      else if (boxValid(b)) art.fit(b, 30);
+      ctx.save();
+      ctx.translate(v.width, 0);
+      ctx.beginPath();
+      ctx.rect(0, 0, art.width, art.height);
+      ctx.clip();
+      this.drawArt(ctx, art, s, v.width);
+      ctx.restore();
+      ctx.fillStyle = "#b9c3d2";
+      ctx.fillRect(v.width - 0.5, 0, 1, v.height);
+    }
+  }
+
+  /** Art view: black nonzero fills on white, no chrome. */
+  private drawArt(ctx: CanvasRenderingContext2D, v: View, s: Sketch, offsetX = 0) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, v.width, v.height);
+    const { path } = outlineOf(s, false);
+    ctx.save();
+    const k = v.dpr;
+    ctx.setTransform(k * v.scale, 0, 0, k * v.scale, k * (offsetX + v.width / 2 - v.cx * v.scale), k * (v.height / 2 + v.cy * v.scale));
+    ctx.fillStyle = theme.fill;
+    ctx.fill(path, "nonzero");
+    ctx.restore();
+  }
+
+  private drawPicture(ctx: CanvasRenderingContext2D, v: View, s: Sketch) {
+    const pic = s.picture;
+    if (!pic) return;
+    const img = this.imageFor(pic.dataUrl);
+    if (!img) return;
+    const tl = v.toScreen({ x: pic.x, y: pic.y + img.naturalHeight * pic.scale });
+    ctx.save();
+    ctx.globalAlpha = pic.opacity;
+    ctx.drawImage(img, tl.x, tl.y, img.naturalWidth * pic.scale * v.scale, img.naturalHeight * pic.scale * v.scale);
+    ctx.restore();
   }
 
   /** Overridable layer drawing (relations, dimensions, fills are added later). */
   drawLayers(p: Painter, s: Sketch, opts: SceneOptions) {
+    // Fill preview and loop diagnostics (diagnostics are skipped while dragging to stay fast).
+    const live = this.store.inTransient;
+    const { o, path } = outlineOf(s, !live);
+    fillOutline(p.ctx, p.view, path, "rgba(30,40,70,0.10)");
     drawSketch(p, s, opts);
+    if (!live) drawDiagnostics(p, o);
+    if (this.store.state.hygiene)
+      for (const x of extremaWithoutPoints(s)) {
+        const S = p.s(x.at);
+        const c = p.ctx;
+        c.fillStyle = theme.openEnd;
+        c.beginPath();
+        c.moveTo(S.x, S.y - 6);
+        c.lineTo(S.x + 6, S.y);
+        c.lineTo(S.x, S.y + 6);
+        c.lineTo(S.x - 6, S.y);
+        c.closePath();
+        c.fill();
+      }
     const conflicts = new Set(this.store.state.status.conflicts);
     const glyphs = drawRelationGlyphs(p, s, conflicts, this.store.state.hover, opts.selection);
     const sel = this.tools.get("select") as SelectTool;

@@ -13,7 +13,7 @@ export function ContextBar() {
   const hasCurves = ui.selection.some((id) => s.entities[id] && s.entities[id].type !== "point");
   if (!valid.length && !hasCurves) return null;
   return (
-    <div class={css.contextBar} style={{ left: ui.contextBar.x + 14, top: ui.contextBar.y + 14 }} onPointerDown={(e) => e.stopPropagation()}>
+    <div class={css.contextBar} style={{ left: `${ui.contextBar.x + 14}px`, top: `${ui.contextBar.y + 14}px` }} onPointerDown={(e) => e.stopPropagation()}>
       {valid.map((t) => (
         <button key={t} title={`Make ${relationNames[t]}`} onClick={() => app.addRelation(t)}>
           <Glyph type={t} />

@@ -334,6 +334,7 @@ export class OffsetTool implements Tool {
   both = false;
   cap: "none" | "arcs" | "lines" = "arcs";
   chain = true;
+  baseConstruction = false;
   private hover: { id: Id; side: 1 | -1 } | null = null;
   constructor(private host: ToolHost) {}
   activate() {
@@ -347,7 +348,7 @@ export class OffsetTool implements Tool {
     while (doc.variables.some((v) => v.name === `offset${n}`)) n++;
     let msg: string | undefined;
     this.host.commit("Offset Entities", (ed) => {
-      msg = offsetChain(ed, id, { distance: this.distance, side, both: this.both, cap: this.both ? this.cap : "none", link: `offset${n}` }).message;
+      msg = offsetChain(ed, id, { distance: this.distance, side, both: this.both, cap: this.both ? this.cap : "none", link: `offset${n}`, baseConstruction: this.baseConstruction }).message;
     });
     if (msg) this.host.flash(msg, "error");
     else this.host.flash(`Offset linked to variable offset${n} (edit it in Global Variables or double-click the dimension)`);
@@ -388,6 +389,7 @@ export class OffsetTool implements Tool {
     return [
       { kind: "number", key: "d", label: "Offset distance", value: this.distance, set: (v) => v > 0 && (this.distance = v) },
       { kind: "check", key: "both", label: "Bi-directional", value: this.both, set: (v) => (this.both = v) },
+      { kind: "check", key: "base", label: "Base geometry → construction", value: this.baseConstruction, set: (v) => (this.baseConstruction = v) },
       {
         kind: "choice",
         key: "cap",

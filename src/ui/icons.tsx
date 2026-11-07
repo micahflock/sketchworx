@@ -237,6 +237,19 @@ export const icons: Record<string, () => JSX.Element> = {
       <path d="M5 12l5 5 9-10" />
     </S>
   ),
+  slots: () => (
+    <S>
+      <rect x="2" y="7" width="6" height="10" rx="1" />
+      <rect x="9" y="7" width="6" height="10" rx="1" />
+      <rect x="16" y="7" width="6" height="10" rx="1" />
+    </S>
+  ),
+  hygiene: () => (
+    <S>
+      <path d="M3 17C3 7 21 7 21 17" />
+      <path d="M12 7.5l2 2-2 2-2-2z" fill="currentColor" />
+    </S>
+  ),
   keys: () => (
     <S>
       <rect x="3" y="7" width="18" height="11" rx="2" />

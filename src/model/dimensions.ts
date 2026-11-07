@@ -268,6 +268,27 @@ function angleQuadrant(s: Sketch, l1: Entity & { type: "line" }, l2: Entity & { 
   return 0;
 }
 
+/** Move metric-guide lines to their variable heights, spanning the advance width. */
+export function placeGuides(s: Sketch, vars: Map<string, number>): Sketch {
+  let ents: Sketch["entities"] | null = null;
+  for (const e of Object.values(s.entities)) {
+    if (e.type !== "line" || !e.guide) continue;
+    const y = vars.get(e.guide);
+    if (y === undefined) continue;
+    for (const [pid, x] of [
+      [e.p1, 0],
+      [e.p2, s.advance],
+    ] as const) {
+      const p = s.entities[pid];
+      if (p?.type === "point" && (p.x !== x || p.y !== y)) {
+        ents ??= { ...s.entities };
+        ents[pid] = { ...p, x, y };
+      }
+    }
+  }
+  return ents ? { ...s, entities: ents } : s;
+}
+
 /** Evaluate a dimension expression text against document variables. */
 export function evaluateDimText(doc: Doc, text: string): { value: number; expr: string } {
   const t = text.trim();
@@ -293,7 +314,9 @@ export function refreshExpressions(doc: Doc): Doc {
     }
     return v;
   });
-  const slots = doc.slots.map((s) => {
+  const slots = doc.slots.map((s0) => {
+    const s = placeGuides(s0, ev.values);
+    if (s !== s0) changed = true;
     let dims: Sketch["dimensions"] | null = null;
     for (const d of Object.values(s.dimensions)) {
       if (!isExpression(d.expr)) continue;

@@ -42,7 +42,7 @@ export function VariablesPanel() {
         </button>
       </div>
       <div class={css.info}>Use in dimensions as =name, e.g. =stem*1.5. Functions: min, max, sqrt, sin, cos (degrees).</div>
-      <div class={css.varRow} style={{ fontWeight: 600, fontSize: 12 }}>
+      <div class={css.varRow} style={{ fontWeight: 600, fontSize: "12px" }}>
         <span>Name</span>
         <span>Value / expression</span>
         <span>=</span>

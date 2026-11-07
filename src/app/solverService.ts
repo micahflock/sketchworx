@@ -76,7 +76,10 @@ export class SolverService {
       this.store.set({ status: { ...this.store.state.status, solving: true } });
       try {
         const r = await this.solver.solve(inp.params, inp.constraints);
-        if (this.store.doc !== doc || this.drag) continue; // superseded
+        if (this.store.doc !== doc || this.drag) {
+          if (!this.drag) this.dirty = true; // the doc changed meanwhile: solve the new one
+          continue;
+        }
         let next = r.ok ? applySolved(doc, r.params) : doc;
         if (this.postSolve) next = this.postSolve(next);
         if (next !== doc) this.store.amendDoc(next);
@@ -93,6 +96,11 @@ export class SolverService {
       this.waiters = [];
       for (const f of w) f();
     }
+  }
+
+  /** Solve arbitrary input without touching the store (other glyph slots). */
+  solveRaw(params: SolverParams, constraints: Parameters<Solver["solve"]>[1]): Promise<SolveResult> {
+    return this.solver.solve(params, constraints);
   }
 
   /** One-shot solve pulling points toward targets (PropertyManager edits). */

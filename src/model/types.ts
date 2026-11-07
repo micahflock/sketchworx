@@ -22,6 +22,8 @@ export interface LineEntity extends EntityBase {
   p2: Id;
   /** Set for a style spline's control-polygon side (always construction). */
   owner?: Id;
+  /** Metric guide (horizontal, fixed) whose height is this variable. */
+  guide?: string;
 }
 
 export interface CircleEntity extends EntityBase {

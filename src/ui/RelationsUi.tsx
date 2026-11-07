@@ -156,7 +156,7 @@ export function RelationsPanel() {
         <div class={css.info}>No relations.</div>
       )}
       {list.length > 1 && (
-        <button class={css.small} style={{ marginTop: 8 }} onClick={() => app.commit("Delete Relations", (ed) => ed.deleteAny(list.map((r) => r.id)))}>
+        <button class={css.small} style={{ marginTop: "8px" }} onClick={() => app.commit("Delete Relations", (ed) => ed.deleteAny(list.map((r) => r.id)))}>
           Delete all listed
         </button>
       )}

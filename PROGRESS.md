@@ -11,6 +11,49 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
 | Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or a local file server |
 
+## Milestone 6 — Art output and iPad polish ✅ (emulated iPad; see notes)
+
+- Fill preview: closed loops of non-construction geometry (lines, arcs, circles, splines, driven offsets) are
+  chained by endpoints and filled with the nonzero rule. Loops are re-oriented by nesting depth, so counters
+  render as holes. Sketch view shows a light fill under the wireframe; Art view shows black fills only, with
+  no chrome. Split view puts the editable sketch on the left and a fitted Art preview on the right.
+- Loop diagnostics: open endpoints (orange rings) and self-intersections (orange crosses). Skipped during
+  drags to stay fast.
+- Metric guides (View → Metric Guides, or the Glyph section): baseline, xheight, capheight, ascender,
+  descender lines driven by variables of those names (defaults for 1000 units/em). They are real fixed
+  construction lines, so points and curves can be made Coincident with them.
+- Glyph slots: strip of thumbnails at the bottom (View → Glyph Slots), add, click to switch, double-click to
+  rename, per-slot advance width. Variables are shared; changing one re-solves every slot in the background.
+- Sketch Picture: insert PNG/JPG as a background with opacity/position/scale, and "Calibrate scale" (draw a
+  line over a known feature, enter its length).
+- Handle hygiene: View → Extrema Check marks horizontal/vertical extrema of splines and arcs that have no
+  on-curve point.
+- Export panel: SVG (current glyph or all glyphs in a row, arcs as `A` or cubics, viewBox from bounds or metric
+  guides + advance, optional construction for presentation; splines above degree 3 become cubics) and PNG of
+  the Art view at a chosen size.
+- PWA: manifest, icons, and a service worker generated at build time that precaches every built file
+  (including the solver WASM), then serves cache-first.
+- Touch: one finger pans, two fingers pinch-zoom/pan, two-finger tap undoes, long-press opens the context
+  toolbar (on geometry) or the shortcut bar. Pencil behaves like the mouse. On-screen Esc / Ctrl / Undo /
+  Redo / Delete appear on touch devices until a keyboard is used. Touch hit radius 22 px, toolbar buttons
+  ≥ 46 px.
+- Fixes found while testing: Preact 11 no longer appends `px` to numeric inline styles, which had hidden the
+  shortcut bar, context toolbar and Modify box (all now explicit `px`). The solver loop now re-solves when a
+  result is superseded instead of dropping it.
+
+Acceptance:
+- SVG: the outlined "O" (letter-O skeleton offset 40 both ways, base geometry → construction) exports as one
+  path with two subpaths. Rendered with Chromium and with resvg (an independent renderer), the filled
+  outlines differ in 0.12% of pixels (anti-aliased edges only). The slot sample differs in 0.32% (arcs as `A`)
+  and 0.28% (as cubics). **Inkscape is not installed in this environment**, so it was not used; please open
+  an exported file in Inkscape once to confirm.
+- Offline: production build served locally, one online visit, then network offline + reload → the app loads,
+  the solver worker runs, and a rectangle solves (Playwright).
+- Touch gestures checked with emulated iPad Pro multi-touch (CDP touch events). **Not yet tried on a real
+  iPad with Apple Pencil.**
+- Unit tests: `tests/outline.test.ts` (loops, hole orientation, open ends, self-intersections, SVG arcs vs
+  cubics, cubic arc accuracy, extrema check).
+
 ## Milestone 5 — Style splines and tools ✅
 
 - Style Spline tool (B): click control vertices; 4 by default (cubic), 3–8 in the PropertyManager; double-click

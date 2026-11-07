@@ -11,6 +11,7 @@ import css from "./ui.module.css";
 import { ConflictList, RelationsSections, RelationsPanel } from "./RelationsUi";
 import { VariablesPanel } from "./VariablesPanel";
 import { KeyboardPanel } from "./KeyboardPanel";
+import { ExportPanel } from "./ExportPanel";
 
 export function Section({ title, children, open = true }: { title: string; children: ComponentChildren; open?: boolean }) {
   const [isOpen, setOpen] = useState(open);
@@ -173,6 +174,7 @@ export function PropertyManager() {
   if (ui.panel === "relations") return <RelationsPanel />;
   if (ui.panel === "variables") return <VariablesPanel />;
   if (ui.panel === "keyboard") return <KeyboardPanel />;
+  if (ui.panel === "export") return <ExportPanel />;
   const tool = app.tool;
   if (tool.id !== "select") {
     const opts = tool.options?.() ?? [];
@@ -192,10 +194,17 @@ export function PropertyManager() {
   if (!ui.selection.length) {
     return (
       <div class={css.pm}>
-        <div class={css.pmTitle}>Sketch</div>
+        <div class={css.pmTitle}>{s.name}</div>
         <ConflictList />
         <div class={css.info}>{ui.prompt}</div>
         <SketchSummary s={s} />
+        <Section title="Glyph">
+          <NumField label="Advance width" value={s.advance} onCommit={(v) => app.setAdvance(v)} />
+          <label class={css.check}>
+            <input type="checkbox" checked={app.hasGuides()} onChange={() => app.toggleGuides()} /> Metric guides
+          </label>
+        </Section>
+        <PictureSection />
       </div>
     );
   }
@@ -279,6 +288,36 @@ function DimensionPm({ id }: { id: string }) {
       </Section>
       <div class={css.info}>{ui.status.conflicts.includes(id) ? "This dimension over-defines the sketch." : ""}</div>
     </div>
+  );
+}
+
+function PictureSection() {
+  const app = useApp();
+  const pic = app.sketch().picture;
+  return (
+    <Section title="Sketch Picture" open={!!pic}>
+      {pic ? (
+        <div>
+          <label class={css.field}>
+            <span>Opacity</span>
+            <input type="range" min="0.05" max="1" step="0.05" value={pic.opacity} onChange={(e) => app.setPicture({ opacity: Number((e.target as HTMLInputElement).value) })} />
+          </label>
+          <NumField label="X" value={pic.x} onCommit={(v) => app.setPicture({ x: v })} />
+          <NumField label="Y" value={pic.y} onCommit={(v) => app.setPicture({ y: v })} />
+          <NumField label="Units / pixel" value={pic.scale} onCommit={(v) => v > 0 && app.setPicture({ scale: v })} />
+          <button class={css.small} onClick={() => app.setTool("pictureScale")}>
+            Calibrate scale…
+          </button>{" "}
+          <button class={css.small} onClick={() => app.setPicture(null)}>
+            Remove
+          </button>
+        </div>
+      ) : (
+        <button class={css.small} onClick={() => app.importPicture()}>
+          Insert picture (PNG/JPG)…
+        </button>
+      )}
+    </Section>
   );
 }
 

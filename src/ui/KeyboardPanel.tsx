@@ -30,7 +30,7 @@ export function KeyboardPanel() {
         <label class={css.field} key={a}>
           <span>{actionLabels[a] ?? a}</span>
           <input
-            style={{ width: 48, textAlign: "center", textTransform: "uppercase" }}
+            style={{ width: "48px", textAlign: "center", textTransform: "uppercase" }}
             value={keyFor(a)}
             onKeyDown={(e) => {
               if (e.key === "Tab") return;
@@ -43,7 +43,7 @@ export function KeyboardPanel() {
       ))}
       <button
         class={css.small}
-        style={{ marginTop: 8 }}
+        style={{ marginTop: "8px" }}
         onClick={() => {
           app.keymap = { ...defaultKeymap };
           saveKeymap(app.keymap);

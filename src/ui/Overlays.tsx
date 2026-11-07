@@ -29,7 +29,7 @@ export function Overlays() {
   return (
     <>
       {ui.showShortcutBar && (
-        <div class={css.shortcutBar} style={{ left: ui.showShortcutBar.x - 110, top: ui.showShortcutBar.y - 50 }}>
+        <div class={css.shortcutBar} style={{ left: `${ui.showShortcutBar.x - 110}px`, top: `${ui.showShortcutBar.y - 50}px` }}>
           {shortcutItems.map((it) => (
             <button
               key={it.action}

@@ -73,6 +73,15 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
   }
   const groups = CoincidenceGroups.of(s);
   const constraints: SolverConstraint[] = [];
+  // Metric guides are fixed where the variables put them.
+  for (const e of Object.values(s.entities)) {
+    if (e.type !== "line" || !e.guide) continue;
+    for (const p of [e.p1, e.p2]) {
+      const q = ptv(s, p);
+      constraints.push({ id: `guide#${p}x`, owner: `guide:${e.id}`, kind: "coordX", p, v: q.x });
+      constraints.push({ id: `guide#${p}y`, owner: `guide:${e.id}`, kind: "coordY", p, v: q.y });
+    }
+  }
   if (s.entities.origin) {
     constraints.push({ id: "origin#x", owner: "origin", kind: "coordX", p: "origin", v: 0 });
     constraints.push({ id: "origin#y", owner: "origin", kind: "coordY", p: "origin", v: 0 });
