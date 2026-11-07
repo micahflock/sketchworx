@@ -74,6 +74,8 @@ export function entityColor(id: Id, opts: SceneOptions): string {
 export function strokeFor(e: Entity, opts: SceneOptions): StrokeStyle {
   const color = entityColor(e.id, opts);
   const emph = opts.selection.has(e.id) || opts.hover === e.id;
+  if (e.type === "line" && e.owner) return { color, width: emph ? 2 : 0.9, dash: [4, 3] }; // spline control polygon
+  if (e.type === "spline" && e.derived) return { color: emph ? color : "#6b6b8a", width: emph ? 2.5 : 1.6 };
   return {
     color,
     width: emph ? 2.5 : 1.6,
@@ -95,9 +97,8 @@ export function drawEntity(p: Painter, s: Sketch, e: Entity, st: StrokeStyle) {
       break;
     }
     case "spline": {
-      const pts = splinePts(s, e);
-      p.polyline(pts, { color: st.color, width: 1, dash: [4, 3] });
-      p.bezier(pts, { ...st, dash: e.construction ? st.dash : undefined });
+      // The control polygon is drawn by its side lines.
+      p.bezier(splinePts(s, e), { ...st, dash: e.construction ? st.dash : undefined });
       break;
     }
     case "point":
@@ -133,6 +134,8 @@ export function drawSketch(p: Painter, s: Sketch, opts: SceneOptions) {
         c.lineTo(P.x, P.y + 4);
         c.stroke();
         if (emph) p.ring(e, 5, color);
+      } else if (owner && owner.type === "spline" && owner.derived) {
+        if (emph) p.dot(e, 3, color);
       } else if (owner && owner.type === "spline") {
         const P = p.s(e);
         const c = p.ctx;

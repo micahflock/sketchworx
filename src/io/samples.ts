@@ -3,6 +3,7 @@ import { applyCommand } from "../model/editor";
 import { createDoc } from "../model/sketch";
 import type { Doc } from "../model/types";
 import { addArc, addLine } from "../tools/common";
+import { addSpline, mirrorEntities } from "../tools/edits";
 
 /** Fully dimensioned straight slot driven by the `width` and `len` variables. */
 export function slotSample(): Doc {
@@ -33,4 +34,32 @@ export function slotSample(): Doc {
     ed.addDimension({ type: "distance", refs: [left.c, right.c], expr: "=len", value: 160, driven: false, label: { x: 0, y: 50 } });
   });
   return refreshExpressions(doc);
+}
+
+/** Letter "O" from four style splines with tangent joints, the left half mirrored. */
+export function letterOSample(): Doc {
+  return applyCommand(createDoc(), (ed) => {
+    const axis = addLine(ed, { x: 0, y: -40 }, { x: 0, y: 740 }, true);
+    const tr = addSpline(ed, [
+      { x: 0, y: 700 },
+      { x: 170, y: 700 },
+      { x: 300, y: 540 },
+      { x: 300, y: 350 },
+    ]);
+    const br = addSpline(ed, [
+      { x: 300, y: 350 },
+      { x: 300, y: 160 },
+      { x: 170, y: 0 },
+      { x: 0, y: 0 },
+    ]);
+    ed.addRelation({ type: "coincident", refs: [tr.cps[3], br.cps[0]] });
+    ed.addRelation({ type: "tangent", refs: [tr.spline, br.spline] });
+    ed.addRelation({ type: "coincident", refs: [tr.cps[0], axis.line] });
+    ed.addRelation({ type: "coincident", refs: [br.cps[3], axis.line] });
+    ed.addRelation({ type: "coincident", refs: [axis.p1, "origin"] });
+    ed.addRelation({ type: "vertical", refs: [axis.line] });
+    const [tl, bl] = mirrorEntities(ed, [tr.spline, br.spline], axis.line);
+    ed.addRelation({ type: "tangent", refs: [tr.spline, tl] });
+    ed.addRelation({ type: "tangent", refs: [br.spline, bl] });
+  });
 }

@@ -1,6 +1,6 @@
 import type { Vec2 } from "../geom/vec";
 import { add, cross, dist, dot, norm, perp, projectParam, scale, sub } from "../geom/vec";
-import { angleRefs, dimAnchor, dimPrefix, distancePointIds, lineIntersection, measure, pointLineRefs } from "../model/dimensions";
+import { angleRefs, dimAnchor, dimPrefix, distancePointIds, lineIntersection, measure, offsetGeom, pointLineRefs } from "../model/dimensions";
 import { isExpression } from "../model/expr";
 import { arcGeom, ptv } from "../model/sketch";
 import type { Dimension, Id, Sketch } from "../model/types";
@@ -171,6 +171,21 @@ export function drawDimension(p: Painter, s: Sketch, d: Dimension, color: string
       }
       return label(p, dimText(d, value), L, color, hot);
     }
+    case "offset": {
+      const o = offsetGeom(s, d);
+      if (!o) return null;
+      const dir = dist(o.from, o.to) > 1e-12 ? norm(sub(o.to, o.from)) : { x: 0, y: 1 };
+      const along = perp(dir);
+      const shift = dot(sub(L, o.from), along);
+      const A = add(o.from, scale(along, shift));
+      const B = add(o.to, scale(along, shift));
+      if (Math.abs(shift) > gap) {
+        p.line(o.from, A, ext);
+        p.line(o.to, B, ext);
+      }
+      dimLine(p, A, B, color);
+      return label(p, dimText(d, value), L, color, hot);
+    }
     case "arcLength": {
       const e = s.entities[d.refs[0]];
       if (e.type !== "arc") return null;
@@ -195,6 +210,7 @@ export function drawDimensions(
 ): AnnotationHit[] {
   const hits: AnnotationHit[] = [];
   for (const d of Object.values(s.dimensions)) {
+    if (d.hidden) continue;
     const hot = opts.hover === d.id || opts.selection.has(d.id);
     const color = opts.conflicts.has(d.id) ? theme.dimConflict : opts.selection.has(d.id) ? theme.selected : d.driven ? theme.dimDriven : theme.dim;
     const extra = opts.labelOffset?.(d.id);

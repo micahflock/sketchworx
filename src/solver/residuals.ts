@@ -261,6 +261,12 @@ export function buildResiduals(pi: ParamIndex, cons: SolverConstraint[]): Residu
         });
         break;
       }
+      case "radiusDiff": {
+        const r1 = round(c.g1);
+        const r2 = round(c.g2);
+        push(o, [...r1.deps, ...r2.deps], (x) => [r2.r(x) - r1.r(x) - c.v]);
+        break;
+      }
       case "arcLength": {
         const g = geom.get(c.g);
         if (!g || g.kind !== "arc") break;

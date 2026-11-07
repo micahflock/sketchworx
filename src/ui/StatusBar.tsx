@@ -27,6 +27,7 @@ export function StatusBar() {
       <span class={css.statusPrompt}>{ui.message ? <b class={ui.message.kind === "error" ? css.err : ""}>{ui.message.text}</b> : ui.prompt}</span>
       <span class={css.coord} ref={coordRef} />
       {ui.ctrl || ui.touchCtrl ? <span class={css.badge}>Ctrl: no auto relations</span> : null}
+      {ui.dynamicMirror ? <span class={css.badge}>Dynamic Mirror</span> : null}
       {st.state !== "empty" && (
         <span
           class={`${css.state} ${css["st_" + st.state]}`}

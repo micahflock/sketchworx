@@ -46,6 +46,10 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
   let best: { id: Id; d: number } | null = null;
   for (const e of Object.values(s.entities)) {
     if (e.type !== "point" || o.skip?.has(e.id)) continue;
+    if (e.owner) {
+      const own = s.entities[e.owner];
+      if (own?.type === "spline" && own.derived) continue;
+    }
     const d = dist(raw, e);
     if (d <= tol && (!best || d < best.d)) best = { id: e.id, d };
   }

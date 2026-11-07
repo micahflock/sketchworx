@@ -3,11 +3,11 @@ import { App } from "./app/app";
 import { AppContext } from "./ui/hooks";
 import { Shell } from "./ui/Shell";
 import "./ui/global.css";
-import { slotSample } from "./io/samples";
+import { letterOSample, slotSample } from "./io/samples";
 
 const app = new App();
 (window as any).sketchworx = app; // handy for debugging and Playwright tests
-(window as any).sketchworxSamples = { slot: slotSample };
+(window as any).sketchworxSamples = { slot: slotSample, o: letterOSample };
 
 render(
   <AppContext.Provider value={app}>

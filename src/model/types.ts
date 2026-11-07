@@ -20,6 +20,8 @@ export interface LineEntity extends EntityBase {
   type: "line";
   p1: Id;
   p2: Id;
+  /** Set for a style spline's control-polygon side (always construction). */
+  owner?: Id;
 }
 
 export interface CircleEntity extends EntityBase {
@@ -40,6 +42,11 @@ export interface ArcEntity extends EntityBase {
 export interface SplineEntity extends EntityBase {
   type: "spline";
   cps: Id[];
+  /**
+   * Driven geometry: a cubic approximating the offset of `source` over [t0, t1].
+   * Recomputed after every solve; not seen by the solver.
+   */
+  derived?: { source: Id; side: 1 | -1; link: string; t0: number; t1: number };
 }
 
 export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | SplineEntity;
@@ -78,7 +85,9 @@ export type DimensionType =
   | "angle"
   | "radius"
   | "diameter"
-  | "arcLength";
+  | "arcLength"
+  /** Offset Entities link: [source, offset] (lines: parallel + distance; arcs/circles: concentric + radius difference). */
+  | "offset";
 
 export interface Dimension {
   id: Id;
@@ -93,6 +102,12 @@ export interface Dimension {
   label: { x: number; y: number };
   /** Angle dimensions: which of the four quadrants (bit 0: flip line 1, bit 1: flip line 2). */
   quadrant?: number;
+  /** Not drawn (secondary members of an offset group). */
+  hidden?: boolean;
+  /** Variable this dimension is linked to: typing a number in its Modify box sets the variable. */
+  link?: string;
+  /** Offset: open-chain ends kept square to the source, as [source point, offset point] pairs. */
+  align?: [Id, Id][];
 }
 
 export interface Variable {

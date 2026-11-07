@@ -43,6 +43,10 @@ export function hitTest(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>, filter?
   for (const e of Object.values(s.entities)) {
     if (skip?.has(e.id)) continue;
     if (filter && !filter(e)) continue;
+    if (e.type === "point" && e.owner) {
+      const o = s.entities[e.owner];
+      if (o?.type === "spline" && o.derived) continue;
+    }
     const d = distToEntity(s, e, p);
     if (d > tol) continue;
     if (e.type === "point") {

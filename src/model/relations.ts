@@ -56,6 +56,10 @@ export const relationOrder: RelationType[] = [
 export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
   const ents = ids.map((id) => s.entities[id]).filter(Boolean) as Entity[];
   if (!ents.length || ents.length !== ids.length) return [];
+  // Driven offset geometry cannot take relations.
+  const derived = (e: Entity) =>
+    (e.type === "spline" && !!e.derived) || (e.type === "point" && !!e.owner && s.entities[e.owner]?.type === "spline" && !!(s.entities[e.owner] as { derived?: unknown }).derived);
+  if (ents.some(derived)) return [];
   const n = ents.length;
   const P = ents.filter((e) => e.type === "point");
   const L = ents.filter((e) => e.type === "line");

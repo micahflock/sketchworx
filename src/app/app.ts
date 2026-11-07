@@ -17,6 +17,8 @@ import type { DragTarget } from "../solver/types";
 import { LineTool } from "../tools/line";
 import { DimensionTool } from "../tools/dimension";
 import { TangentArcTool } from "../tools/tangentArc";
+import { DynamicMirrorTool, ExtendTool, FilletTool, MirrorTool, OffsetTool, SplineTool, TrimTool } from "../tools/modify";
+import { mirrorEntities, recomputeDerived } from "../tools/edits";
 import { loadKeymap } from "./keymap";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
@@ -36,6 +38,9 @@ import { drawRelationGlyphs, hitAnnotations } from "../render/annotations";
 import type { AnnotationHit } from "../render/annotations";
 import { addRelationCmd, validRelations } from "../model/relations";
 import type { RelationType } from "../model/types";
+
+/** Commands whose new entities Dynamic Mirror copies. */
+const DRAW_COMMANDS = new Set(["Line", "Centerline", "Arc", "Tangent Arc", "Circle", "Point", "Style Spline", "Rectangle"]);
 
 export class App implements ToolHost {
   readonly store = new Store();
@@ -72,6 +77,14 @@ export class App implements ToolHost {
     for (const m of ["corner", "center", "3corner", "3center", "parallelogram"] as const) reg(new RectTool(this, m));
     reg(new DimensionTool(this));
     reg(new TangentArcTool(this));
+    reg(new SplineTool(this));
+    reg(new TrimTool(this));
+    reg(new ExtendTool(this));
+    reg(new FilletTool(this));
+    reg(new OffsetTool(this));
+    reg(new MirrorTool(this));
+    reg(new DynamicMirrorTool(this));
+    this.solver.postSolve = (doc) => applyCommand(doc, recomputeDerived);
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
   }
@@ -131,6 +144,19 @@ export class App implements ToolHost {
     return this.store.doc;
   }
   commit(label: string, fn: CommandFn): Doc {
+    const axis = this.store.state.dynamicMirror;
+    if (axis && DRAW_COMMANDS.has(label)) {
+      const inner = fn;
+      fn = (ed) => {
+        const before = new Set(Object.keys(ed.s.entities));
+        inner(ed);
+        if (!ed.s.entities[axis]) return;
+        const fresh = Object.values(ed.s.entities)
+          .filter((e) => !before.has(e.id) && !(e.type === "point" && e.owner) && !(e.type === "line" && e.owner))
+          .map((e) => e.id);
+        mirrorEntities(ed, fresh, axis);
+      };
+    }
     const next = applyCommand(this.store.doc, fn);
     if (next !== this.store.doc) {
       this.store.commitDoc(next, label);
@@ -279,6 +305,28 @@ export class App implements ToolHost {
       this.store.amendDoc(refreshed);
       this.afterChange();
     }
+  }
+
+  // ---- multi-step edits (Power Trim strokes): one undo step
+  editBegin() {
+    this.store.beginTransient();
+  }
+  editApply(fn: CommandFn) {
+    const next = applyCommand(this.store.doc, fn);
+    if (next !== this.store.doc) {
+      this.store.updateTransient(next);
+      this.solver.requestSolve();
+    }
+  }
+  editEnd(label: string) {
+    this.store.endTransient(label);
+    this.afterChange();
+  }
+  get dynamicMirror(): Id | null {
+    return this.store.state.dynamicMirror;
+  }
+  setDynamicMirror(axis: Id | null) {
+    this.store.set({ dynamicMirror: axis });
   }
 
   // ---- dragging through the solver

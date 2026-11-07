@@ -4,9 +4,6 @@ import type { Entity, Id, Relation, Sketch } from "../model/types";
 import type { SolverConstraint, SolverGeom, SolverParams, SolverPoint } from "./types";
 import { dimensionConstraints } from "./dimensions";
 
-/** Hidden solver line for side i of a style spline's control polygon. */
-export const splineSideId = (splineId: Id, i: number) => `${splineId}#side${i}`;
-
 export interface BuildResult {
   params: SolverParams;
   constraints: SolverConstraint[];
@@ -54,7 +51,9 @@ export function sharedEnd(groups: CoincidenceGroups, a: Entity, b: Entity): [Id,
 export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {}): BuildResult {
   const points: SolverPoint[] = [];
   const geoms: SolverGeom[] = [];
+  const derived = derivedIds(s);
   for (const e of Object.values(s.entities)) {
+    if (derived.has(e.id)) continue;
     switch (e.type) {
       case "point":
         points.push({ id: e.id, x: e.x, y: e.y });
@@ -69,8 +68,7 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
         geoms.push({ kind: "arc", id: e.id, c: e.c, s: e.s, e: e.e });
         break;
       case "spline":
-        for (let i = 0; i < e.cps.length - 1; i++) geoms.push({ kind: "line", id: splineSideId(e.id, i), p1: e.cps[i], p2: e.cps[i + 1] });
-        break;
+        break; // control vertices are points; polygon sides are construction lines
     }
   }
   const groups = CoincidenceGroups.of(s);
@@ -81,6 +79,10 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
   }
   const unsupported: Id[] = [];
   for (const r of Object.values(s.relations)) {
+    if (r.refs.some((id) => derived.has(id))) {
+      unsupported.push(r.id);
+      continue;
+    }
     const out = relationConstraints(s, r, groups);
     if (out === null) unsupported.push(r.id);
     else constraints.push(...out);
@@ -96,6 +98,17 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
 }
 
 type C = SolverConstraint;
+/** Driven (offset) splines and their control vertices: computed, not solved. */
+export function derivedIds(s: Sketch): Set<Id> {
+  const out = new Set<Id>();
+  for (const e of Object.values(s.entities))
+    if (e.type === "spline" && e.derived) {
+      out.add(e.id);
+      for (const p of e.cps) out.add(p);
+    }
+  return out;
+}
+
 export type Body = C extends infer T ? (T extends C ? Omit<T, "id" | "owner"> : never) : never;
 
 function relationConstraints(s: Sketch, r: Relation, groups: CoincidenceGroups): C[] | null {

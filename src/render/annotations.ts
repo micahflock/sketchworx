@@ -63,7 +63,12 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
     const bad = conflicts.has(r.id);
     const hot = hover === r.id || selection.has(r.id);
     // SolidWorks draws the glyph next to each related entity. Point-on-curve shows it at the point.
-    const targets = r.type === "coincident" || r.type === "midpoint" ? r.refs.filter((id) => s.entities[id]?.type === "point") : r.refs;
+    const targets =
+      r.type === "coincident" || r.type === "midpoint"
+        ? r.refs.filter((id) => s.entities[id]?.type === "point")
+        : r.type === "symmetric"
+          ? r.refs.slice(0, 2) // not on the centerline
+          : r.refs;
     for (const id of targets) {
       const e = s.entities[id];
       if (!e) continue;

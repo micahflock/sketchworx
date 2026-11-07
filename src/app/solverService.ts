@@ -136,7 +136,9 @@ export class SolverService {
     if (!d || d.session !== session) return;
     d.started = true;
     d.busy = false;
-    this.store.updateTransient(applySolved(d.base, p));
+    let next = applySolved(d.base, p);
+    if (this.postSolve) next = this.postSolve(next);
+    this.store.updateTransient(next);
     if (d.pending) {
       const t = d.pending;
       d.pending = null;

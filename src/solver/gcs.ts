@@ -112,6 +112,9 @@ function toPrimitives(params: SolverParams, cons: SolverConstraint[]): Prim[] {
       case "arcLength":
         prims.push({ ...base, type: "arc_length", a_id: c.g, dist: c.v });
         break;
+      case "radiusDiff":
+        prims.push({ ...base, type: "difference", param1: radiusRef(c.g1), param2: radiusRef(c.g2), difference: c.v });
+        break;
     }
   }
   return prims;

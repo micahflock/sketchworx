@@ -110,7 +110,8 @@ export function CommandManager() {
     (b.action === "relationsPanel" && ui.panel === "relations") ||
     (b.action === "variablesPanel" && ui.panel === "variables") ||
     (b.action === "keyboardPanel" && ui.panel === "keyboard") ||
-    (b.action === "toggleGridSnap" && ui.gridSnap);
+    (b.action === "toggleGridSnap" && ui.gridSnap) ||
+    (b.id === "dynamicMirror" && !!ui.dynamicMirror);
   return (
     <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>
       {groups.map((g) => (

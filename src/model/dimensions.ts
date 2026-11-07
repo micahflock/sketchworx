@@ -76,7 +76,38 @@ export function measure(s: Sketch, d: Dimension): number {
       while (sw <= 0) sw += 2 * Math.PI;
       return g.r * sw;
     }
+    case "offset": {
+      const o = offsetGeom(s, d);
+      return o ? dist(o.from, o.to) : NaN;
+    }
   }
+}
+
+/** Offset dimension: the two points it spans (on the source and on the offset entity). */
+export function offsetGeom(s: Sketch, d: Dimension): { from: Vec2; to: Vec2 } | null {
+  const [src, dst] = d.refs.map((id) => s.entities[id]);
+  if (!src || !dst) return null;
+  if (src.type === "line" && dst.type === "line") {
+    const m = mid(ptv(s, dst.p1), ptv(s, dst.p2));
+    const a = ptv(s, src.p1);
+    const b = ptv(s, src.p2);
+    const t = projectParam(m, a, b);
+    return { from: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, to: m };
+  }
+  const radius = (e: Entity) => (e.type === "circle" ? e.r : e.type === "arc" ? arcGeom(s, e).r : NaN);
+  if ((src.type === "circle" || src.type === "arc") && (dst.type === "circle" || dst.type === "arc")) {
+    const c = ptv(s, src.c);
+    let ang = 0;
+    if (dst.type === "arc") {
+      const g = arcGeom(s, dst);
+      let sw = g.a1 - g.a0;
+      while (sw <= 0) sw += 2 * Math.PI;
+      ang = g.a0 + sw / 2;
+    }
+    const u = { x: Math.cos(ang), y: Math.sin(ang) };
+    return { from: { x: c.x + u.x * radius(src), y: c.y + u.y * radius(src) }, to: { x: c.x + u.x * radius(dst), y: c.y + u.y * radius(dst) } };
+  }
+  return null;
 }
 
 /** The two points a distance dimension measures between. */
@@ -129,6 +160,10 @@ export function dimAnchor(s: Sketch, d: Dimension): Vec2 {
       case "angle": {
         const r = angleRefs(s, d)!;
         return lineIntersection(ptv(s, r.a), ptv(s, r.b), ptv(s, r.c), ptv(s, r.d));
+      }
+      case "offset": {
+        const o = offsetGeom(s, d);
+        return o ? mid(o.from, o.to) : { x: 0, y: 0 };
       }
       default: {
         const e = s.entities[d.refs[0]];

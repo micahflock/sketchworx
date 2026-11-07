@@ -32,6 +32,8 @@ export interface UiState {
   showGrid: boolean;
   /** Show on-screen modifier keys (touch device without keyboard). */
   touchUi: boolean;
+  /** Centerline used by Dynamic Mirror, when active. */
+  dynamicMirror: Id | null;
 }
 
 type Listener = () => void;
@@ -65,6 +67,7 @@ export class Store {
       gridSnap: false,
       showGrid: true,
       touchUi: false,
+      dynamicMirror: null,
     };
   }
 

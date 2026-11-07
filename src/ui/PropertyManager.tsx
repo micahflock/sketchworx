@@ -240,7 +240,7 @@ function DimensionPm({ id }: { id: string }) {
   const [text, setText] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   if (!d) return null;
-  const typeName = { distance: "Linear (aligned)", distanceX: "Horizontal", distanceY: "Vertical", pointLine: "Point to line", angle: "Angle", radius: "Radius", diameter: "Diameter", arcLength: "Arc length" }[d.type];
+  const typeName = { distance: "Linear (aligned)", distanceX: "Horizontal", distanceY: "Vertical", pointLine: "Point to line", angle: "Angle", radius: "Radius", diameter: "Diameter", arcLength: "Arc length", offset: "Offset" }[d.type];
   const measured = Math.abs(measure(s, d));
   const commit = () => {
     if (text === null) return;

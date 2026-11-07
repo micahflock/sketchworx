@@ -1,4 +1,4 @@
-import { definingPoints, ORIGIN } from "./sketch";
+import { ORIGIN } from "./sketch";
 import type { Dimension, Doc, Entity, Id, Relation, Sketch, Variable } from "./types";
 
 /**
@@ -103,11 +103,19 @@ export class Editor {
       const e = this.sketch.entities[id];
       if (!e || id === ORIGIN) continue;
       if (e.type === "point" && e.owner && this.sketch.entities[e.owner]) continue; // endpoints go with their curve
+      if (e.type === "line" && e.owner && this.sketch.entities[e.owner]) continue; // polygon sides go with their spline
       kill.add(id);
-      if (e.type !== "point") {
-        for (const p of definingPoints(e)) {
-          const pe = this.sketch.entities[p];
-          if (pe && pe.type === "point" && pe.owner === e.id) kill.add(p);
+    }
+    // Owned children (endpoints, control vertices, polygon sides) and driven offsets go with their owner.
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const e of Object.values(this.sketch.entities)) {
+        if (kill.has(e.id)) continue;
+        const owner = (e.type === "point" || e.type === "line" ? e.owner : undefined) ?? (e.type === "spline" ? e.derived?.source : undefined);
+        if (owner && kill.has(owner)) {
+          kill.add(e.id);
+          grew = true;
         }
       }
     }
@@ -140,6 +148,22 @@ export class Editor {
     const id = this.newId("r");
     this.rels()[id] = { ...r, id };
     return id;
+  }
+  updateRelation(id: Id, patch: Partial<Relation>) {
+    const cur = this.sketch.relations[id];
+    if (cur) this.rels()[id] = { ...cur, ...patch };
+  }
+  /** Re-point every relation and dimension reference from one id to another. */
+  substitute(from: Id, to: Id) {
+    for (const r of Object.values(this.sketch.relations))
+      if (r.refs.includes(from)) this.rels()[r.id] = { ...r, refs: r.refs.map((x) => (x === from ? to : x)) };
+    for (const d of Object.values(this.sketch.dimensions))
+      if (d.refs.includes(from) || d.align?.some((p) => p.includes(from)))
+        this.dims()[d.id] = {
+          ...d,
+          refs: d.refs.map((x) => (x === from ? to : x)),
+          ...(d.align ? { align: d.align.map((p) => p.map((x) => (x === from ? to : x)) as [Id, Id]) } : {}),
+        };
   }
   deleteRelation(id: Id) {
     if (this.sketch.relations[id]) delete this.rels()[id];

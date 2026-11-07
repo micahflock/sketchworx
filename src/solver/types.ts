@@ -53,6 +53,8 @@ export type SolverConstraint = { id: SId; owner: SId } & (
   /** Angle from direction a→b to direction c→d, radians. */
   | { kind: "angle"; a: SId; b: SId; c: SId; d: SId; v: number }
   | { kind: "arcLength"; g: SId; v: number }
+  /** radius(g2) - radius(g1) = v */
+  | { kind: "radiusDiff"; g1: SId; g2: SId; v: number }
 );
 
 export type ConstraintKind = SolverConstraint["kind"];

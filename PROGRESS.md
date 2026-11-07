@@ -11,6 +11,41 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
 | Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or a local file server |
 
+## Milestone 5 — Style splines and tools ✅
+
+- Style Spline tool (B): click control vertices; 4 by default (cubic), 3–8 in the PropertyManager; double-click
+  or Enter finishes early. Single-span Bézier, degree = vertices − 1.
+- Control-polygon sides are real construction lines owned by the spline (not just solver-internal), so they
+  take Horizontal/Vertical/Parallel/Equal relations and dimensions directly: the usual way to set horizontal
+  tangents at extrema. H/V inferred while placing a vertex is applied to that side. Deleting the spline
+  deletes its vertices and sides.
+- Spline tangency (line, arc, spline at a shared end) maps onto polygon-side constraints as the spec says.
+- Power Trim: drag a stroke across segments (one undo step) or click. Trimming keeps the entity's other
+  relations, re-attaches cut ends with Coincident, splits into Collinear (lines) / Coradial (arcs) pieces,
+  turns circles into arcs, and trims splines by de Casteljau subdivision.
+- Extend: hover previews, click extends the nearest end of a line/arc to the next intersection.
+- Sketch Fillet: click a corner (or two lines); tangent + coincident relations, radius dimension on the first,
+  Equal for the rest made in the same session.
+- Offset Entities: chain selection, side from the cursor, bi-directional, cap ends with arcs or lines. The offset
+  stays linked by one visible offset dimension driven by an auto-created variable (`offset1`, …); lines get
+  parallel + distance, arcs concentric + radius difference, open ends stay square to the source.
+- Offset of style splines: true offsets are approximated with a minimal number of cubic segments (adaptive
+  subdivision, least-squares handle lengths, tolerance 0.1% of the curve span) and stored as driven geometry
+  linked to the source. They are recomputed after every solve and drag frame, take no relations, and draw gray.
+- Mirror Entities (select entities + a centerline): copies linked by Symmetric relations; points that lie on the
+  centerline are shared via Coincident instead, which avoids redundancy. Dynamic Mirror mirrors new
+  entities while you draw until toggled off.
+- Shared curve geometry in `geom/curves.ts` (parameterization, analytic line/circle/arc intersections, Bézier
+  intersections by polyline + Newton refinement).
+
+Acceptance:
+- `tests/edits.test.ts` "letter O": four style splines, tangent joints, right half mirrored about a
+  centerline, no redundant or conflicting relations; dragging a control vertex 15 frames keeps all four
+  joints tangent to < 1e-6 rad. Also available as a sample (`window.sketchworxSamples.o()`), checked
+  interactively in the browser.
+- Unit tests for trim (end, split, delete), extend, fillet geometry, offset chain + variable change, spline
+  offset fit tolerance.
+
 ## Milestone 4 — SolidWorks feel ✅
 
 - Auto-relations while drawing with dotted blue inference lines and yellow preview glyphs: coincident
