@@ -318,8 +318,8 @@ export class RectTool extends ClickTool {
       const m = this.mode;
       const [l0, l1, l2, l3] = lines.map((l) => l.line);
       if (m === "corner" || m === "center") {
-        ed.addRelation({ type: "horizontal", refs: [l0, l2] });
-        ed.addRelation({ type: "vertical", refs: [l1, l3] });
+        for (const l of [l0, l2]) ed.addRelation({ type: "horizontal", refs: [l] });
+        for (const l of [l1, l3]) ed.addRelation({ type: "vertical", refs: [l] });
       } else if (m === "3corner" || m === "3center") {
         ed.addRelation({ type: "parallel", refs: [l0, l2] });
         ed.addRelation({ type: "parallel", refs: [l1, l3] });

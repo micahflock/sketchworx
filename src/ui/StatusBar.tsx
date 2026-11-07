@@ -28,7 +28,12 @@ export function StatusBar() {
       <span class={css.coord} ref={coordRef} />
       {ui.ctrl || ui.touchCtrl ? <span class={css.badge}>Ctrl: no auto relations</span> : null}
       {st.state !== "empty" && (
-        <span class={`${css.state} ${css["st_" + st.state]}`}>
+        <span
+          class={`${css.state} ${css["st_" + st.state]}`}
+          style={{ cursor: st.state === "over" ? "pointer" : undefined }}
+          title={st.state === "over" ? "Show conflicting relations" : `Solved in ${st.ms.toFixed(1)} ms`}
+          onClick={() => st.state === "over" && app.store.set({ panel: "relations" })}
+        >
           {stateText[st.state]}
           {st.state === "under" ? ` · ${st.dof} DOF` : ""}
           {st.solving ? " …" : ""}

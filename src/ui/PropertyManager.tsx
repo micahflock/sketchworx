@@ -7,7 +7,7 @@ import { fmt } from "../tools/line";
 import type { ToolOption } from "../tools/tool";
 import { useApp, useUi } from "./hooks";
 import css from "./ui.module.css";
-import { RelationsSections, RelationsPanel } from "./RelationsUi";
+import { ConflictList, RelationsSections, RelationsPanel } from "./RelationsUi";
 import { VariablesPanel } from "./VariablesPanel";
 
 export function Section({ title, children, open = true }: { title: string; children: JSX.Element | JSX.Element[] | null | false; open?: boolean }) {
@@ -190,6 +190,7 @@ export function PropertyManager() {
     return (
       <div class={css.pm}>
         <div class={css.pmTitle}>Sketch</div>
+        <ConflictList />
         <div class={css.info}>{ui.prompt}</div>
         <SketchSummary s={s} />
       </div>
@@ -199,6 +200,7 @@ export function PropertyManager() {
   return (
     <div class={css.pm}>
       <div class={css.pmTitle}>{single ? entityLabel(single) : `${ui.selection.length} items selected`}</div>
+      <ConflictList />
       <Section title="Selected Entities">
         <ul class={css.list}>
           {ui.selection.map((id) => (

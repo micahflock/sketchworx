@@ -11,6 +11,45 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
 | Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or a local file server |
 
+## Milestone 2 — Solver and relations ✅
+
+- `solver/` exposes one interface (`Solver.solve(params, constraints, drag?) → { params, entityStatus, conflicts, … }`
+  plus drag sessions). `solver/gcs.ts` is the only file importing planegcs; it runs in a Web Worker
+  (`solver/worker.ts`, proxied by `solver/client.ts`).
+- `solver/build.ts` translates relations into a small constraint vocabulary. Style splines (milestone 5) enter
+  the solver only as control vertices plus hidden polygon-side lines.
+- Two-pass solve for accurate redundancy diagnosis (see spike). Failed solves keep the previous geometry.
+- Per-entity status: numerical Jacobian + reduced row echelon form per independent cluster
+  (`solver/analysis.ts`). A parameter is fully defined when its unit vector is in the Jacobian's row space.
+  Blue under-defined, black fully defined, red over-defined (redundant/conflicting relation's geometry),
+  yellow when a solve fails without a conflict report.
+- Drag: temporary planegcs constraints whose targets are sketch params, so each frame only updates params and
+  re-solves. Frames are coalesced (latest wins) while the worker is busy. Line/spline bodies drag all their
+  points; circle/arc edges drag the radius.
+- Relations: Coincident (point-point, point-curve), Horizontal/Vertical (lines or points), Parallel,
+  Perpendicular, Collinear, Equal (lines or radii), Tangent (line-arc/circle, arc-arc, with endpoint form when
+  ends are coincident), Concentric, Coradial, Midpoint, Symmetric (about a centerline; points, lines,
+  arcs/circles, splines), Fix (snapshots the current values).
+- Valid-relation rules per selection (`model/relations.ts`), Add Relations / Existing Relations in the
+  PropertyManager, context toolbar after selecting, green glyphs (hover highlights related entities, click
+  selects the relation, Delete removes it), Display/Delete Relations panel with All / Selected / Dangling /
+  Over-defining filters, SketchXpert-lite conflict list with "Delete this one", status bar
+  Under/Fully/Over Defined + DOF.
+- Parameter edits in the PropertyManager move geometry through the solver (temporary constraints), so
+  relations hold.
+
+Acceptance (Playwright, dev and production build):
+- Corner rectangle (4 coincident, 2 H, 2 V) + Fix on one corner → "Under Defined · 2 DOF"; dragging the
+  opposite corner keeps all relations.
+- Adding Parallel between the two horizontal sides → status Over Defined, both lines red, the relation listed
+  with a delete button.
+- Fixture tests: `tests/solver.test.ts` (DOF, exact solve, redundancy, conflicts, drag, tangent, determinism).
+
+Notes:
+- Point-point coincident glyphs (chain joints) are hidden to avoid clutter, as SolidWorks does for merged
+  endpoints; they still appear in Display/Delete Relations.
+- Drag speed in the browser has not been measured on an iPad yet. Node: ~9 ms for 200 lines.
+
 ## Milestone 1 — Canvas and drawing ✅
 
 - Vite + TypeScript (strict) + Preact scaffold, CSS modules.

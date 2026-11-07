@@ -22,6 +22,13 @@ import { Store } from "./store";
 import { serializeDoc, parseDoc, FILE_EXT } from "../io/native";
 import { autosaveRead, autosaveWrite, openText, saveText } from "../io/storage";
 import { defaultKeymap } from "./keymap";
+import { SolverService } from "./solverService";
+import { WorkerSolver } from "../solver/client";
+import type { Solver } from "../solver/types";
+import { drawRelationGlyphs, hitAnnotations } from "../render/annotations";
+import type { AnnotationHit } from "../render/annotations";
+import { addRelationCmd, validRelations } from "../model/relations";
+import type { RelationType } from "../model/types";
 
 export class App implements ToolHost {
   readonly store = new Store();
@@ -33,7 +40,9 @@ export class App implements ToolHost {
   private renderQueued = false;
   private panning: { last: Vec2 } | null = null;
   private lastPointer: PEvent | null = null;
-  private dragBase: Doc | null = null;
+  readonly solver: SolverService;
+  /** Hit rectangles of glyphs/dimensions from the last frame (screen space). */
+  annotationHits: AnnotationHit[] = [];
   keymap = { ...defaultKeymap };
   /** Remembered variant per flyout group. */
   flyoutLast: Record<string, string> = {};
@@ -41,7 +50,8 @@ export class App implements ToolHost {
   /** Status bar cursor readout hook. */
   onCursor: ((p: Vec2) => void) | null = null;
 
-  constructor() {
+  constructor(solver: Solver = new WorkerSolver()) {
+    this.solver = new SolverService(this.store, solver);
     const reg = (t: Tool) => this.tools.set(t.id, t);
     reg(new SelectTool(this));
     reg(new LineTool(this, "line"));
@@ -141,8 +151,9 @@ export class App implements ToolHost {
       e.type === "point" ? opts?.points !== false : opts?.curves !== false,
     );
   }
-  hitAnnotation(_screen: Vec2): { id: Id; kind: "dimension" | "relation" } | null {
-    return null;
+  hitAnnotation(screen: Vec2): { id: Id; kind: "dimension" | "relation" } | null {
+    const h = hitAnnotations(this.annotationHits, screen);
+    return h ? { id: h.id, kind: h.kind } : null;
   }
   selection(): Id[] {
     return this.store.state.selection;
@@ -176,36 +187,22 @@ export class App implements ToolHost {
   }
   openModify(_dimId: Id, _isNew: boolean) {}
 
-  // ---- dragging (direct in M1; the solver takes over in M2)
+  // ---- dragging through the solver
   dragBegin(targets: DragTarget[]) {
-    this.dragBase = this.store.doc;
-    this.store.beginTransient();
-    this.dragUpdate(targets);
+    this.solver.dragBegin(targets);
   }
   dragUpdate(targets: DragTarget[]) {
-    if (!this.dragBase) return;
-    const doc = applyCommand(this.dragBase, (ed) => {
-      for (const t of targets) {
-        if (t.point) ed.movePoint(t.point, t.x, t.y);
-        else if (t.radiusOf && t.r !== undefined) {
-          const e = ed.s.entities[t.radiusOf];
-          if (e?.type === "circle") ed.update(e.id, { r: t.r });
-        }
-      }
-    });
-    this.store.updateTransient(doc);
+    this.solver.dragUpdate(targets);
   }
   dragEnd(commit: boolean, label = "Drag") {
-    if (!this.dragBase) return;
-    this.dragBase = null;
-    if (commit) this.store.endTransient(label);
-    else this.store.cancelTransient();
-    this.afterChange();
+    this.solver.dragEnd(commit, label);
+    if (commit) this.scheduleAutosave();
   }
 
   // ------------------------------------------------------------------ changes
   /** Called after every committed change. */
   afterChange() {
+    this.solver.requestSolve();
     this.scheduleAutosave();
   }
   afterDocReplaced() {
@@ -235,15 +232,29 @@ export class App implements ToolHost {
     if (sel.length !== this.store.state.selection.length) this.store.select(sel);
   }
 
-  /** PropertyManager edits. The solver keeps relations satisfied (see M2). */
-  setPointPosition(id: Id, x: number, y: number) {
-    this.commit("Edit Point", (ed) => ed.movePoint(id, x, y));
+  /** PropertyManager edits go through the solver so relations stay satisfied. */
+  async setPointPosition(id: Id, x: number, y: number) {
+    const doc = await this.solver.solveToward([{ point: id, x, y }]);
+    if (doc) this.commitDoc(doc, "Edit Point");
+    else this.flash("That position conflicts with existing relations", "error");
   }
-  setRadius(id: Id, r: number) {
-    this.commit("Edit Radius", (ed) => {
-      const e = ed.s.entities[id];
-      if (e?.type === "circle") ed.update(id, { r });
-    });
+  async setRadius(id: Id, r: number) {
+    const doc = await this.solver.solveToward([{ radiusOf: id, r, x: 0, y: 0 }]);
+    if (doc) this.commitDoc(doc, "Edit Radius");
+  }
+
+  /** Relations valid for the current selection. */
+  validRelations(): RelationType[] {
+    return validRelations(this.sketch(), this.store.state.selection);
+  }
+  addRelation(type: RelationType, ids = this.store.state.selection) {
+    if (!validRelations(this.sketch(), ids).includes(type)) return this.flash(`${type} is not valid for this selection`, "error");
+    this.commit(`Add ${type}`, (ed) => addRelationCmd(ed, type, ids));
+    this.store.set({ contextBar: null });
+  }
+  deleteRelation(id: Id) {
+    this.commit("Delete Relation", (ed) => ed.deleteAny([id]));
+    this.store.select(this.store.state.selection.filter((x) => x !== id));
   }
 
   deleteSelection() {
@@ -490,7 +501,16 @@ export class App implements ToolHost {
 
   sceneOptions(): SceneOptions {
     const st = this.store.state;
-    return { selection: new Set(st.selection), hover: st.hover, status: st.status, showGrid: st.showGrid };
+    const s = this.sketch();
+    const related = new Set<Id>();
+    // Hovering a relation (glyph or list row) highlights its entities.
+    const hovered = st.hover ? s.relations[st.hover] : undefined;
+    if (hovered) for (const id of hovered.refs) related.add(id);
+    for (const id of st.selection) {
+      const r = s.relations[id];
+      if (r) for (const x of r.refs) related.add(x);
+    }
+    return { selection: new Set(st.selection), hover: st.hover, status: st.status, showGrid: st.showGrid, related };
   }
 
   render() {
@@ -511,5 +531,6 @@ export class App implements ToolHost {
   /** Overridable layer drawing (relations, dimensions, fills are added later). */
   drawLayers(p: Painter, s: Sketch, opts: SceneOptions) {
     drawSketch(p, s, opts);
+    this.annotationHits = drawRelationGlyphs(p, s, new Set(this.store.state.status.conflicts), this.store.state.hover, opts.selection);
   }
 }
