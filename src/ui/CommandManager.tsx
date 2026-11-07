@@ -70,6 +70,7 @@ export const groups: Group[] = [
       a("open", "Open", "open", "open"),
       a("save", "Save", "save", "save"),
       a("export", "Export SVG", "export", "exportSvg"),
+      a("keys", "Keyboard", "keys", "keyboardPanel"),
       a("undo", "Undo", "undo", "undo"),
       a("redo", "Redo", "redo", "redo"),
     ],
@@ -108,6 +109,7 @@ export function CommandManager() {
     (b.action === "view:" + ui.viewMode) ||
     (b.action === "relationsPanel" && ui.panel === "relations") ||
     (b.action === "variablesPanel" && ui.panel === "variables") ||
+    (b.action === "keyboardPanel" && ui.panel === "keyboard") ||
     (b.action === "toggleGridSnap" && ui.gridSnap);
   return (
     <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>

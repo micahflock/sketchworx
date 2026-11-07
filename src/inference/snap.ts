@@ -16,6 +16,8 @@ export interface SnapResult {
   midpointOf?: Id;
   /** Segment from `from` to pos is horizontal/vertical. */
   hv?: "horizontal" | "vertical";
+  /** Direction inference relative to an existing entity (tangent to an arc, perpendicular to a line). */
+  dirRel?: { type: "tangent" | "perpendicular" | "parallel"; ref: Id };
   guides: { a: Vec2; b: Vec2 }[];
   glyphs: InferGlyph[];
 }
@@ -30,6 +32,8 @@ export interface SnapOptions {
   tol: number;
   gridStep?: number;
   noCurves?: boolean;
+  /** Candidate directions from `from` that imply a relation when the cursor follows them. */
+  dirRefs?: { dir: Vec2; type: "tangent" | "perpendicular" | "parallel"; ref: Id }[];
 }
 
 /** Find the best snap for a cursor position, SolidWorks style. */
@@ -47,7 +51,19 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
   }
   if (best) {
     const p = ptv(s, best.id);
-    return { pos: p, point: best.id, guides: [], glyphs: ["coincident"] };
+    const r: SnapResult = { pos: p, point: best.id, guides: [], glyphs: ["coincident"] };
+    // Closing onto a point that is (nearly) level or plumb with the anchor also infers H/V.
+    if (o.from) {
+      const d = sub(p, o.from);
+      if (Math.abs(d.y) < tol && Math.abs(d.x) > tol) {
+        r.hv = "horizontal";
+        r.glyphs.push("H");
+      } else if (Math.abs(d.x) < tol && Math.abs(d.y) > tol) {
+        r.hv = "vertical";
+        r.glyphs.push("V");
+      }
+    }
+    return r;
   }
 
   // 2. Line midpoints.
@@ -70,6 +86,27 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
       pos.x = o.from.x;
       res.hv = "vertical";
       res.glyphs.push("V");
+    }
+  }
+  // Tangent / perpendicular to the entity the segment starts from.
+  if (o.from && !res.hv && o.dirRefs?.length) {
+    const d = sub(raw, o.from);
+    const l = Math.hypot(d.x, d.y);
+    if (l > tol * 2) {
+      for (const ref of o.dirRefs) {
+        const u = ref.dir;
+        const ul = Math.hypot(u.x, u.y) || 1;
+        const t = (d.x * u.x + d.y * u.y) / ul;
+        const off = Math.abs(d.x * u.y - d.y * u.x) / ul;
+        if (t > 0 && off < tol) {
+          pos = { x: o.from.x + (u.x / ul) * t, y: o.from.y + (u.y / ul) * t };
+          res.dirRel = { type: ref.type, ref: ref.ref };
+          res.glyphs.push(ref.type === "tangent" ? "tangent" : "perpendicular");
+          res.guides.push({ a: o.from, b: pos });
+          res.pos = pos;
+          return res;
+        }
+      }
     }
   }
   // Alignment guides to existing points (no relation, just placement help).

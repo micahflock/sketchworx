@@ -1,5 +1,6 @@
 import type { Vec2 } from "../geom/vec";
-import { dist, sub, add } from "../geom/vec";
+import { dist, sub, add, perp, norm, scale } from "../geom/vec";
+import { ptv } from "../model/sketch";
 import type { SnapResult } from "../inference/snap";
 import type { Id } from "../model/types";
 import type { Painter } from "../render/painter";
@@ -23,6 +24,8 @@ export class LineTool implements Tool {
   private downScreen: Vec2 | null = null;
   private pressedFirst = false;
   private arcMode = false;
+  /** Drag-back-out gesture: leave the endpoint, come back to it, leave again → tangent arc. */
+  private gesture: "away" | "returned" | "idle" = "idle";
   construction: boolean;
 
   constructor(private host: ToolHost, public mode: LineMode = "line") {
@@ -47,7 +50,34 @@ export class LineTool implements Tool {
 
   private snapAt(e: PEvent): SnapResult {
     const skip = new Set<Id>();
-    return this.host.snap(e.world, { from: this.start?.pos, skip, suppress: e.ctrl || this.host.suppress() });
+    return this.host.snap(e.world, { from: this.start?.pos, skip, suppress: e.ctrl || this.host.suppress(), dirRefs: this.dirRefs() });
+  }
+
+  /** Directions from the chain start that infer tangent/perpendicular relations. */
+  private dirRefs() {
+    const st = this.start;
+    if (!st || this.arcMode || this.mode === "midpoint") return [];
+    const out: { dir: Vec2; type: "tangent" | "perpendicular"; ref: Id }[] = [];
+    const s = this.host.sketch();
+    const fromEntity = (id: Id | undefined, pointId: Id | undefined, travel?: Vec2) => {
+      const e = id ? s.entities[id] : undefined;
+      if (!e) return;
+      if (e.type === "line") {
+        const d = travel ?? sub(ptv(s, e.p2), ptv(s, e.p1));
+        out.push({ dir: perp(d), type: "perpendicular", ref: e.id }, { dir: scale(perp(d), -1), type: "perpendicular", ref: e.id });
+      } else if (e.type === "arc" && pointId) {
+        const c = ptv(s, e.c);
+        const p = ptv(s, pointId);
+        const t = norm(perp(sub(p, c))); // CCW tangent
+        out.push({ dir: travel ?? (pointId === e.s ? scale(t, -1) : t), type: "tangent", ref: e.id });
+      }
+    };
+    if (st.prevLine) fromEntity(st.prevLine, st.prevEnd, s.entities[st.prevLine]?.type === "arc" ? st.prevDir : undefined);
+    else if (st.snap?.point) {
+      const pe = s.entities[st.snap.point];
+      if (pe?.type === "point" && pe.owner) fromEntity(pe.owner, pe.id);
+    }
+    return out;
   }
 
   onDown(e: PEvent) {
@@ -67,7 +97,21 @@ export class LineTool implements Tool {
 
   onMove(e: PEvent) {
     this.cur = this.snapAt(e);
+    this.trackGesture(e);
     this.host.requestRender();
+  }
+
+  private trackGesture(e: PEvent) {
+    const st = this.start;
+    if (!st?.prevEnd || this.mode === "midpoint") return;
+    const d = dist(this.host.view.toScreen(st.pos), e.screen);
+    if (this.gesture === "idle" && d > 24) this.gesture = "away";
+    else if (this.gesture === "away" && d < 6) this.gesture = "returned";
+    else if (this.gesture === "returned" && d > 12) {
+      this.gesture = "away";
+      this.arcMode = !this.arcMode;
+      this.prompt();
+    }
   }
 
   onUp(e: PEvent) {
@@ -104,6 +148,7 @@ export class LineTool implements Tool {
   private endChain() {
     this.start = null;
     this.arcMode = false;
+    this.gesture = "idle";
     this.prompt();
     this.host.requestRender();
   }
@@ -130,6 +175,7 @@ export class LineTool implements Tool {
       if (sn.point || !c) return this.endChain();
       const tangentDir = arc.endDir;
       this.start = { pos: sn.pos, prevEnd: c.endId, prevLine: c.arcId, prevDir: tangentDir };
+      this.gesture = "idle";
       this.prompt();
       return;
     }
@@ -153,12 +199,14 @@ export class LineTool implements Tool {
         applySnap(ed, r.p2, sn);
       }
       applyHV(ed, r.line, sn);
+      if (sn.dirRel && ed.s.entities[sn.dirRel.ref]) ed.addRelation({ type: sn.dirRel.type, refs: [sn.dirRel.ref, r.line] });
       made = r;
     });
     const m = made as { line: Id; p2: Id } | null;
     // Closing onto an existing point (or a midpoint line) ends the chain.
     if (this.mode === "midpoint" || sn.point || !m) return this.endChain();
     this.start = { pos: sn.pos, prevEnd: m.p2, prevLine: m.line, prevDir: sub(sn.pos, st.pos) };
+    this.gesture = "idle";
     this.prompt();
   }
 

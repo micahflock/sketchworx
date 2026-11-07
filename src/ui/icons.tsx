@@ -237,6 +237,12 @@ export const icons: Record<string, () => JSX.Element> = {
       <path d="M5 12l5 5 9-10" />
     </S>
   ),
+  keys: () => (
+    <S>
+      <rect x="3" y="7" width="18" height="11" rx="2" />
+      <path d="M6 10h1M9 10h1M12 10h1M15 10h1M18 10h0M7 14h10" />
+    </S>
+  ),
   grid: () => (
     <S>
       {dot(6, 6)}

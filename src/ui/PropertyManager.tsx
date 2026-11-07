@@ -10,6 +10,7 @@ import { useApp, useUi } from "./hooks";
 import css from "./ui.module.css";
 import { ConflictList, RelationsSections, RelationsPanel } from "./RelationsUi";
 import { VariablesPanel } from "./VariablesPanel";
+import { KeyboardPanel } from "./KeyboardPanel";
 
 export function Section({ title, children, open = true }: { title: string; children: ComponentChildren; open?: boolean }) {
   const [isOpen, setOpen] = useState(open);
@@ -171,6 +172,7 @@ export function PropertyManager() {
   const s = app.sketch();
   if (ui.panel === "relations") return <RelationsPanel />;
   if (ui.panel === "variables") return <VariablesPanel />;
+  if (ui.panel === "keyboard") return <KeyboardPanel />;
   const tool = app.tool;
   if (tool.id !== "select") {
     const opts = tool.options?.() ?? [];

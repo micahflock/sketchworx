@@ -15,7 +15,7 @@ export interface UiState {
   /** Short instruction for the status bar ("Click to set the end point"). */
   prompt: string;
   status: SketchStatus;
-  panel: "auto" | "relations" | "variables";
+  panel: "auto" | "relations" | "variables" | "keyboard";
   viewMode: ViewMode;
   showShortcutBar: { x: number; y: number } | null;
   contextBar: { x: number; y: number } | null;

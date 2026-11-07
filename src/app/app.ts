@@ -16,6 +16,8 @@ import { View } from "../render/view";
 import type { DragTarget } from "../solver/types";
 import { LineTool } from "../tools/line";
 import { DimensionTool } from "../tools/dimension";
+import { TangentArcTool } from "../tools/tangentArc";
+import { loadKeymap } from "./keymap";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
 import { fmt } from "../tools/line";
@@ -27,7 +29,6 @@ import type { PEvent, Tool, ToolHost } from "../tools/tool";
 import { Store } from "./store";
 import { serializeDoc, parseDoc, FILE_EXT } from "../io/native";
 import { autosaveRead, autosaveWrite, openText, saveText } from "../io/storage";
-import { defaultKeymap } from "./keymap";
 import { SolverService } from "./solverService";
 import { WorkerSolver } from "../solver/client";
 import type { Solver } from "../solver/types";
@@ -49,7 +50,7 @@ export class App implements ToolHost {
   readonly solver: SolverService;
   /** Hit rectangles of glyphs/dimensions from the last frame (screen space). */
   annotationHits: AnnotationHit[] = [];
-  keymap = { ...defaultKeymap };
+  keymap: Record<string, string> = loadKeymap();
   /** Remembered variant per flyout group. */
   flyoutLast: Record<string, string> = {};
   private autosaveTimer: number | undefined;
@@ -70,6 +71,7 @@ export class App implements ToolHost {
     reg(new ArcTool(this, "threepoint"));
     for (const m of ["corner", "center", "3corner", "3center", "parallelogram"] as const) reg(new RectTool(this, m));
     reg(new DimensionTool(this));
+    reg(new TangentArcTool(this));
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
   }
@@ -571,6 +573,8 @@ export class App implements ToolHost {
         return void this.openFile();
       case "save":
         return void this.saveFile();
+      case "keyboardPanel":
+        return this.store.set({ panel: this.store.state.panel === "keyboard" ? "auto" : "keyboard" });
       case "variablesPanel":
         return this.store.set({ panel: this.store.state.panel === "variables" ? "auto" : "variables" });
       default:

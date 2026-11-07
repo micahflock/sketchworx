@@ -11,6 +11,23 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 | Keyboard map | SolidWorks defaults from the spec, in `src/app/keymap.ts` | Rebinding UI later |
 | Hosting | Static build (`npm run build` → `dist/`, relative base) | Works from GitHub Pages / Cloudflare Pages or a local file server |
 
+## Milestone 4 — SolidWorks feel ✅
+
+- Auto-relations while drawing with dotted blue inference lines and yellow preview glyphs: coincident
+  (points), on-curve, midpoint, horizontal/vertical (also when closing onto an existing point), tangent when
+  leaving an arc end along its tangent, perpendicular to the previous segment, alignment guides to other
+  points. Ctrl (or the on-screen Ctrl on iPad) suppresses them; chained endpoints stay connected.
+- Line tool: A toggles a tangent arc; the SolidWorks gesture (move away from the last endpoint, come back,
+  move out again) also switches to a tangent arc. Standalone Tangent Arc tool in the Arc flyout.
+- Context toolbar after a selection (most likely relations + construction toggle), shortcut bar on S,
+  Display/Delete Relations, construction toggle (Q), Centerline.
+- Keyboard map: SolidWorks defaults; a Keyboard panel (File group) rebinds keys, saved per browser.
+
+Acceptance (Playwright):
+- Rectangle drawn by eye with the Line tool (corners off by 2–5 px) → 4 corner coincident + 2 H + 2 V
+  (plus one coincident to the origin when the first click lands on it).
+- Same clicks with Ctrl held → only the 3 chain joints, no H/V and no closing coincident.
+
 ## Milestone 3 — Smart Dimension and variables ✅
 
 - One Smart Dimension tool (D). Type inferred from the picks and the label position: aligned / horizontal /
