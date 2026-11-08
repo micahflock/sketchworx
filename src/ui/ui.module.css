@@ -206,6 +206,51 @@
   white-space: nowrap;
 }
 
+/* HELL MODE color picker */
+.swatch {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #000;
+  outline: 1px solid var(--sw-text-3);
+}
+.palette {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, 36px);
+  gap: 4px;
+  padding: 6px;
+  background: var(--sw-surface);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: var(--sw-radius);
+  box-shadow: 0 6px 18px var(--sw-shadow);
+}
+.paletteItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--sw-radius);
+  cursor: pointer;
+}
+.paletteItem .swatch {
+  width: 24px;
+  height: 24px;
+  outline: none;
+}
+.paletteItem.active,
+.paletteItem:hover {
+  border-color: var(--sw-text);
+}
+
 /* ---------------- Command box */
 .toolbarEnd {
   flex: none;
@@ -1048,6 +1093,24 @@
 }
 .fname {
   color: var(--sw-text-3);
+}
+/* Shown once an Apple Pencil (or other pen) has touched the canvas; tap toggles finger drawing. */
+.penFlag {
+  margin: 5px 0 5px 8px;
+  padding: 0 6px !important;
+  font: inherit;
+  font-size: 11px;
+  color: var(--sw-accent-ink);
+  background: var(--sw-accent);
+  border: 1px solid var(--sw-accent) !important;
+  border-radius: var(--sw-radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.penFlagOff {
+  color: var(--sw-text-2);
+  background: none;
+  border-color: var(--sw-border-strong) !important;
 }
 .version {
   font-size: 11px;

@@ -71,6 +71,11 @@ abstract class ClickTool implements Tool {
     // Press-drag-release from the first point places the second.
     if (this.pts.length === 1 && this.downScreen && screenDist(e.screen, this.downScreen) > DRAG_THRESHOLD_PX) {
       this.push(this.snapAt(e));
+    } else if (this.pts.length === 1 && this.need > 1 && e.pointerType !== "mouse") {
+      // Touch and pen draw by dragging only: a tap does not start a shape.
+      this.pts = [];
+      this.host.setPrompt(this.prompts[0]);
+      this.host.requestRender();
     }
     this.downScreen = null;
   }

@@ -6,7 +6,8 @@ import type { Command } from "./commandSearch";
 import css from "./ui.module.css";
 import { isMac, keyFor, keyLegend } from "./shortcuts";
 import { nextTheme } from "../app/themePref";
-import type { ThemeName } from "../render/theme";
+import { HELL_ACCENTS } from "../render/theme";
+import type { HellAccent, ThemeName } from "../render/theme";
 
 const themeToggleLabel: Record<ThemeName, string> = {
   light: "Switch to light theme",
@@ -256,10 +257,54 @@ export function CommandManager() {
       </div>
       <div class={css.toolbarEnd}>
         <CommandBox />
+        {ui.theme === "hell" && <HellPalette />}
         <button class={css.tbtn} title={themeToggleLabel[next]} aria-label={themeToggleLabel[next]} onClick={() => app.runAction("toggleTheme")}>
           <Icon name={next === "light" ? "sun" : next === "dark" ? "moon" : "hell"} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/** HELL MODE color picker: a swatch of the current color that opens the eight choices. */
+function HellPalette() {
+  const app = useApp();
+  const ui = useUi();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
+  }, [open]);
+  return (
+    <div class={css.flyoutHost} ref={ref}>
+      <button class={css.tbtn} title="HELL MODE color" aria-label="HELL MODE color" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span class={css.swatch} style={{ background: HELL_ACCENTS[ui.hellAccent] }} />
+      </button>
+      {open && (
+        <div class={css.palette} role="listbox" aria-label="HELL MODE color">
+          {(Object.keys(HELL_ACCENTS) as HellAccent[]).map((k) => (
+            <button
+              key={k}
+              role="option"
+              aria-selected={k === ui.hellAccent}
+              title={k}
+              aria-label={k}
+              class={`${css.paletteItem} ${k === ui.hellAccent ? css.active : ""}`}
+              onClick={() => {
+                app.setHellAccent(k);
+                setOpen(false);
+              }}
+            >
+              <span class={css.swatch} style={{ background: HELL_ACCENTS[k] }} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

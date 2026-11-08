@@ -19,7 +19,8 @@ import type { Hit } from "../render/hit";
 import { Painter } from "../render/painter";
 import { drawGrid, drawSketch, gridStep } from "../render/renderer";
 import type { SceneOptions } from "../render/renderer";
-import { setCanvasTheme, theme } from "../render/theme";
+import { hellShades, setCanvasTheme, theme } from "../render/theme";
+import type { HellAccent } from "../render/theme";
 import type { ThemeName } from "../render/theme";
 import { View } from "../render/view";
 import type { DragTarget } from "../solver/types";
@@ -31,7 +32,7 @@ import { convertEntities, mirrorEntities, recomputeDerived } from "../tools/edit
 import { ConvertTool } from "../tools/convert";
 import { RepairTool } from "../tools/repair";
 import { loadKeymap } from "./keymap";
-import { isHellNumber, isHellUnlocked, loadThemePref, nextTheme, resolveTheme, saveThemePref, unlockHell } from "./themePref";
+import { isHellNumber, isHellUnlocked, loadHellAccent, loadThemePref, nextTheme, resolveTheme, saveHellAccent, saveThemePref, unlockHell } from "./themePref";
 import type { ThemePref } from "./themePref";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
@@ -103,6 +104,11 @@ export class App implements ToolHost, ArtHost {
   private drawingTouch: number | null = null;
   private afterPinch = false;
   private lastTap: { t: number; at: Vec2 } | null = null;
+  /** The Apple Pencil (or other pen) currently pressed, and when a pen was last seen (pressed or hovering). */
+  private penDown: number | null = null;
+  private penSeenAt = -Infinity;
+  /** Touches dropped as a resting palm; they stay ignored until lifted. */
+  private ignoredTouches = new Set<number>();
   /** Last tool other than Select, resumed by the on-screen Draw toggle. */
   private lastDrawTool = "line";
   /** Status bar cursor readout hook. */
@@ -143,7 +149,7 @@ export class App implements ToolHost, ArtHost {
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
     this.darkQuery?.addEventListener?.("change", () => this.setThemePref(this.store.state.themePref, false));
-    this.store.set({ hellUnlocked: isHellUnlocked() });
+    this.store.set({ hellUnlocked: isHellUnlocked(), hellAccent: loadHellAccent() });
     this.setThemePref(loadThemePref(), false);
     // Canvas text uses the theme fonts; draw again once they arrive.
     if (typeof document !== "undefined") document.fonts?.addEventListener?.("loadingdone", () => this.requestRender());
@@ -156,12 +162,30 @@ export class App implements ToolHost, ArtHost {
   setThemePref(pref: ThemePref, save = true) {
     if (save) saveThemePref(pref);
     const name = resolveTheme(pref, !!this.darkQuery?.matches);
-    setCanvasTheme(name);
+    setCanvasTheme(name, this.store.state.hellAccent);
     if (typeof document !== "undefined") {
       document.documentElement.dataset.theme = name;
       document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chromeColor[name]);
+      this.applyHellAccentCss();
     }
     this.store.set({ themePref: pref, theme: name });
+  }
+
+  /** Pick the HELL MODE color (red, green, pink, ...). */
+  setHellAccent(accent: HellAccent) {
+    saveHellAccent(accent);
+    this.store.set({ hellAccent: accent });
+    setCanvasTheme(this.store.state.theme, accent);
+    this.applyHellAccentCss();
+    this.requestRender();
+  }
+  /** The interface reads the accent through --hell* variables (global.css). */
+  private applyHellAccentCss() {
+    if (typeof document === "undefined") return;
+    const sh = hellShades(this.store.state.hellAccent);
+    const st = document.documentElement.style;
+    const vars: Record<string, string> = { "--hell": sh.main, "--hell-dim": sh.dim, "--hell-edge": sh.edge, "--hell-edge-soft": sh.edgeSoft, "--hell-deep": sh.deep, "--hell-deeper": sh.deeper };
+    for (const [k, v] of Object.entries(vars)) st.setProperty(k, v);
   }
 
   /** Setting a dimension to 666 the first time unlocks HELL MODE and switches to it. */
@@ -731,11 +755,16 @@ export class App implements ToolHost, ArtHost {
   private bindInput(c: HTMLCanvasElement) {
     c.addEventListener("contextmenu", (e) => e.preventDefault());
     c.addEventListener("pointerdown", (e) => {
-      c.setPointerCapture(e.pointerId);
+      try {
+        c.setPointerCapture(e.pointerId);
+      } catch {
+        /* the pointer is already gone */
+      }
       const pe = this.toEvent(e);
       this.lastPointer = pe;
       if (pe.pointerType !== "mouse" && !this.store.state.touchUi) this.store.set({ touchUi: true });
       if (pe.pointerType === "touch") return this.touchDown(e, pe);
+      if (pe.pointerType === "pen") this.penPressed(e.pointerId);
       if (e.button === 1 || (e.button === 0 && e.altKey && pe.pointerType === "mouse")) {
         this.panning = { last: pe.screen };
         e.preventDefault();
@@ -749,6 +778,7 @@ export class App implements ToolHost, ArtHost {
       const pe = this.toEvent(e);
       this.lastPointer = pe;
       if (pe.pointerType === "touch") return this.touchMove(e, pe);
+      if (pe.pointerType === "pen") this.penSeenAt = performance.now();
       if (this.panning) {
         this.view.panBy(pe.screen.x - this.panning.last.x, pe.screen.y - this.panning.last.y);
         this.panning.last = pe.screen;
@@ -761,6 +791,10 @@ export class App implements ToolHost, ArtHost {
     const up = (e: PointerEvent) => {
       const pe = this.toEvent(e);
       if (pe.pointerType === "touch") return this.touchUp(e, pe);
+      if (pe.pointerType === "pen" && this.penDown === e.pointerId) {
+        this.penDown = null;
+        this.penSeenAt = performance.now();
+      }
       if (this.panning) {
         this.panning = null;
         return;
@@ -876,17 +910,54 @@ export class App implements ToolHost, ArtHost {
     this.commitDoc(setChainStyle(this.store.doc, chains, patch), label);
   }
 
+  // ---- pen
+  // Once a pen has been used, fingers no longer draw or select (the palm rests on the screen while
+  // writing): two fingers still pan, pinch-zoom and tap-undo. While the pen is down, or just lifted
+  // or hovering, every touch is treated as the palm and ignored. The status bar flag turns this off.
+  private penPressed(id: number) {
+    this.penDown = id;
+    this.penSeenAt = performance.now();
+    if (!this.store.state.penSeen) this.store.set({ penSeen: true, pencilOnly: true });
+    // A palm that landed first may already be pinching or drawing: drop it.
+    clearTimeout(this.longPress);
+    clearTimeout(this.pendingTimer);
+    this.pendingTouch = null;
+    if (this.drawingTouch !== null) {
+      this.pressCancel();
+      this.drawingTouch = null;
+    }
+    this.pinch = null;
+    for (const t of this.touches.keys()) this.ignoredTouches.add(t);
+    this.touches.clear();
+  }
+  /** A touch that is a palm next to the pen, rather than a finger gesture. */
+  private isPalm(e: PointerEvent): boolean {
+    if (!this.store.state.pencilOnly) return false;
+    if (this.penDown !== null || performance.now() - this.penSeenAt < 500) return true;
+    return Math.max(e.width || 0, e.height || 0) > 60; // a broad contact patch
+  }
+  togglePencilOnly() {
+    const on = !this.store.state.pencilOnly;
+    this.store.set({ pencilOnly: on });
+    this.flash(on ? "Pencil draws; fingers pan and zoom" : "Fingers draw and select too");
+  }
+
   // ---- touch
   // One finger always drives the active tool: Select (tap selects, drag moves or box-selects) or a
   // drawing tool. It never pans; two fingers pan + pinch-zoom, and a quick two-finger tap undoes.
   // Long-press (Select only) opens the context toolbar or shortcut bar.
   private touchDown(e: PointerEvent, pe: PEvent) {
+    if (this.isPalm(e)) {
+      this.ignoredTouches.add(e.pointerId);
+      return;
+    }
     this.touches.set(e.pointerId, { start: pe.screen, last: pe.screen, t0: performance.now() });
     clearTimeout(this.longPress);
     clearTimeout(this.pendingTimer);
     if (this.touches.size === 1) {
       this.afterPinch = false;
       this.longPressFired = false;
+      if (this.store.state.pencilOnly) return; // one finger does nothing: wait for a second one
       // Hold the touch back briefly: a second finger turns it into a pinch instead.
       this.pendingTouch = { id: e.pointerId, pe };
       this.pendingTimer = window.setTimeout(() => this.flushPendingTouch(), 150);
@@ -931,6 +1002,7 @@ export class App implements ToolHost, ArtHost {
   }
 
   private touchMove(e: PointerEvent, pe: PEvent) {
+    if (this.ignoredTouches.has(e.pointerId)) return;
     const t = this.touches.get(e.pointerId);
     if (!t) return;
     t.last = pe.screen;
@@ -958,6 +1030,7 @@ export class App implements ToolHost, ArtHost {
   }
 
   private touchUp(e: PointerEvent, pe: PEvent) {
+    if (this.ignoredTouches.delete(e.pointerId)) return;
     clearTimeout(this.longPress);
     clearTimeout(this.pendingTimer);
     this.touches.delete(e.pointerId);

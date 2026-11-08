@@ -207,67 +207,103 @@ export const darkTheme: CanvasTheme = {
   dimFont: "12px 'JetBrains Mono', ui-monospace, monospace",
 };
 
-const RED = "#ff1f1f";
-const DIM_RED = "#a31212";
+/** HELL MODE accent colors: one bold color on black. */
+export const HELL_ACCENTS = {
+  red: "#ff1f1f",
+  green: "#1fff3c",
+  pink: "#ff2fb4",
+  orange: "#ff7a0f",
+  yellow: "#ffe81f",
+  blue: "#2f7dff",
+  purple: "#a53fff",
+  white: "#ffffff",
+} as const;
+export type HellAccent = keyof typeof HELL_ACCENTS;
 
-/** HELL MODE: black and one red, so constraint state is shown by line shape instead of hue. */
-export const hellTheme: CanvasTheme = {
-  bg: "#000000",
-  gridStyle: "lines",
-  gridMinor: "transparent",
-  gridMajor: "rgba(255,31,31,0.16)",
-  gridAxis: "rgba(255,31,31,0.25)",
-  origin: RED,
-  state: { under: RED, full: RED, over: RED, failed: RED },
-  selected: RED,
-  hover: "rgba(255,31,31,0.6)",
-  preview: RED,
-  previewFaint: "rgba(255,31,31,0.35)",
-  inference: DIM_RED,
-  inferGlyphBg: "#000000",
-  inferGlyphFg: RED,
-  inferGlyphBorder: RED,
-  relGlyphBg: "#000000",
-  relGlyphFg: RED,
-  relGlyphBorder: RED,
-  relGlyphConflict: RED,
-  relGlyphConflictFg: "#000000",
-  relGlyphConflictBorder: RED,
-  relGlyphHotBg: RED,
-  relGlyphHotFg: "#000000",
-  dim: RED,
-  dimDriven: DIM_RED,
-  dimConflict: RED,
-  dimLabelBg: "rgba(0,0,0,0.92)",
-  dimLabelHotBg: "#3a0000",
-  measure: RED,
-  construction: RED,
-  reference: DIM_RED,
-  later: "rgba(255,31,31,0.3)",
-  derived: DIM_RED,
-  handleFill: "#000000",
-  openEnd: RED,
-  fill: "#141414",
-  profileTint: "rgba(255,31,31,0.06)",
-  boxWindow: "rgba(255,31,31,0.10)",
-  boxWindowLine: RED,
-  boxCrossing: "rgba(255,31,31,0.05)",
-  boxCrossingLine: DIM_RED,
-  trimStroke: RED,
-  splitDivider: "#4a0000",
-  lineWidth: 2.4,
-  emphWidth: 4.5,
-  stateStyle: {
-    under: { dash: [10, 6], hollow: true },
-    full: { solidHandles: true },
-    over: { jagged: true, solidHandles: true, crossPoints: true },
-    failed: { jagged: true, solidHandles: true, crossPoints: true },
-  },
-  conflictCross: true,
-  glyphFont: "600 10px 'IBM Plex Mono', ui-monospace, monospace",
-  glyphRadius: 0,
-  dimFont: "12px 'IBM Plex Mono', ui-monospace, monospace",
-};
+export function isHellAccent(v: unknown): v is HellAccent {
+  return typeof v === "string" && Object.prototype.hasOwnProperty.call(HELL_ACCENTS, v);
+}
+
+function rgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+/** The accent at alpha a over the canvas. */
+const rgba = (hex: string, a: number) => `rgba(${rgb(hex).join(",")},${a})`;
+/** The accent darkened toward black (k = 1 is the accent itself). */
+export function shade(hex: string, k: number): string {
+  return "#" + rgb(hex).map((c) => Math.round(c * k).toString(16).padStart(2, "0")).join("");
+}
+
+/** Shades of the HELL MODE accent shared by the canvas and the interface (global.css). */
+export function hellShades(accent: HellAccent) {
+  const c = HELL_ACCENTS[accent];
+  return { main: c, dim: shade(c, 0.64), edge: shade(c, 0.29), edgeSoft: shade(c, 0.23), deep: shade(c, 0.125), deeper: shade(c, 0.08) };
+}
+
+/** HELL MODE: black and one color, so constraint state is shown by line shape instead of hue. */
+export function hellPalette(accent: HellAccent = "red"): CanvasTheme {
+  const { main: C, dim: DIM, edge, edgeSoft } = hellShades(accent);
+  return {
+    bg: "#000000",
+    gridStyle: "lines",
+    gridMinor: "transparent",
+    gridMajor: rgba(C, 0.16),
+    gridAxis: rgba(C, 0.25),
+    origin: C,
+    state: { under: C, full: C, over: C, failed: C },
+    selected: C,
+    hover: rgba(C, 0.6),
+    preview: C,
+    previewFaint: rgba(C, 0.35),
+    inference: DIM,
+    inferGlyphBg: "#000000",
+    inferGlyphFg: C,
+    inferGlyphBorder: C,
+    relGlyphBg: "#000000",
+    relGlyphFg: C,
+    relGlyphBorder: C,
+    relGlyphConflict: C,
+    relGlyphConflictFg: "#000000",
+    relGlyphConflictBorder: C,
+    relGlyphHotBg: C,
+    relGlyphHotFg: "#000000",
+    dim: C,
+    dimDriven: DIM,
+    dimConflict: C,
+    dimLabelBg: "rgba(0,0,0,0.92)",
+    dimLabelHotBg: edgeSoft,
+    measure: C,
+    construction: C,
+    reference: DIM,
+    later: rgba(C, 0.3),
+    derived: DIM,
+    handleFill: "#000000",
+    openEnd: C,
+    fill: "#141414",
+    profileTint: rgba(C, 0.06),
+    boxWindow: rgba(C, 0.1),
+    boxWindowLine: C,
+    boxCrossing: rgba(C, 0.05),
+    boxCrossingLine: DIM,
+    trimStroke: C,
+    splitDivider: edge,
+    lineWidth: 2.4,
+    emphWidth: 4.5,
+    stateStyle: {
+      under: { dash: [10, 6], hollow: true },
+      full: { solidHandles: true },
+      over: { jagged: true, solidHandles: true, crossPoints: true },
+      failed: { jagged: true, solidHandles: true, crossPoints: true },
+    },
+    conflictCross: true,
+    glyphFont: "600 10px 'IBM Plex Mono', ui-monospace, monospace",
+    glyphRadius: 0,
+    dimFont: "12px 'IBM Plex Mono', ui-monospace, monospace",
+  };
+}
+
+export const hellTheme: CanvasTheme = hellPalette("red");
 
 export type ThemeName = "light" | "dark" | "hell";
 
@@ -276,6 +312,6 @@ const palettes: Record<ThemeName, CanvasTheme> = { light: lightTheme, dark: dark
 /** The active canvas colors. One shared object, so renderers read the current theme without re-importing. */
 export const theme: CanvasTheme = structuredClone(lightTheme);
 
-export function setCanvasTheme(name: ThemeName) {
-  Object.assign(theme, structuredClone(palettes[name]));
+export function setCanvasTheme(name: ThemeName, hellAccent: HellAccent = "red") {
+  Object.assign(theme, name === "hell" ? hellPalette(hellAccent) : structuredClone(palettes[name]));
 }

@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest";
+import { applyCommand } from "../src/model/editor";
+import type { CommandFn } from "../src/model/editor";
+import { activeSketch, createDoc } from "../src/model/sketch";
+import type { Doc } from "../src/model/types";
+import { View } from "../src/render/view";
+import { snap } from "../src/inference/snap";
+import { CHAIN_TARGET_PX, LineTool } from "../src/tools/line";
+import { CircleTool } from "../src/tools/shapes";
+import { HELL_ACCENTS, hellPalette, lightTheme } from "../src/render/theme";
+
+/** A host with a real document and snapping, viewed at 1 px per unit with the origin at the screen's center. */
+function setup() {
+  let doc: Doc = createDoc();
+  const view = new View();
+  const host = {
+    view,
+    sketch: () => activeSketch(doc),
+    doc: () => doc,
+    commit: (_label: string, fn: CommandFn) => (doc = applyCommand(doc, fn)),
+    snap: (raw: { x: number; y: number }, o: object = {}) => snap(activeSketch(doc), raw, { tol: 8, ...o }),
+    setPrompt: () => {},
+    requestRender: () => {},
+    suppress: () => false,
+  };
+  const ev = (sx: number, sy: number, pointerType = "touch") => {
+    const screen = { x: sx, y: sy };
+    return { world: view.toWorld(screen), screen, button: 0, shift: false, ctrl: false, alt: false, pointerType };
+  };
+  const count = (type: string) => Object.values(activeSketch(doc).entities).filter((e) => e.type === type).length;
+  const relations = () => Object.values(activeSketch(doc).relations ?? {});
+  return { host, ev, count, relations };
+}
+
+const drag = (tool: { onDown(e: unknown): void; onMove(e: unknown): void; onUp(e: unknown): void }, a: unknown, b: unknown) => {
+  tool.onDown(a);
+  tool.onMove(b);
+  tool.onUp(b);
+};
+
+describe("Line tool by touch", () => {
+  it("draws one segment per drag", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(100, 100), ev(200, 130));
+    expect(count("line")).toBe(1);
+  });
+
+  it("does not draw tap-to-tap lines", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    for (const p of [ev(100, 100), ev(200, 130), ev(250, 300)]) {
+      tool.onDown(p);
+      tool.onUp(p);
+    }
+    expect(count("line")).toBe(0);
+  });
+
+  it("continues the chain from a drag that starts near the last end point", () => {
+    const { host, ev, count, relations } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(100, 100), ev(200, 130));
+    // Inside the enlarged target, but farther than the normal snap distance.
+    const off = CHAIN_TARGET_PX.touch - 4;
+    drag(tool, ev(200 + off, 130), ev(260, 260));
+    expect(count("line")).toBe(2);
+    expect(relations().filter((r) => r.type === "coincident")).toHaveLength(1);
+  });
+
+  it("starts a new line from a drag elsewhere", () => {
+    const { host, ev, count, relations } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(100, 100), ev(200, 130));
+    drag(tool, ev(400, 400), ev(500, 470));
+    expect(count("line")).toBe(2);
+    expect(relations().filter((r) => r.type === "coincident")).toHaveLength(0);
+  });
+
+  it("keeps click-click chains for the mouse", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    for (const p of [ev(100, 100, "mouse"), ev(200, 130, "mouse"), ev(250, 300, "mouse")]) {
+      tool.onDown(p);
+      tool.onUp(p);
+    }
+    expect(count("line")).toBe(2);
+  });
+});
+
+describe("shapes by touch", () => {
+  it("draw a circle by dragging, not by two taps", () => {
+    const { host, ev, count } = setup();
+    const tool = new CircleTool(host as never);
+    tool.activate();
+    for (const p of [ev(100, 100), ev(160, 100)]) {
+      tool.onDown(p);
+      tool.onUp(p);
+    }
+    expect(count("circle")).toBe(0);
+    drag(tool, ev(100, 100), ev(160, 100));
+    expect(count("circle")).toBe(1);
+  });
+});
+
+describe("HELL MODE colors", () => {
+  it("offers eight accents, each a complete one-color palette", () => {
+    expect(Object.keys(HELL_ACCENTS)).toEqual(["red", "green", "pink", "orange", "yellow", "blue", "purple", "white"]);
+    for (const k of Object.keys(HELL_ACCENTS) as (keyof typeof HELL_ACCENTS)[]) {
+      const t = hellPalette(k);
+      expect(Object.keys(t).sort()).toEqual(Object.keys(lightTheme).sort());
+      expect(new Set(Object.values(t.state))).toEqual(new Set([HELL_ACCENTS[k]]));
+      expect(t.selected).toBe(HELL_ACCENTS[k]);
+    }
+  });
+});

@@ -1,10 +1,12 @@
-import type { ThemeName } from "../render/theme";
+import type { HellAccent, ThemeName } from "../render/theme";
+import { isHellAccent } from "../render/theme";
 
 /** What the user chose. "system" follows the operating system's light/dark setting. "hell" needs unlocking. */
 export type ThemePref = "light" | "dark" | "system" | "hell";
 
 const STORAGE_KEY = "sketchworx.theme";
 const HELL_KEY = "sketchworx.hell";
+const ACCENT_KEY = "sketchworx.hellAccent";
 
 /** The dimension value that unlocks HELL MODE. */
 export const HELL_NUMBER = 666;
@@ -58,4 +60,22 @@ export function nextTheme(current: ThemeName, hellUnlocked: boolean): ThemeName 
   if (current === "light") return "dark";
   if (current === "dark" && hellUnlocked) return "hell";
   return "light";
+}
+
+export function loadHellAccent(): HellAccent {
+  try {
+    const v = localStorage.getItem(ACCENT_KEY);
+    if (isHellAccent(v)) return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return "red";
+}
+
+export function saveHellAccent(accent: HellAccent) {
+  try {
+    localStorage.setItem(ACCENT_KEY, accent);
+  } catch {
+    /* storage unavailable */
+  }
 }
