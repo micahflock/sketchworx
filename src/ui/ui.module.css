@@ -474,7 +474,8 @@
   display: inline-flex;
 }
 /* Confirmation under the move buttons: what a move would remove. The arrow points at the button pressed
-   (move up is the 4th action from the right, move down the 3rd; each is 26 px, inside 4 px of padding). */
+   (move up is the 4th action from the right, move down the 3rd, delete the last; each is 26 px, inside 4 px
+   of padding). */
 .ftConfirm {
   position: relative;
   margin: 6px 0 4px;
@@ -510,6 +511,9 @@
 }
 .ftConfirmDown {
   --arrow-right: 61px;
+}
+.ftConfirmDelete {
+  --arrow-right: 9px;
 }
 .ftConfirmBtns {
   display: flex;

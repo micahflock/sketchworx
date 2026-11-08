@@ -3,7 +3,7 @@ import { Store } from "../src/app/store";
 import { SolverService } from "../src/app/solverService";
 import { parseDoc, serializeDoc } from "../src/io/native";
 import { applyCommand } from "../src/model/editor";
-import { addFeature, crossRefs, danglingOf, deleteFeature, dependents, moveConflict, moveFeature, setActive, setVisible } from "../src/model/features";
+import { addFeature, crossRefs, danglingOf, deleteConflict, deleteFeature, dependents, moveConflict, moveFeature, setActive, setVisible } from "../src/model/features";
 import { docOutline } from "../src/model/outline";
 import { validRelations } from "../src/model/relations";
 import { activeSketch, createDoc, ownSketch, ptv } from "../src/model/sketch";
@@ -215,6 +215,32 @@ describe("feature tree model", () => {
     const down = moveFeature(doc, s1.id, 1, true) as Doc;
     expect(down.features.map((f) => f.id)).toEqual([s2.id, s1.id]);
     expect(Object.values(ownSketch(down, s2.id).relations).length).toBe(1);
+  });
+
+  it("deleting a referenced sketch can remove the references to it, and only those", () => {
+    const { doc: d2, ids } = withDiagonal();
+    // Sketch3 uses both Sketch1 (its corner) and Sketch2 (the diagonal's end).
+    let doc = addFeature(d2);
+    doc = applyCommand(doc, (ed) => {
+      const l = addLine(ed, { x: 100, y: 60 }, { x: 140, y: 90 });
+      ed.addRelation({ type: "coincident", refs: [l.p1, ids.corner] });
+      ed.addRelation({ type: "coincident", refs: [l.p2, ids.d2] });
+      ed.addDimension({ type: "distance", refs: [l.p2, ids.br], expr: "50", value: 50, driven: false, label: { x: 120, y: 40 } });
+    });
+    const [s1, s2, s3] = doc.features;
+    const deps = deleteConflict(doc, s1.id);
+    expect(deps.map((d) => d.feature.id)).toEqual([s2.id, s3.id]);
+    expect(deps[1].refs.relations.length).toBe(1);
+    expect(deps[1].refs.dimensions.length).toBe(1);
+    expect(typeof deleteFeature(doc, s1.id)).toBe("string");
+    const after = deleteFeature(doc, s1.id, true) as Doc;
+    expect(after.features.map((f) => f.id)).toEqual([s2.id, s3.id]);
+    const rels3 = Object.values(ownSketch(after, s3.id).relations);
+    expect(rels3.map((r) => r.refs)).toEqual([[expect.any(String), ids.d2]]); // the tie to Sketch2 stays
+    expect(Object.keys(ownSketch(after, s3.id).dimensions)).toEqual([]);
+    expect(danglingOf(after, s2.id)).toEqual([]);
+    expect(danglingOf(after, s3.id)).toEqual([]);
+    expect(deleteConflict(doc, s3.id)).toEqual([]); // nothing uses the last sketch
   });
 
   it("a move with nothing to break needs no confirmation", () => {

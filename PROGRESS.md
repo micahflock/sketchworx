@@ -2,7 +2,7 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
-## Reordering sketches that reference each other ✅
+## Reordering and deleting sketches that reference each other ✅
 
 A sketch may only reference sketches above it. Moving one above geometry it uses no longer refuses: the move
 button opens a confirmation right under it ("Sketch2 uses Sketch1. Moving Sketch2 up removes 1 relation and
@@ -10,16 +10,21 @@ button opens a confirmation right under it ("Sketch2 uses Sketch1. Moving Sketch
 closes it). Confirming deletes the relations and dimensions that use the other sketch and unlinks offsets
 that follow it (they stay where they are as free curves), then moves, as one undo step. Nothing is left
 dangling. Moves that break nothing happen at once, as before. Model: `crossRefs`, `moveConflict` and
-`moveFeature(doc, id, dir, removeRefs)` in `src/model/features.ts`. Deleting a referenced sketch is still
-refused.
+`moveFeature(doc, id, dir, removeRefs)` in `src/model/features.ts`.
+
+Deleting a sketch that others use works the same way: the ✕ button opens the confirmation under it ("Sketch2
+and Sketch3 use Sketch1. Deleting Sketch1 removes 1 relation in Sketch2, and 1 relation and 1 dimension in
+Sketch3."), and **Remove and delete** removes only the references to that sketch (a sketch using two others
+keeps its ties to the one that stays), then deletes it, as one undo step. Model: `deleteConflict` and
+`deleteFeature(doc, id, removeRefs)`. The last sketch still cannot be deleted.
 
 Round line ends in Art view were checked again: every case (centered and side strokes, rounded corners, arcs)
 stops the path half the weight short of each end, so the round cap ends exactly at the sketch endpoint in Art
 view and in SVG. Only a line shorter than its weight cannot be shortened enough. Regression tests in
 `tests/art.test.ts`.
 
-Tests: `tests/features.test.ts` (conflict detection, remove-and-move up and down, the shared origin is kept,
-offsets unlinked, plain moves).
+Tests: `tests/features.test.ts` (conflict detection, remove-and-move up and down, remove-and-delete with a
+sketch that uses two others, the shared origin is kept, offsets unlinked, plain moves).
 
 ## Toolbar, command search and theme plumbing ✅
 

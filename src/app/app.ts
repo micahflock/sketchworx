@@ -643,8 +643,9 @@ export class App implements ToolHost, ArtHost {
     this.commitDoc(setVisible(this.store.doc, id, visible), visible ? "Show Sketch" : "Hide Sketch");
     if (!visible) this.pruneSelection();
   }
-  deleteSketch(id: Id) {
-    const r = deleteFeature(this.store.doc, id);
+  /** Delete a sketch. With `removeRefs`, other sketches' references to it are removed in the same step. */
+  deleteSketch(id: Id, removeRefs = false) {
+    const r = deleteFeature(this.store.doc, id, removeRefs);
     if (typeof r === "string") return this.flash(r, "error");
     if (r.active !== this.store.doc.active) this.leaveSketch();
     this.commitDoc(r, "Delete Sketch");
