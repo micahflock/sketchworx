@@ -74,12 +74,12 @@ export function chainsFor(chains: Chain[], ids: Id[]): Chain[] {
 export const DEFAULT_ART_COLOR = "#000000";
 
 /** The fields a chain can override, each falling back to the document default. */
-export const OVERRIDABLE = ["weight", "color", "corner", "end"] as const;
+export const OVERRIDABLE = ["weight", "color", "corner", "roundEnds"] as const;
 export type Overridable = (typeof OVERRIDABLE)[number];
 
 export function artDefaults(doc: Doc): ArtDefaults {
   const a = doc.art;
-  return { weight: a?.weight ?? DEFAULT_ART_WEIGHT, color: a?.color ?? DEFAULT_ART_COLOR, corner: a?.corner ?? 0, end: a?.end ?? 0 };
+  return { weight: a?.weight ?? DEFAULT_ART_WEIGHT, color: a?.color ?? DEFAULT_ART_COLOR, corner: a?.corner ?? 0, roundEnds: a?.roundEnds ?? false };
 }
 
 export function artWeight(doc: Doc): number {
@@ -108,10 +108,10 @@ export function chainStyle(doc: Doc, c: Chain): ResolvedStyle {
     weight: s?.weight ?? d.weight,
     color: s?.color ?? d.color,
     corner: s?.corner ?? d.corner,
-    end: s?.end ?? d.end,
+    roundEnds: s?.roundEnds ?? d.roundEnds,
     side: s?.side ?? "center",
     fill: c.closed && !!s?.fill,
-    custom: { weight: s?.weight !== undefined, color: s?.color !== undefined, corner: s?.corner !== undefined, end: s?.end !== undefined },
+    custom: { weight: s?.weight !== undefined, color: s?.color !== undefined, corner: s?.corner !== undefined, roundEnds: s?.roundEnds !== undefined },
   };
 }
 
@@ -120,7 +120,7 @@ export interface StylePatch {
   weight?: number | null;
   color?: string | null;
   corner?: number | null;
-  end?: number | null;
+  roundEnds?: boolean | null;
   side?: ArtSide;
   fill?: boolean;
 }
@@ -135,11 +135,13 @@ export function setChainStyle(doc: Doc, chains: Chain[], patch: StylePatch): Doc
   const styles = { ...(doc.art?.styles ?? {}) };
   for (const c of chains) {
     const next: ArtStyle = { ...(storedStyle(doc, c) ?? {}) };
-    for (const k of ["weight", "corner", "end"] as const) {
+    for (const k of ["weight", "corner"] as const) {
       const v = patch[k];
       if (v === null) delete next[k];
       else if (v !== undefined) next[k] = Math.max(0, v);
     }
+    if (patch.roundEnds === null) delete next.roundEnds;
+    else if (patch.roundEnds !== undefined) next.roundEnds = patch.roundEnds;
     if (patch.color === null) delete next.color;
     else if (isArtColor(patch.color)) next.color = patch.color.toLowerCase();
     if (patch.side === "center") delete next.side;
@@ -148,7 +150,7 @@ export function setChainStyle(doc: Doc, chains: Chain[], patch: StylePatch): Doc
       if (patch.fill && c.closed) next.fill = true;
       else delete next.fill;
     }
-    const empty = Object.values(next).every((v) => v === undefined || v === false);
+    const empty = Object.keys(next).length === 0;
     for (const id of c.ids) {
       if (empty) delete styles[id];
       else styles[id] = next;
@@ -161,7 +163,8 @@ export function setChainStyle(doc: Doc, chains: Chain[], patch: StylePatch): Doc
 export function setArtDefaults(doc: Doc, patch: Partial<ArtDefaults>): Doc {
   const cur = artDefaults(doc);
   const next: ArtDefaults = { ...cur };
-  for (const k of ["weight", "corner", "end"] as const) if (isLength(patch[k])) next[k] = patch[k] as number;
+  for (const k of ["weight", "corner"] as const) if (isLength(patch[k])) next[k] = patch[k] as number;
+  if (typeof patch.roundEnds === "boolean") next.roundEnds = patch.roundEnds;
   if (isArtColor(patch.color)) next.color = patch.color.toLowerCase();
   if (OVERRIDABLE.every((k) => next[k] === cur[k])) return doc;
   return { ...doc, art: { ...next, styles: doc.art?.styles ?? {} } };
@@ -189,7 +192,10 @@ export function readArtSettings(raw: any): ArtSettings | undefined {
     for (const [id, st] of Object.entries<any>(raw.styles)) {
       if (!st || typeof st !== "object") continue;
       const out: ArtStyle = {};
-      for (const k of ["weight", "corner", "end"] as const) if (isLength(st[k])) out[k] = st[k];
+      for (const k of ["weight", "corner"] as const) if (isLength(st[k])) out[k] = st[k];
+      // Files from before round ends was a switch stored an end radius.
+      if (typeof st.roundEnds === "boolean") out.roundEnds = st.roundEnds;
+      else if (isLength(st.end) && st.end > 0) out.roundEnds = true;
       if (isArtColor(st.color)) out.color = st.color.toLowerCase();
       if (st.side === "left" || st.side === "right") out.side = st.side;
       if (st.fill === true) out.fill = true;
@@ -198,7 +204,8 @@ export function readArtSettings(raw: any): ArtSettings | undefined {
   const out: ArtSettings = { weight: isLength(raw.weight) ? raw.weight : DEFAULT_ART_WEIGHT, styles };
   if (isArtColor(raw.color)) out.color = raw.color.toLowerCase();
   if (isLength(raw.corner)) out.corner = raw.corner;
-  if (isLength(raw.end)) out.end = raw.end;
+  if (typeof raw.roundEnds === "boolean") out.roundEnds = raw.roundEnds;
+  else if (isLength(raw.end) && raw.end > 0) out.roundEnds = true;
   return out;
 }
 
@@ -217,36 +224,61 @@ function pieces(s: Seg, tol: number): number {
   return Math.min(256, Math.max(2, Math.ceil(Math.sqrt((1.5 * Math.max(d1, d2)) / tol))));
 }
 
-/** A chain as a polyline (closed chains do not repeat the first point). */
-export function chainPolyline(segs: Seg[], closed: boolean, tol: number): Vec2[] {
-  const out: Vec2[] = [];
+/**
+ * A chain as a polyline (closed chains do not repeat the first point). `joints[i]` marks points where
+ * two pieces of the chain meet: the only places a corner radius applies.
+ */
+export function samplePolyline(segs: Seg[], closed: boolean, tol: number): { pts: Vec2[]; joints: boolean[] } {
+  const pts: Vec2[] = [];
+  const joints: boolean[] = [];
   segs.forEach((s, i) => {
-    const pts = segPoints(s, pieces(s, tol));
-    out.push(...(i === 0 ? pts : pts.slice(1)));
+    const sp = segPoints(s, pieces(s, tol));
+    // The previous piece's last point is where this one starts.
+    if (i > 0) joints[pts.length - 1] = true;
+    for (let k = i > 0 ? 1 : 0; k < sp.length; k++) {
+      pts.push(sp[k]);
+      joints.push(false);
+    }
   });
-  if (closed && out.length > 1) out.pop();
-  return out;
+  if (closed && pts.length > 1) {
+    pts.pop();
+    joints.pop();
+    joints[0] = true;
+  }
+  return { pts, joints };
+}
+
+export function chainPolyline(segs: Seg[], closed: boolean, tol: number): Vec2[] {
+  return samplePolyline(segs, closed, tol).pts;
 }
 
 const perp = (t: Vec2): Vec2 => ({ x: -t.y, y: t.x });
 
 /**
  * The polyline moved sideways by `d` (positive: to the left of its direction), with mitered
- * corners; corners sharper than the miter limit are beveled.
+ * corners; corners sharper than the miter limit are beveled. `flags` (one per input point) are
+ * carried to the output points made from each input point.
  */
-export function offsetPolyline(input: Vec2[], d: number, closed: boolean, miterLimit = MITER_LIMIT): Vec2[] {
+export function offsetPolylineFlags(input: Vec2[], d: number, closed: boolean, flags: boolean[], miterLimit = MITER_LIMIT): { pts: Vec2[]; flags: boolean[] } {
   const pts: Vec2[] = [];
-  for (const p of input) {
+  const fl: boolean[] = [];
+  input.forEach((p, i) => {
     const q = pts[pts.length - 1];
-    if (!q || Math.hypot(p.x - q.x, p.y - q.y) > 1e-12) pts.push(p);
-  }
+    if (!q || Math.hypot(p.x - q.x, p.y - q.y) > 1e-12) {
+      pts.push(p);
+      fl.push(!!flags[i]);
+    } else fl[fl.length - 1] ||= !!flags[i];
+  });
   if (closed && pts.length > 2) {
     const a = pts[0];
     const z = pts[pts.length - 1];
-    if (Math.hypot(a.x - z.x, a.y - z.y) <= 1e-12) pts.pop();
+    if (Math.hypot(a.x - z.x, a.y - z.y) <= 1e-12) {
+      pts.pop();
+      fl[0] ||= fl.pop()!;
+    }
   }
   const n = pts.length;
-  if (n < 2 || d === 0) return pts.slice();
+  if (n < 2 || d === 0) return { pts: pts.slice(), flags: fl };
   const dir = (i: number): Vec2 => {
     const a = pts[i];
     const b = pts[(i + 1) % n];
@@ -254,6 +286,7 @@ export function offsetPolyline(input: Vec2[], d: number, closed: boolean, miterL
     return { x: (b.x - a.x) / l, y: (b.y - a.y) / l };
   };
   const out: Vec2[] = [];
+  const outFl: boolean[] = [];
   for (let i = 0; i < n; i++) {
     const v = pts[i];
     const hasPrev = closed || i > 0;
@@ -261,6 +294,7 @@ export function offsetPolyline(input: Vec2[], d: number, closed: boolean, miterL
     if (!hasPrev || !hasNext) {
       const nn = perp(dir(hasNext ? i : i - 1));
       out.push({ x: v.x + nn.x * d, y: v.y + nn.y * d });
+      outFl.push(fl[i]);
       continue;
     }
     const n1 = perp(dir((i - 1 + n) % n));
@@ -270,12 +304,18 @@ export function offsetPolyline(input: Vec2[], d: number, closed: boolean, miterL
     const cos = ml / 2; // cos of half the turn between the two normals
     if (ml < 1e-9 || 1 / cos > miterLimit) {
       out.push({ x: v.x + n1.x * d, y: v.y + n1.y * d }, { x: v.x + n2.x * d, y: v.y + n2.y * d });
+      outFl.push(fl[i], fl[i]);
       continue;
     }
     const k = d / cos / ml;
     out.push({ x: v.x + m.x * k, y: v.y + m.y * k });
+    outFl.push(fl[i]);
   }
-  return out;
+  return { pts: out, flags: outFl };
+}
+
+export function offsetPolyline(input: Vec2[], d: number, closed: boolean, miterLimit = MITER_LIMIT): Vec2[] {
+  return offsetPolylineFlags(input, d, closed, [], miterLimit).pts;
 }
 
 /** Distance from `p` to a polyline. */
@@ -296,21 +336,26 @@ export function distToPolyline(p: Vec2, pts: Vec2[], closed: boolean): number {
 }
 
 /**
- * Round the corners of a closed polygon. `radius(i, convex)` gives the radius at vertex i; convex is
- * judged for a polygon whose inside is on the right of its direction. A fillet never uses more than
- * half of either neighbouring edge, so neighbouring fillets cannot overlap.
+ * Round corners of a polyline with arcs: `radius(i)` at vertex i (the ends of an open polyline are
+ * left alone). A fillet never uses more than half of either neighbouring edge, so neighbouring
+ * fillets cannot overlap.
  */
-export function roundPolygon(pts: Vec2[], radius: (i: number, convex: boolean) => number, tol: number): Vec2[] {
+export function filletPolyline(pts: Vec2[], closed: boolean, radius: (i: number) => number, tol: number): Vec2[] {
   const n = pts.length;
   if (n < 3) return pts.slice();
   const out: Vec2[] = [];
   for (let i = 0; i < n; i++) {
-    const p = pts[(i - 1 + n) % n];
     const v = pts[i];
+    if (!closed && (i === 0 || i === n - 1)) {
+      out.push(v);
+      continue;
+    }
+    const p = pts[(i - 1 + n) % n];
     const q = pts[(i + 1) % n];
     const l1 = Math.hypot(v.x - p.x, v.y - p.y);
     const l2 = Math.hypot(q.x - v.x, q.y - v.y);
-    if (l1 < 1e-12 || l2 < 1e-12) {
+    const r = radius(i);
+    if (r <= 0 || l1 < 1e-12 || l2 < 1e-12) {
       out.push(v);
       continue;
     }
@@ -318,8 +363,7 @@ export function roundPolygon(pts: Vec2[], radius: (i: number, convex: boolean) =
     const d2 = { x: (q.x - v.x) / l2, y: (q.y - v.y) / l2 };
     const cross = d1.x * d2.y - d1.y * d2.x;
     const turn = Math.acos(Math.max(-1, Math.min(1, d1.x * d2.x + d1.y * d2.y)));
-    const r = radius(i, cross < 0);
-    if (r <= 0 || turn < 1e-6 || turn > Math.PI - 1e-6) {
+    if (turn < 1e-6 || turn > Math.PI - 1e-6) {
       out.push(v);
       continue;
     }
@@ -339,21 +383,109 @@ export function roundPolygon(pts: Vec2[], radius: (i: number, convex: boolean) =
   return out;
 }
 
-/**
- * Outline of a stroke whose band spans offsets [a, b] from the chain (b on the left), with rounded
- * corners and ends. Returns the rings to fill (nonzero): one for an open chain, the outer and inner
- * edge (opposite directions) for a closed one. Inner corners get the corner radius less the weight,
- * so both edges of a turn stay concentric.
- */
-export function strokeOutline(center: Vec2[], a: number, b: number, closed: boolean, corner: number, end: number, tol: number): Vec2[][] {
-  const w = b - a;
-  const join = (convex: boolean) => (convex ? corner : Math.max(0, corner - w));
-  const left = offsetPolyline(center, b, closed);
-  const right = offsetPolyline(center, a, closed).reverse();
-  if (closed) return [left, right].map((ring) => roundPolygon(ring, (_, convex) => join(convex), tol));
-  const ring = left.concat(right);
-  const caps = new Set([0, left.length - 1, left.length, ring.length - 1]);
-  return [roundPolygon(ring, (i, convex) => (caps.has(i) ? Math.min(end, w / 2) : join(convex)), tol)];
+/** Length of a polyline. */
+function polyLength(pts: Vec2[]): number {
+  let l = 0;
+  for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return l;
+}
+
+/** How much to cut from each end so a round cap of `w/2` stays within the line (never all of it). */
+function capTrim(length: number, w: number): number {
+  return Math.min(w / 2, length * 0.4999);
+}
+
+/** An open polyline shortened by `d0` at the start and `d1` at the end. */
+export function trimPolyline(pts: Vec2[], d0: number, d1: number): Vec2[] {
+  const cut = (src: Vec2[], d: number): Vec2[] => {
+    const out = src.slice();
+    while (d > 0 && out.length > 1) {
+      const a = out[0];
+      const b = out[1];
+      const l = Math.hypot(b.x - a.x, b.y - a.y);
+      if (l <= d && out.length > 2) {
+        out.shift();
+        d -= l;
+        continue;
+      }
+      const f = Math.min(1, d / Math.max(l, 1e-12));
+      out[0] = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+      break;
+    }
+    return out;
+  };
+  return cut(cut(pts, d0).reverse(), d1).reverse();
+}
+
+const segLength = (s: Seg): number =>
+  s.kind === "line" ? Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y) : s.kind === "arc" ? Math.abs(s.sweep) * s.r : polyLength(segPoints(s, 64));
+
+const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+
+/** The part of a segment from fraction `f0` to `f1` of its length (exact for lines and arcs). */
+function subSeg(s: Seg, f0: number, f1: number): Seg {
+  if (s.kind === "line") return { ...s, start: lerp(s.start, s.end, f0), end: lerp(s.start, s.end, f1) };
+  if (s.kind === "arc") {
+    const a0 = s.a0 + s.sweep * f0;
+    const sweep = s.sweep * (f1 - f0);
+    const at = (a: number) => ({ x: s.c.x + s.r * Math.cos(a), y: s.c.y + s.r * Math.sin(a) });
+    return { ...s, a0, sweep, start: at(a0), end: at(a0 + sweep) };
+  }
+  // Cubic: parameter at a length fraction from a sampled length table, then de Casteljau.
+  const pts = segPoints(s, 64);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  const L = cum[cum.length - 1] || 1;
+  const tAt = (f: number) => {
+    const want = f * L;
+    let i = 1;
+    while (i < cum.length - 1 && cum[i] < want) i++;
+    const span = cum[i] - cum[i - 1] || 1;
+    return (i - 1 + (want - cum[i - 1]) / span) / (cum.length - 1);
+  };
+  const split = (p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, t: number) => {
+    const a = lerp(p0, p1, t), b = lerp(p1, p2, t), c = lerp(p2, p3, t);
+    const d = lerp(a, b, t), e = lerp(b, c, t), m = lerp(d, e, t);
+    return { left: [p0, a, d, m], right: [m, e, c, p3] };
+  };
+  const t0 = tAt(f0);
+  const t1 = tAt(f1);
+  let q = [s.start, s.c1, s.c2, s.end];
+  if (t0 > 0) q = split(q[0], q[1], q[2], q[3], t0).right;
+  if (t1 < 1) q = split(q[0], q[1], q[2], q[3], (t1 - t0) / Math.max(1 - t0, 1e-12)).left;
+  return { ...s, start: q[0], c1: q[1], c2: q[2], end: q[3] };
+}
+
+/** Open chain pieces shortened by `d0` at the start and `d1` at the end. */
+export function trimSegs(segs: Seg[], d0: number, d1: number): Seg[] {
+  const out = segs.slice();
+  while (d0 > 0 && out.length) {
+    const L = segLength(out[0]);
+    if (L <= d0 && out.length > 1) {
+      out.shift();
+      d0 -= L;
+      continue;
+    }
+    out[0] = subSeg(out[0], Math.min(1, d0 / Math.max(L, 1e-12)), 1);
+    break;
+  }
+  while (d1 > 0 && out.length) {
+    const k = out.length - 1;
+    const L = segLength(out[k]);
+    if (L <= d1 && out.length > 1) {
+      out.pop();
+      d1 -= L;
+      continue;
+    }
+    out[k] = subSeg(out[k], 0, 1 - Math.min(1, d1 / Math.max(L, 1e-12)));
+    break;
+  }
+  return out;
+}
+
+/** Corner radius as drawn: 0 (sharp), else at least half the weight (strokes cannot round tighter). */
+export function effectiveCorner(style: { weight: number; corner: number }): number {
+  return style.corner > 0 ? Math.max(style.corner, style.weight / 2) : 0;
 }
 
 // ------------------------------------------------------------------ scene
@@ -363,12 +495,15 @@ export interface ArtStroke {
   style: ResolvedStyle;
   /** The chain itself, as a polyline. */
   center: Vec2[];
-  /** Where the stroke runs: the chain, or for a side stroke the chain moved half the weight over. */
+  /**
+   * Where the stroke runs, as a polyline: the chain, or for a side stroke the chain moved half the
+   * weight over; with corners rounded and ends shortened for round caps.
+   */
   path: Vec2[];
-  /** True when `path` is the chain itself (exact curves can be drawn instead). */
-  centered: boolean;
-  /** With rounded corners or ends, the stroke is filled from this outline instead of stroked. */
-  outline: Vec2[][] | null;
+  /** The same as `path` in exact pieces, when it is the chain itself (centered, no corner radius). */
+  segs: Seg[] | null;
+  join: "miter" | "round";
+  cap: "butt" | "round";
 }
 
 /** A filled profile in its color, with the filled profiles directly inside it cut out as holes. */
@@ -422,14 +557,24 @@ export function buildArtScene(doc: Doc, tol: number): ArtScene {
   const bounds = emptyBox();
   for (const chain of docChains(doc)) {
     const style = chainStyle(doc, chain);
-    const center = chainPolyline(chain.segs, chain.closed, tol);
+    const { pts: center, joints } = samplePolyline(chain.segs, chain.closed, tol);
     const w = style.weight;
-    const centered = style.side === "center" || w === 0;
-    const path = centered ? center : offsetPolyline(center, style.side === "left" ? w / 2 : -w / 2, chain.closed);
-    const rounded = w > 0 && (style.corner > 0 || (!chain.closed && style.end > 0));
-    const [lo, hi] = style.side === "left" ? [0, w] : style.side === "right" ? [-w, 0] : [-w / 2, w / 2];
-    const outline = rounded ? strokeOutline(center, lo, hi, chain.closed, style.corner, style.end, tol) : null;
-    strokes.push({ chain, style, center, path, centered, outline });
+    const corner = effectiveCorner(style);
+    // The stroke's own centerline is filleted, so its outside edge turns with the corner radius.
+    const fillet = Math.max(0, corner - w / 2);
+    const roundEnds = !chain.closed && style.roundEnds && w > 0;
+    const trim = roundEnds ? capTrim(polyLength(center), w) : 0;
+    let path: Vec2[];
+    let segs: Seg[] | null = null;
+    if (style.side === "center" || w === 0) {
+      path = fillet > 0 ? filletPolyline(center, chain.closed, (i) => (joints[i] ? fillet : 0), tol) : center;
+      if (fillet === 0) segs = trim > 0 ? trimSegs(chain.segs, trim, trim) : chain.segs;
+    } else {
+      const off = offsetPolylineFlags(center, style.side === "left" ? w / 2 : -w / 2, chain.closed, joints);
+      path = fillet > 0 ? filletPolyline(off.pts, chain.closed, (i) => (off.flags[i] ? fillet : 0), tol) : off.pts;
+    }
+    if (trim > 0) path = trimPolyline(path, trim, trim);
+    strokes.push({ chain, style, center, path, segs, join: corner > 0 ? "round" : "miter", cap: roundEnds ? "round" : "butt" });
     const pad = w / 2;
     for (const p of path) {
       boxAdd(bounds, { x: p.x - pad, y: p.y - pad });

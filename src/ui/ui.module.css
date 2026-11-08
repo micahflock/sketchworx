@@ -750,3 +750,7 @@
 .ovrReset:hover {
   background: #e3ecf9;
 }
+.ends {
+  display: flex;
+  gap: 4px;
+}

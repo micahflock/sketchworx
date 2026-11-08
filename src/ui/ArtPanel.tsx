@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { artDefaults, chainStyle, docChains } from "../model/art";
+import { artDefaults, chainStyle, docChains, effectiveCorner } from "../model/art";
 import type { Chain, Overridable, ResolvedStyle } from "../model/art";
 import type { ArtSide } from "../model/types";
 import { fmt } from "../tools/line";
@@ -62,6 +62,29 @@ function Row({ label, custom, onReset, children }: { label: string; custom?: boo
   );
 }
 
+const CORNER_TIP = "Radius of the outside of each corner of the stroke. 0 is sharp; anything above 0 is at least half the weight";
+
+/** Square or round ends of open lines. */
+function Ends({ round, onPick }: { round: boolean; onPick: (round: boolean) => void }) {
+  return (
+    <span class={css.ends}>
+      <button class={`${css.tab} ${round ? "" : css.active}`} title="Square ends, flush with the line's end points" onClick={() => onPick(false)}>
+        Square
+      </button>
+      <button class={`${css.tab} ${round ? css.active : ""}`} title="Half-circle ends, within the line's length" onClick={() => onPick(true)}>
+        Round
+      </button>
+    </span>
+  );
+}
+
+/** Tells when a corner radius is drawn larger than typed (strokes cannot round tighter than half the weight). */
+function CornerNote({ corner, weight }: { corner: number; weight: number }) {
+  const shown = effectiveCorner({ corner, weight });
+  if (shown === corner) return null;
+  return <div class={css.info}>Drawn as {fmt(shown)}: a stroke cannot round tighter than half its weight.</div>;
+}
+
 /** PropertyManager in Art view: the document defaults, and the style of the selected chains. */
 export function ArtPanel() {
   const app = useApp();
@@ -82,10 +105,11 @@ export function ArtPanel() {
           <ColorInput value={d.color} onCommit={(v) => app.setArtDefaults({ color: v })} />
         </Row>
         <Row label="Corner radius">
-          <NumInput value={d.corner} title="Rounds the outside of each corner of a stroke" onCommit={(v) => app.setArtDefaults({ corner: v })} />
+          <NumInput value={d.corner} title={CORNER_TIP} onCommit={(v) => app.setArtDefaults({ corner: v })} />
         </Row>
-        <Row label="End radius">
-          <NumInput value={d.end} title="Rounds the ends of open lines; half the weight makes them fully round" onCommit={(v) => app.setArtDefaults({ end: v })} />
+        <CornerNote corner={d.corner} weight={d.weight} />
+        <Row label="Line ends">
+          <Ends round={d.roundEnds} onPick={(v) => app.setArtDefaults({ roundEnds: v })} />
         </Row>
         <div class={css.info}>
           Used by every chain that does not set its own. {chains.length - profiles} open chain{chains.length - profiles === 1 ? "" : "s"} · {profiles} profile
@@ -130,11 +154,12 @@ function ChainSection({ sel }: { sel: Chain[] }) {
         <ColorInput value={s0.color} onCommit={(v) => app.setChainStyle(sel, { color: v })} />
       </Row>
       <Row label="Corner radius" custom={custom("corner")} onReset={reset("corner")}>
-        <NumInput value={s0.corner} title="Rounds the outside of each corner of the stroke" onCommit={(v) => app.setChainStyle(sel, { corner: v })} />
+        <NumInput value={s0.corner} title={CORNER_TIP} onCommit={(v) => app.setChainStyle(sel, { corner: v })} />
       </Row>
+      <CornerNote corner={s0.corner} weight={s0.weight} />
       {anyOpen && (
-        <Row label="End radius" custom={custom("end")} onReset={reset("end")}>
-          <NumInput value={s0.end} title="Rounds the line's ends; half the weight makes them fully round" onCommit={(v) => app.setChainStyle(sel, { end: v })} />
+        <Row label="Line ends" custom={custom("roundEnds")} onReset={reset("roundEnds")}>
+          <Ends round={s0.roundEnds} onPick={(v) => app.setChainStyle(sel, { roundEnds: v })} />
         </Row>
       )}
       <div class={css.info}>Width direction</div>

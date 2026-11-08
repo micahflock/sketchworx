@@ -830,7 +830,7 @@ export class App implements ToolHost, ArtHost {
       : patch.side ? "Line Side"
       : patch.color !== undefined ? "Line Color"
       : patch.corner !== undefined ? "Corner Radius"
-      : patch.end !== undefined ? "End Radius"
+      : patch.roundEnds !== undefined ? "Line Ends"
       : "Line Weight";
     this.commitDoc(setChainStyle(this.store.doc, chains, patch), label);
   }

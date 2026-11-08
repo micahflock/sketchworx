@@ -44,17 +44,12 @@ function polyPath(pts: Vec2[], closed: boolean): Path2D {
   return p;
 }
 
-const strokePaths = new WeakMap<ArtStroke, { stroke: Path2D; center: Path2D; outline: Path2D | null }>();
+const strokePaths = new WeakMap<ArtStroke, { stroke: Path2D; center: Path2D }>();
 function pathsOf(s: ArtStroke) {
   let p = strokePaths.get(s);
   if (!p) {
     const center = segsPath(s.chain.segs, s.chain.closed);
-    let outline: Path2D | null = null;
-    if (s.outline) {
-      outline = new Path2D();
-      for (const ring of s.outline) outline.addPath(polyPath(ring, true));
-    }
-    p = { center, stroke: s.centered ? center : polyPath(s.path, s.chain.closed), outline };
+    p = { center, stroke: s.segs ? segsPath(s.segs, s.chain.closed) : polyPath(s.path, s.chain.closed) };
     strokePaths.set(s, p);
   }
   return p;
@@ -99,21 +94,11 @@ export function paintArt(ctx: CanvasRenderingContext2D, scene: ArtScene, t: ArtT
   const marked = scene.strokes.filter((s) => hl.selected?.has(s.chain.key) || hl.hover === s.chain.key);
   for (const s of marked) {
     const sel = hl.selected?.has(s.chain.key);
-    const p = pathsOf(s);
     ctx.strokeStyle = sel ? SELECT : HOVER;
-    ctx.fillStyle = sel ? SELECT : HOVER;
-    if (p.outline) {
-      // Follow the rounded shape: a band around its outline.
-      ctx.save();
-      ctx.lineJoin = "round";
-      ctx.lineWidth = 8 * t.unit;
-      ctx.stroke(p.outline);
-      ctx.fill(p.outline, "nonzero");
-      ctx.restore();
-    } else {
-      ctx.lineWidth = Math.max(0, s.style.weight) + 8 * t.unit;
-      ctx.stroke(p.stroke);
-    }
+    ctx.lineJoin = s.join;
+    ctx.lineCap = s.cap;
+    ctx.lineWidth = Math.max(0, s.style.weight) + 8 * t.unit;
+    ctx.stroke(pathsOf(s).stroke);
   }
   const sideOf = new Map(scene.strokes.map((s) => [s.chain.key, s.style]));
   for (const f of scene.fills) {
@@ -132,16 +117,14 @@ export function paintArt(ctx: CanvasRenderingContext2D, scene: ArtScene, t: ArtT
   }
   for (const s of scene.strokes) {
     if (s.style.weight <= 0) continue;
-    const p = pathsOf(s);
-    if (p.outline) {
-      ctx.fillStyle = s.style.color;
-      ctx.fill(p.outline, "nonzero");
-    } else {
-      ctx.strokeStyle = s.style.color;
-      ctx.lineWidth = s.style.weight;
-      ctx.stroke(p.stroke);
-    }
+    ctx.strokeStyle = s.style.color;
+    ctx.lineWidth = s.style.weight;
+    ctx.lineJoin = s.join;
+    ctx.lineCap = s.cap;
+    ctx.stroke(pathsOf(s).stroke);
   }
+  ctx.lineJoin = "round";
+  ctx.lineCap = "butt";
   // The chain itself and its direction on top of selected strokes.
   for (const s of marked) {
     if (!hl.selected?.has(s.chain.key)) continue;

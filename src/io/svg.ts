@@ -123,16 +123,19 @@ function artElements(doc: Doc, arcs: "arc" | "cubic"): { paths: string[]; box: B
   const size = boxValid(box0) ? Math.max(box0.maxX - box0.minX, box0.maxY - box0.minY) : 100;
   const scene = artScene(doc, size * 2e-4);
   const paths: string[] = [];
-  for (const f of scene.fills) paths.push(`  <path d="${loopsToPathData(f.loops, arcs)}" fill="${f.color}" fill-rule="nonzero"/>`);
+  const styleOf = new Map(scene.strokes.map((s) => [s.chain.key, s.style]));
+  for (const f of scene.fills) {
+    // Under an outside stroke, a hairline in the fill color closes the anti-aliasing seam at the edge.
+    const st = styleOf.get(f.chain.key);
+    const seam = st && st.side === "right" && st.weight > 0 ? ` stroke="${f.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"` : "";
+    paths.push(`  <path d="${loopsToPathData(f.loops, arcs)}" fill="${f.color}" fill-rule="nonzero"${seam}/>`);
+  }
   for (const s of scene.strokes) {
     if (s.style.weight <= 0) continue;
-    // Rounded corners or ends are written as the stroke's filled outline.
-    if (s.outline) {
-      paths.push(`  <path d="${s.outline.map((r) => polylineData(r, true)).join("")}" fill="${s.style.color}" fill-rule="nonzero"/>`);
-      continue;
-    }
-    const d = s.centered ? segsToPathData(s.chain.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
-    paths.push(`  <path d="${d}" fill="none" stroke="${s.style.color}" stroke-width="${n(s.style.weight)}" stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"/>`);
+    const d = s.segs ? segsToPathData(s.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
+    const ends = s.cap === "round" ? ' stroke-linecap="round"' : "";
+    const join = s.join === "round" ? ' stroke-linejoin="round"' : ` stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"`;
+    paths.push(`  <path d="${d}" fill="none" stroke="${s.style.color}" stroke-width="${n(s.style.weight)}"${join}${ends}/>`);
   }
   return { paths, box: scene.bounds };
 }

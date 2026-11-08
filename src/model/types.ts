@@ -166,10 +166,13 @@ export interface ArtStyle {
   weight?: number;
   /** Stroke and fill color, "#rrggbb". */
   color?: string;
-  /** Radius of the stroke's outer corners, in sketch units (0: sharp). */
+  /**
+   * Radius of the stroke's outer corners, in sketch units (0: sharp). Strokes cannot round tighter
+   * than half the weight, so smaller non-zero values draw as half the weight.
+   */
   corner?: number;
-  /** Radius of the corners at the ends of an open chain (0: square; half the weight: fully round). */
-  end?: number;
+  /** Round the ends of an open chain (a half circle within the line's length); otherwise square. */
+  roundEnds?: boolean;
   side?: ArtSide;
   /** Fill a closed profile. */
   fill?: boolean;
@@ -180,7 +183,7 @@ export interface ArtDefaults {
   weight: number;
   color: string;
   corner: number;
-  end: number;
+  roundEnds: boolean;
 }
 
 export interface ArtSettings extends Partial<Omit<ArtDefaults, "weight">> {

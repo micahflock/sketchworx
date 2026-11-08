@@ -7,16 +7,20 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 - **Color**: a document default (Defaults → Color) and a per-chain color, used for the chain's stroke and,
   for a filled profile, its fill. Nested fills keep their own colors: a filled profile inside a filled one is
   a hole in it, and one inside that hole paints again in its own color.
-- **Corner radius**: rounds the outside of every corner of a stroke (the inside of a turn gets the radius less
-  the weight, so both edges stay concentric). Smooth curves are unaffected unless they bend tighter than the
-  radius.
-- **End radius**: rounds the corners at the ends of an open chain; half the weight makes a fully round end.
-  Ends stay within the line's length (they do not stick out past the endpoint like a canvas round cap).
-- Every chain field (weight, color, corner, end) now shows "default" when it follows the document default,
-  or a ↺ button to go back to it. Defaults are stored on `doc.art` (`color`, `corner`, `end`).
-- A rounded stroke is drawn by filling its outline (`strokeOutline` / `roundPolygon` in `src/model/art.ts`);
-  SVG export writes it as a filled path. Strokes without rounding are still stroked paths.
-- Selection and hover halos are drawn behind the art and follow rounded outlines.
+- **Corner radius**: radius of the outside of each corner of the stroke. It is drawn the way an SVG stroke
+  can draw it, so Art view and export match: the stroke's own centerline is filleted by the radius less half
+  the weight, with round joins. 0 is sharp (miter); a value between 0 and half the weight draws as half the
+  weight (the panel says so). Only the joints between pieces are corners; smooth curves are not changed.
+- **Line ends**: Square or Round (was an end radius; files with an end radius above 0 open as Round). Round
+  ends are a half circle within the line's length: the path is shortened by half the weight and drawn with
+  round caps.
+- Every chain field (weight, color, corner, ends) shows "default" when it follows the document default, or a
+  ↺ button to go back to it. Defaults are stored on `doc.art` (`color`, `corner`, `roundEnds`).
+- Everything is stroked: SVG export writes each chain as a path with `stroke-width`, `stroke-linejoin` and
+  `stroke-linecap` (exact arcs and curves when the stroke is centered with no corner radius; a polyline
+  otherwise). Filled profiles under an outside stroke get a hairline in their fill color to hide the
+  anti-aliasing seam.
+- Selection and hover halos are drawn behind the art.
 
 ## Art view: strokes and per-chain styling ✅
 

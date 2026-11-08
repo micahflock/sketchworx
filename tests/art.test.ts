@@ -4,9 +4,11 @@ import { parseDoc, serializeDoc } from "../src/io/native";
 import {
   artDefaults,
   artWeight,
-  roundPolygon,
+  effectiveCorner,
+  filletPolyline,
   setArtDefaults,
-  strokeOutline,
+  trimPolyline,
+  trimSegs,
   buildArtScene,
   chainOf,
   chainStyle,
@@ -198,7 +200,7 @@ describe("art geometry", () => {
     const s = buildArtScene(d, 0.01).strokes.find((x) => x.chain.key === prof.key)!;
     // Stroke centerline is 1 unit inside: a 8×8 square.
     expect(Math.abs(polyArea(s.path))).toBeCloseTo(64, 6);
-    expect(s.centered).toBe(false);
+    expect(s.segs).toBeNull();
   });
 
   it("hits strokes near the line and filled profiles inside", () => {
@@ -244,51 +246,97 @@ describe("art color and rounding", () => {
     ]);
   });
 
-  it("rounds a square's corners", () => {
-    const r = roundPolygon(square(0, 0, 10).reverse(), () => 2, 1e-3);
+  it("rounds a square path's corners", () => {
+    const r = filletPolyline(square(0, 0, 10), true, () => 2, 1e-3);
     // A 10×10 square with 2-radius corners: 100 − (4 − π)·4.
     expect(Math.abs(polyArea(r))).toBeCloseTo(100 - (4 - Math.PI) * 4, 1);
-    // No rounding: unchanged.
-    expect(roundPolygon(square(0, 0, 10), () => 0, 1e-3)).toHaveLength(4);
+    expect(filletPolyline(square(0, 0, 10), true, () => 0, 1e-3)).toHaveLength(4);
+    // An open path keeps its end points.
+    const open = filletPolyline(square(0, 0, 10), false, () => 2, 1e-3);
+    expect(open[0]).toEqual({ x: 0, y: 0 });
+    expect(open[open.length - 1]).toEqual({ x: 0, y: 10 });
   });
 
-  it("rounds a line's ends fully at half the weight", () => {
-    const line = [
-      { x: 0, y: 0 },
-      { x: 20, y: 0 },
-    ];
-    const [ring] = strokeOutline(line, -2, 2, false, 0, 2, 1e-3);
-    // A 20×4 band with semicircular ends inside its length: 20·4 − (4 − π)·4.
-    expect(Math.abs(polyArea(ring))).toBeCloseTo(80 - (4 - Math.PI) * 4, 1);
-    const xs = ring.map((p) => p.x);
-    expect(Math.min(...xs)).toBeCloseTo(0, 9);
-    expect(Math.max(...xs)).toBeCloseTo(20, 9);
+  it("draws corner radii below half the weight as half the weight", () => {
+    expect(effectiveCorner({ weight: 4, corner: 0 })).toBe(0);
+    expect(effectiveCorner({ weight: 4, corner: 1 })).toBe(2);
+    expect(effectiveCorner({ weight: 4, corner: 5 })).toBe(5);
   });
 
-  it("keeps a turn's inside and outside concentric", () => {
-    const corner = [
-      { x: 0, y: 0 },
-      { x: 20, y: 0 },
-      { x: 20, y: 20 },
-    ];
-    // Weight 2 centered, corner radius 3: the outside edge turns with radius 3, the inside with 1.
-    const [ring] = strokeOutline(corner, -1, 1, false, 3, 0, 1e-4);
-    const near = (x: number, y: number) => ring.some((p) => Math.hypot(p.x - x, p.y - y) < 1e-3);
-    expect(near(21 - 3 + 3 * Math.SQRT1_2, -1 + 3 - 3 * Math.SQRT1_2)).toBe(true); // outside arc midpoint, center (18, 2)
-    expect(near(19 - 1 + Math.SQRT1_2, 1 + 1 - Math.SQRT1_2)).toBe(true); // inside arc midpoint, center (18, 2)
+  it("shortens lines for round ends so they stay within the line's length", () => {
+    const t = trimPolyline(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      2,
+      3,
+    );
+    expect(t).toEqual([
+      { x: 2, y: 0 },
+      { x: 7, y: 0 },
+    ]);
+    const doc = applyCommand(createDoc(), (ed) => {
+      addLine(ed, { x: 0, y: 0 }, { x: 20, y: 0 });
+    });
+    const [c] = docChains(doc);
+    const segs = trimSegs(c.segs, 2, 2);
+    expect(segs[0].start.x).toBeCloseTo(2, 9);
+    expect(segs[0].end.x).toBeCloseTo(18, 9);
   });
 
-  it("fills a rounded stroke from its outline and saves the new fields", () => {
+  it("trims arcs exactly", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      addCircle(ed, { x: 0, y: 0 }, 10);
+    });
+    const half = docChains(doc)[0].segs[0]; // a half circle, length 10π
+    const [a] = trimSegs([half], Math.PI * 10 * 0.25, 0);
+    expect(a.kind).toBe("arc");
+    if (a.kind === "arc") expect(Math.abs(a.sweep)).toBeCloseTo(Math.PI * 0.75, 9);
+  });
+
+  it("strokes a line with round ends and a rounded corner", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      const a = addLine(ed, { x: 0, y: 0 }, { x: 20, y: 0 });
+      const b = addLine(ed, { x: 20, y: 0 }, { x: 20, y: 20 });
+      ed.addRelation({ type: "coincident", refs: [a.p2, b.p1] });
+    });
+    const d = setChainStyle(setArtWeight(doc, 2), docChains(doc), { corner: 3, roundEnds: true });
+    const [s] = buildArtScene(d, 1e-4).strokes;
+    expect(s).toMatchObject({ join: "round", cap: "round", segs: null });
+    // Ends pulled in by half the weight; the stroke's own centerline turns with radius 3 − 1 = 2.
+    expect(s.path[0].x).toBeCloseTo(1, 9);
+    expect(s.path[s.path.length - 1].y).toBeCloseTo(19, 9);
+    const near = (x: number, y: number) => s.path.some((p) => Math.hypot(p.x - x, p.y - y) < 1e-3);
+    expect(near(18 + 2 * Math.SQRT1_2, 2 - 2 * Math.SQRT1_2)).toBe(true);
+    // Centered with no corner radius: exact pieces, shortened.
+    const d2 = setChainStyle(d, docChains(d), { corner: 0 });
+    const [s2] = buildArtScene(d2, 1e-4).strokes;
+    expect(s2.segs?.[0].start.x).toBeCloseTo(1, 9);
+    expect(s2.join).toBe("miter");
+  });
+
+  it("writes rounded strokes as SVG strokes and saves the new fields", () => {
     const { doc, open } = mixed();
-    const d = setChainStyle(setArtDefaults(doc, { corner: 1, color: "#123456" }), [chainOf(docChains(doc), open[0])!], { end: 0.5 });
-    const sc = buildArtScene(d, 0.01);
-    expect(sc.strokes.every((s) => s.outline)).toBe(true);
+    const d = setChainStyle(setArtDefaults(doc, { corner: 1, color: "#123456" }), [chainOf(docChains(doc), open[0])!], { roundEnds: true });
     const back = parseDoc(serializeDoc(d));
-    expect(artDefaults(back)).toMatchObject({ corner: 1, color: "#123456", end: 0 });
-    expect(chainStyle(back, chainOf(docChains(back), open[1])!).end).toBe(0.5);
+    expect(artDefaults(back)).toMatchObject({ corner: 1, color: "#123456", roundEnds: false });
+    expect(chainStyle(back, chainOf(docChains(back), open[1])!).roundEnds).toBe(true);
     const svg = exportSvg(d, { arcs: "arc", construction: false, art: true });
-    expect(svg).toContain('fill="#123456"');
-    expect(svg).not.toContain("stroke-width");
+    expect(svg.match(/stroke-width="2"/g)).toHaveLength(2);
+    expect(svg.match(/stroke-linejoin="round"/g)).toHaveLength(2);
+    expect(svg.match(/stroke-linecap="round"/g)).toHaveLength(1);
+    expect(svg).toContain('stroke="#123456"');
+  });
+
+  it("reads an older end radius as round ends", () => {
+    const { doc, open } = mixed();
+    const raw = JSON.parse(serializeDoc(doc));
+    raw.art = { weight: 2, end: 1, styles: { [open[0]]: { end: 0.5 } } };
+    const back = parseDoc(JSON.stringify(raw));
+    expect(artDefaults(back).roundEnds).toBe(true);
+    expect(chainStyle(back, chainOf(docChains(back), open[0])!).custom.roundEnds).toBe(true);
   });
 });
 
