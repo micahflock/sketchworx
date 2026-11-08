@@ -123,8 +123,11 @@ Note: `spike/*.mjs` import the npm package that the spike used. To rerun them: `
   for presentation; splines above degree 3 become cubics) and PNG of the Art view at a chosen size.
 - PWA: manifest, icons, and a service worker generated at build time that precaches every built file
   (including the solver WASM), then serves cache-first.
-- Touch: one finger pans, two fingers pinch-zoom/pan, two-finger tap undoes, long-press opens the context
-  toolbar (on geometry) or the shortcut bar. Pencil behaves like the mouse. On-screen Esc / Ctrl / Undo /
+- Touch: one finger draws with the active tool until an Apple Pencil is used; after that one finger pans and
+  the Pencil draws (a "Finger: Draw / Pan" on-screen toggle overrides it, remembered per device). Two fingers
+  always pan/pinch-zoom, a quick two-finger tap undoes, a double tap acts as a double-click (ends a line chain),
+  long-press opens the context toolbar (on geometry) or the shortcut bar. Pencil behaves like the mouse. On phones
+  the PropertyManager starts collapsed and slides over the canvas when opened. On-screen Esc / Ctrl / Undo /
   Redo / Delete appear on touch devices until a keyboard is used. Touch hit radius 22 px, toolbar buttons
   ≥ 46 px.
 - Fixes found while testing: Preact 11 no longer appends `px` to numeric inline styles, which had hidden the

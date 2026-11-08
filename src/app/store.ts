@@ -34,6 +34,8 @@ export interface UiState {
   showGrid: boolean;
   /** Show on-screen modifier keys (touch device without keyboard). */
   touchUi: boolean;
+  /** One finger drives the active tool (true) or pans (false; Pencil draws). */
+  fingerDraws: boolean;
   /** Centerline used by Dynamic Mirror, when active. */
   dynamicMirror: Id | null;
   /** Curvature combs on splines and arcs. */
@@ -41,6 +43,14 @@ export interface UiState {
 }
 
 type Listener = () => void;
+
+function initialFingerDraws(): boolean {
+  try {
+    return localStorage.getItem("sketchworx.fingerDraws") !== "0";
+  } catch {
+    return true;
+  }
+}
 
 /** Minimal observable store. UI panels subscribe; the canvas renders on demand. */
 export class Store {
@@ -72,6 +82,7 @@ export class Store {
       gridSnap: false,
       showGrid: true,
       touchUi: false,
+      fingerDraws: initialFingerDraws(),
       dynamicMirror: null,
       combs: false,
     };

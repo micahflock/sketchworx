@@ -59,6 +59,15 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+/** True when the user picked finger draw/pan explicitly on this device. */
+function fingerChoiceStored(): boolean {
+  try {
+    return localStorage.getItem("sketchworx.fingerDraws") !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Commands whose new entities Dynamic Mirror copies. */
 const DRAW_COMMANDS = new Set(["Line", "Centerline", "Arc", "Tangent Arc", "Circle", "Point", "Style Spline", "Rectangle"]);
 
@@ -86,6 +95,12 @@ export class App implements ToolHost {
   private touches = new Map<number, { start: Vec2; last: Vec2; t0: number }>();
   private pinch: { dist: number; mid: Vec2; moved: number; t0: number } | null = null;
   private longPress: number | undefined;
+  private longPressFired = false;
+  private pendingTouch: { id: number; pe: PEvent } | null = null;
+  private pendingTimer: number | undefined;
+  private drawingTouch: number | null = null;
+  private afterPinch = false;
+  private lastTap: { t: number; at: Vec2 } | null = null;
   /** Status bar cursor readout hook. */
   onCursor: ((p: Vec2) => void) | null = null;
 
@@ -677,6 +692,11 @@ export class App implements ToolHost {
       this.lastPointer = pe;
       if (pe.pointerType !== "mouse" && !this.store.state.touchUi) this.store.set({ touchUi: true });
       if (this.store.state.viewMode === "split" && pe.screen.x > this.view.width) return;
+      if (pe.pointerType === "pen" && this.store.state.fingerDraws && !fingerChoiceStored()) {
+        // An Apple Pencil is in use: let the finger pan from now on, as in most iPad drawing apps.
+        this.setFingerDraws(false, false);
+        this.flash("Apple Pencil detected: Pencil draws, one finger pans (toggle with the Finger button)");
+      }
       if (pe.pointerType === "touch") return this.touchDown(e, pe);
       if (e.button === 1 || (e.button === 0 && e.altKey && pe.pointerType === "mouse")) {
         this.panning = { last: pe.screen };
@@ -732,36 +752,70 @@ export class App implements ToolHost {
     window.addEventListener("blur", () => this.store.set({ ctrl: false }));
   }
 
-  // ---- touch: one finger pans, two fingers pinch-zoom, two-finger tap undoes, long-press opens the menu
+  // ---- touch
+  // Finger-draw mode (default until an Apple Pencil is seen): one finger drives the active tool.
+  // Pan mode (after a Pencil is used, or toggled): one finger pans and the Pencil draws.
+  // Always: two fingers pan + pinch-zoom, a quick two-finger tap undoes, long-press opens the menu.
   private touchDown(e: PointerEvent, pe: PEvent) {
     this.touches.set(e.pointerId, { start: pe.screen, last: pe.screen, t0: performance.now() });
     clearTimeout(this.longPress);
+    clearTimeout(this.pendingTimer);
     if (this.touches.size === 1) {
-      this.longPress = window.setTimeout(() => {
-        const t = this.touches.get(e.pointerId);
-        if (!t || this.touches.size !== 1 || Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) > 10) return;
-        const w = this.view.toWorld(t.last);
-        const h = this.hit(w, "touch");
-        if (h) {
-          if (!this.store.state.selection.includes(h.id)) this.select([...this.store.state.selection, h.id]);
-          this.showContextBar(t.last);
-        } else this.store.set({ showShortcutBar: t.last });
-      }, 500);
+      this.afterPinch = false;
+      this.longPressFired = false;
+      const draws = this.store.state.fingerDraws;
+      if (draws) {
+        // Hold the touch back briefly: a second finger turns it into a pinch instead.
+        this.pendingTouch = { id: e.pointerId, pe };
+        this.pendingTimer = window.setTimeout(() => this.flushPendingTouch(), 150);
+      }
+      if (!draws || this.tool.id === "select") {
+        this.longPress = window.setTimeout(() => {
+          const t = this.touches.get(e.pointerId);
+          if (!t || this.touches.size !== 1 || Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) > 10) return;
+          this.longPressFired = true;
+          if (this.drawingTouch !== null) {
+            this.tool.cancel();
+            this.drawingTouch = null;
+          }
+          this.pendingTouch = null;
+          const h = this.hit(this.view.toWorld(t.last), "touch");
+          if (h) {
+            if (!this.store.state.selection.includes(h.id)) this.select([...this.store.state.selection, h.id]);
+            this.showContextBar(t.last);
+          } else this.store.set({ showShortcutBar: t.last });
+        }, 500);
+      }
     } else if (this.touches.size === 2) {
+      // Second finger: abandon any single-finger action and start pinch/pan.
+      this.pendingTouch = null;
+      if (this.drawingTouch !== null) {
+        this.tool.cancel();
+        this.drawingTouch = null;
+      }
       const [a, b] = [...this.touches.values()];
       this.pinch = { dist: Math.hypot(a.last.x - b.last.x, a.last.y - b.last.y), mid: { x: (a.last.x + b.last.x) / 2, y: (a.last.y + b.last.y) / 2 }, moved: 0, t0: performance.now() };
+      this.afterPinch = true;
     }
   }
+
+  /** Send a held-back finger touch to the active tool. */
+  private flushPendingTouch() {
+    const p = this.pendingTouch;
+    if (!p || this.touches.size !== 1) return;
+    this.pendingTouch = null;
+    this.drawingTouch = p.id;
+    this.store.set({ showShortcutBar: null });
+    this.tool.onDown(p.pe);
+  }
+
   private touchMove(e: PointerEvent, pe: PEvent) {
     const t = this.touches.get(e.pointerId);
     if (!t) return;
     const dx = pe.screen.x - t.last.x;
     const dy = pe.screen.y - t.last.y;
     t.last = pe.screen;
-    if (this.touches.size === 1) {
-      this.view.panBy(dx, dy);
-      this.requestRender();
-    } else if (this.touches.size === 2 && this.pinch) {
+    if (this.touches.size === 2 && this.pinch) {
       const [a, b] = [...this.touches.values()];
       const d = Math.hypot(a.last.x - b.last.x, a.last.y - b.last.y);
       const mid = { x: (a.last.x + b.last.x) / 2, y: (a.last.y + b.last.y) / 2 };
@@ -771,16 +825,71 @@ export class App implements ToolHost {
       this.pinch.dist = d;
       this.pinch.mid = mid;
       this.requestRender();
+      return;
+    }
+    if (this.touches.size !== 1 || this.afterPinch || this.longPressFired) return;
+    if (!this.store.state.fingerDraws) {
+      this.view.panBy(dx, dy);
+      this.requestRender();
+      return;
+    }
+    if (this.pendingTouch?.id === e.pointerId && Math.hypot(pe.screen.x - t.start.x, pe.screen.y - t.start.y) > 8) {
+      clearTimeout(this.pendingTimer);
+      this.flushPendingTouch();
+    }
+    if (this.drawingTouch === e.pointerId) {
+      this.onCursor?.(pe.world);
+      this.tool.onMove(pe);
     }
   }
-  private touchUp(e: PointerEvent, _pe: PEvent) {
+
+  private touchUp(e: PointerEvent, pe: PEvent) {
     clearTimeout(this.longPress);
+    clearTimeout(this.pendingTimer);
     this.touches.delete(e.pointerId);
     if (this.pinch && this.touches.size < 2) {
       const tap = performance.now() - this.pinch.t0 < 300 && this.pinch.moved < 12;
       this.pinch = null;
       if (tap) this.undo();
     }
+    if (this.touches.size === 0) this.afterPinch = false;
+    if (this.longPressFired) return;
+    // A quick tap: deliver down + up together.
+    if (this.pendingTouch?.id === e.pointerId) {
+      const down = this.pendingTouch.pe;
+      this.pendingTouch = null;
+      this.store.set({ showShortcutBar: null });
+      this.tool.onDown(down);
+      this.tool.onUp(pe);
+      this.checkDoubleTap(pe);
+      return;
+    }
+    if (this.drawingTouch === e.pointerId) {
+      this.drawingTouch = null;
+      this.tool.onUp(pe);
+      this.checkDoubleTap(pe);
+    }
+  }
+
+  /** Two taps close together in time and space act as a double-click (e.g. ends a line chain). */
+  private checkDoubleTap(pe: PEvent) {
+    const now = performance.now();
+    const last = this.lastTap;
+    if (last && now - last.t < 350 && Math.hypot(pe.screen.x - last.at.x, pe.screen.y - last.at.y) < 24) {
+      this.lastTap = null;
+      this.tool.onDoubleClick?.(pe);
+    } else this.lastTap = { t: now, at: pe.screen };
+  }
+
+  /** Switch what a single finger does; remembered on this device. */
+  setFingerDraws(on: boolean, explicit = true) {
+    this.store.set({ fingerDraws: on });
+    if (explicit)
+      try {
+        localStorage.setItem("sketchworx.fingerDraws", on ? "1" : "0");
+      } catch {
+        /* storage unavailable */
+      }
   }
 
   onKeyDown(e: KeyboardEvent) {

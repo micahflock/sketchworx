@@ -610,6 +610,32 @@
   gap: 6px;
   z-index: 10;
 }
+@media (max-width: 600px) {
+  .touchKeys {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .touchKeys button {
+    min-width: 44px !important;
+    padding: 0 8px;
+  }
+  /* The PropertyManager slides over the canvas instead of taking its width. */
+  .main {
+    position: relative;
+  }
+  .pmWrap:not(.pmClosed) {
+    position: absolute;
+    z-index: 15;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(300px, 85vw);
+    box-shadow: 4px 0 18px rgba(20, 30, 50, 0.2);
+  }
+}
 .touchKeys button {
   min-width: 56px;
   min-height: 44px;
