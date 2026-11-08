@@ -59,6 +59,15 @@ export function StatusBar() {
         </span>
       )}
       <span class={css.fname}>{ui.fileName ?? "untitled"}</span>
+      {ui.penSeen && (
+        <button
+          class={`${css.penFlag} ${ui.pencilOnly ? "" : css.penFlagOff}`}
+          title={ui.pencilOnly ? "Pencil detected: only the pencil draws, fingers pan and zoom. Tap to let fingers draw too" : "Pencil detected: fingers draw too. Tap so only the pencil draws"}
+          onClick={() => app.togglePencilOnly()}
+        >
+          ✎ Pencil{ui.pencilOnly ? "" : " + fingers"}
+        </button>
+      )}
       <span class={css.version} title={`Sketchworx ${__APP_VERSION__}, built ${__APP_BUILT__} from commit ${__APP_COMMIT__}`}>
         <span class={css.versionNum}>v{__APP_VERSION__} · </span>
         {__APP_COMMIT__}

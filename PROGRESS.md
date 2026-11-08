@@ -2,6 +2,26 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Apple Pencil, drag-to-draw on touch, HELL MODE colors ✅
+
+- **Pencil and palm rejection:** pen input (Apple Pencil reports `pointerType: "pen"`) was handled like a
+  mouse, but a resting palm was still read as touch: one contact drove the tool, two panned. Now the first
+  pen press turns on "pencil only": a single finger does nothing on the canvas, two fingers still pan,
+  pinch-zoom and tap-undo. While the pen is down, within 0.5 s of it lifting or hovering, or for a broad
+  contact patch, touches are ignored as the palm until they lift. A pen press also drops any palm touch that
+  had already started a pinch. The status bar shows **✎ Pencil** next to the version once a pen is seen;
+  tapping it lets fingers draw and select too ("✎ Pencil + fingers").
+- **Touch/pen drawing is drag only:** in the Line tool each press-drag-lift draws one segment. A drag that
+  starts within 34 px (22 px for the pen) of the chain's last end point continues the chain (coincident
+  joint, tangent/perpendicular inference from the previous segment); a drag anywhere else starts a new line.
+  A tap draws nothing and ends the chain. Between strokes the end point shows its enlarged target ring and
+  there is no rubber band. Circles, rectangles and arcs also ignore a tap as a first point (drag places the
+  first two points; three-point shapes take the third by tap). The mouse keeps click-click chains.
+- **HELL MODE colors:** a swatch button beside the theme toggle (only in HELL MODE) opens eight accents: red,
+  green, pink, orange, yellow, blue, purple, white. The canvas palette is built from the accent
+  (`hellPalette` in `src/render/theme.ts`); the interface reads `--hell*` variables that the app sets on
+  `<html>`. The choice is saved in `sketchworx.hellAccent`.
+
 ## Reskin: Test bench, Sequencer and HELL MODE ✅
 
 Interface and canvas restyled; layout, behavior and the solver are unchanged.
