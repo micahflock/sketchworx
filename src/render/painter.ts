@@ -159,10 +159,11 @@ export class Painter {
   }
 
   /** Square glyph tag at a screen position (theme font and corner radius); returns its rect. */
-  badge(text: string, x: number, y: number, bg: string, fg: string, border?: string) {
+  /** A small tag centered at (x, y) with glyph text, or a line icon (SVG path data in a 10×10 box). */
+  badge(text: string, x: number, y: number, bg: string, fg: string, border?: string, icon?: string) {
     const c = this.ctx;
     c.font = theme.glyphFont;
-    const w = Math.max(14, c.measureText(text).width + 6);
+    const w = icon ? 14 : Math.max(14, c.measureText(text).width + 6);
     const h = 14;
     c.beginPath();
     c.roundRect(x - w / 2, y - h / 2, w, h, theme.glyphRadius);
@@ -174,10 +175,22 @@ export class Painter {
       c.setLineDash([]);
       c.stroke();
     }
-    c.fillStyle = fg;
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillText(text, x, y + 0.5);
+    if (icon) {
+      c.save();
+      c.translate(x - 5, y - 5);
+      c.strokeStyle = fg;
+      c.lineWidth = 1.1;
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      c.setLineDash([]);
+      c.stroke(new Path2D(icon));
+      c.restore();
+    } else {
+      c.fillStyle = fg;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText(text, x, y + 0.5);
+    }
     return { x: x - w / 2, y: y - h / 2, w, h };
   }
 }

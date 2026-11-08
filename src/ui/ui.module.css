@@ -772,7 +772,7 @@
 }
 .glyphBad {
   background: var(--sw-glyph-bad-bg);
-  color: var(--sw-error);
+  color: var(--sw-glyph-bad-fg);
   border-color: var(--sw-glyph-bad-border);
 }
 .small {

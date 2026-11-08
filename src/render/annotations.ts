@@ -1,7 +1,7 @@
 import { bezierDeriv, bezierPoint } from "../geom/bezier";
 import type { Vec2 } from "../geom/vec";
 import { norm } from "../geom/vec";
-import { relationGlyphs, relationHasGlyph } from "../model/relations";
+import { relationGlyphs, relationHasGlyph, relationIcons } from "../model/relations";
 import { arcGeom, ptv, splinePts } from "../model/sketch";
 import type { Entity, Id, Sketch } from "../model/types";
 import type { Painter } from "./painter";
@@ -81,7 +81,7 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
       const y = at.y + dir.y * k * 18;
       const bg = bad ? theme.relGlyphConflict : hot ? theme.relGlyphHotBg : theme.relGlyphBg;
       const fg = bad ? theme.relGlyphConflictFg : hot ? theme.relGlyphHotFg : theme.relGlyphFg;
-      const rect = p.badge(relationGlyphs[r.type], x, y, bg, fg, bad ? theme.relGlyphConflictBorder : hot ? theme.hover : theme.relGlyphBorder);
+      const rect = p.badge(relationGlyphs[r.type], x, y, bg, fg, bad ? theme.relGlyphConflictBorder : hot ? theme.hover : theme.relGlyphBorder, relationIcons[r.type]);
       if (bad && theme.conflictCross) p.crossScreen(rect.x + rect.w + 7, rect.y - 3, 9, theme.relGlyphConflictBorder);
       hits.push({ id: r.id, kind: "relation", ...rect });
     }
