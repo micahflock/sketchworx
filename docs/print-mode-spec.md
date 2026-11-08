@@ -200,14 +200,52 @@ needs no rule of its own.
 A view mode next to Sketch / Art / Split (`ViewMode = "print"`), and the right-hand pane of Split can show it.
 
 - **Drawn**: the flattened regions in filament colors (what will be exported).
-- **As printed** (toggle, default on): each region opened by `w/2`, so the corners round as they will on the
-  print.
-- **Beads** (toggle, later phase): the outer perimeter path(s) drawn as `w`-wide lines, like PrusaSlicer's
-  preview of one layer. **[Q7]**
+- **As printed** (default): the multicolor **first layer**, built color by color in print order the way the
+  printer lays it down (below).
+- **Beads** (toggle, later phase): the perimeter paths drawn as first-layer-width lines in their colors,
+  like PrusaSlicer's preview of the first layer.
 - **Real size** button (1:1 on screen where the browser reports the display's DPI) and a **nozzle cursor**: a
   circle of diameter `w` that follows the pointer, to judge small details by eye.
 - Picking in Print view selects the chain that made the region, so its style can be edited in place
   (like Art view).
+
+### As printed: stacking the first layer
+
+The preview shows the first layer as it comes off the bed, with each color laid down against the ones
+printed before it. Colors go down in **print order**: the slot order (for manual swap this is exactly the
+order of the bodies; for the MMU3 it is the order PrusaSlicer uses when it starts the layer with extruder 1,
+which is close enough for a preview).
+
+For each color, in order:
+
+1. **Shape the nozzle can make**: the color's region opened by `w₁/2`, where `w₁` is the first-layer line
+   width. Outside corners round; inside corners stay sharp.
+2. **Squish**: the first layer is pressed flat, so the beads spread by `s` past their path. The color grows by
+   `s` into space that is still empty, but not into plastic already on the bed and not outside the part.
+   So a color printed earlier pushes slightly into its later neighbours, and fills part of the small
+   gaps the rounding leaves at corners.
+3. What it covers is painted in its color and counts as taken for the colors after it.
+
+What is left uncovered inside the part is **bare bed**: the pinholes where a rounded corner of one color
+meets the sharp inside corner of another. They are drawn in the sheet color (setting; default the dark gold
+of the satin sheet) so they are easy to spot, and a **Pinholes** count and largest size appear under the
+preview. They are information, not rule breaks: every outside corner makes some.
+
+A **Bed side** toggle mirrors the preview, to show the face as seen from below (the side that was on the
+sheet). **[Q10]**
+
+Changing the print order (dragging slots) updates the preview straight away, so the order can be chosen by
+how the edges come out.
+
+New printer profile fields for this:
+
+| Field | Default | Used for |
+| --- | --- | --- |
+| First-layer line width `w₁` | 0.5 mm (PrusaSlicer's MK4S default for the 0.4 nozzle; check against your profile) | Corner rounding in the preview |
+| Squish `s` | 0.05 mm per side (an estimate; 0 turns it off) | Spread of each color in the preview |
+| Sheet color | `#8a6d3b` (satin) | Bare bed in the preview |
+
+The rules (section 8) still use `w`, not `w₁`: they are about every layer, the preview is about the face.
 
 ## 10. Export
 
@@ -238,7 +276,8 @@ the origin. Export is unavailable while the Issues list has breaks.
 
 ```ts
 interface PrintSettings {
-  printer: { preset: string; nozzle: number; lineWidth: number; minFeatureLines: number; minGapLines: number; layerHeight: number };
+  printer: { preset: string; nozzle: number; lineWidth: number; minFeatureLines: number; minGapLines: number; layerHeight: number;
+             firstLayerWidth: number; squish: number; sheetColor: string };
   filaments: { slot: 1 | 2 | 3 | 4 | 5; name: string; color: string }[];
   base: number;          // slot of the background
   outline?: Id;          // chain key of the part outline (unset: outermost filled profile)
@@ -265,7 +304,7 @@ re-solves because the `w` variable changes).
 2. Filament palette (MMU3 / manual swap, print order), slot per chain, base and part outline.
 3. Region flattening (Clipper2) + Print view "Drawn".
 4. Rules, pulling typed values back to the limit, drag stops, refusals, notices, Issues list.
-5. "As printed" preview.
+5. "As printed" first-layer preview: stacking in print order, squish, pinholes, bed side.
 6. Per-filament DXF (Fusion 360 ready) and SVG export (zip / folder) with arc refit and shared edges.
 7. Beads view, real size, nozzle cursor.
 
@@ -281,6 +320,9 @@ re-solves because the `w` variable changes).
   notice; dragging one stroke toward the other stops at 0.90 mm.
 - Drawing a line that would leave a 0.4 mm strip is refused with a toast naming the rule, 0.40 mm and
   0.90 mm, and the strip is marked in red.
+- As printed, a 5 mm black square on a white base, squish 0: each of the square's corners leaves a pinhole
+  of area `(1 − π/4)(w₁/2)²` (±1%). With squish on, printing white first shifts the white/black edge `s`
+  into the black and shrinks the pinholes; swapping the order shifts it the other way.
 - Manual swap with 6 colors: the palette accepts them, shows 5 swaps, and the README lists the print order.
 - Switching the preset to the 0.25 mm nozzle re-solves dimensions written as `=4*w`. Switching to 0.8 mm
   lists the new breaks, blocks export, and still allows edits that fix them.
@@ -295,7 +337,7 @@ re-solves because the `w` variable changes).
 | --- | --- | --- |
 | Q3 | How should overlaps resolve: drawing order (later on top), or an explicit order per chain? | Drawing order, with Bring to Front / Send to Back |
 | Q6 | mm everywhere in Print mode OK? Inches needed? | mm only |
-| Q7 | Is a bead/toolpath preview useful, or is the "as printed" outline enough? | Outline in v1, beads later |
+| Q10 | Should the preview show the face from the top (as PrusaSlicer does) or from the bed side (mirrored, the face that was on the sheet) by default? | Top, with a Bed side toggle |
 
 ## Decisions
 
@@ -308,3 +350,4 @@ re-solves because the `w` variable changes).
 | Q9 Printer and slicer | Prusa MK4S + PrusaSlicer; presets for the 0.25 / 0.4 / 0.6 / 0.8 mm nozzles | Your printer |
 | Q1 Color setup | MMU3 (5 slots) or manual swap (bodies printed in order with pauses, up to 8 slots, slot order = print order). Color only in XY; heights in CAD; no 3MF in v1 | Mid-layer changes work without the MMU by pausing between bodies |
 | CAD | Fusion 360 (Insert DXF, mm units in the header) | Your main CAD |
+| Q7 Preview | "As printed" stacks the colors in print order as a first layer: nozzle rounding at `w₁`, squish into empty space only, uncovered spots shown as pinholes. Bead view later | Your call: stack colors as on a multicolor first layer |
