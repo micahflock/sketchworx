@@ -12,7 +12,7 @@ export function loadThemePref(): ThemePref {
   } catch {
     /* storage unavailable */
   }
-  return "light";
+  return "system";
 }
 
 export function saveThemePref(pref: ThemePref) {

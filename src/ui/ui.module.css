@@ -258,7 +258,7 @@
   color: var(--sw-text-3);
 }
 /* Medium windows: a shorter box, so every tool still fits beside it. */
-@media (min-width: 1300px) and (max-width: 1399px) {
+@media (min-width: 1180px) and (max-width: 1279px) {
   .cmdBox {
     width: 140px;
   }
@@ -270,7 +270,7 @@
   }
 }
 /* Narrow windows and phones: the box shrinks to its search icon and opens over the whole toolbar. */
-@media (max-width: 1299px) {
+@media (max-width: 1179px) {
   .cmdBox {
     width: 32px;
   }

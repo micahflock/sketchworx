@@ -18,6 +18,8 @@ export class DimensionTool implements Tool {
   readonly cursor = "crosshair";
   private refs: Id[] = [];
   private cursorPos: Vec2 | null = null;
+  /** What the next click would pick, if anything (then the click picks rather than places). */
+  private pickable: Id | null = null;
 
   constructor(private host: ToolHost & { placeDimension(d: Omit<Dimension, "id">): void }) {}
 
@@ -27,6 +29,8 @@ export class DimensionTool implements Tool {
   }
   deactivate() {
     this.refs = [];
+    this.pickable = null;
+    this.host.setHover(null);
     this.host.select([]);
   }
   private prompt() {
@@ -97,10 +101,10 @@ export class DimensionTool implements Tool {
 
   onMove(e: PEvent) {
     this.cursorPos = e.world;
-    if (!this.refs.length) {
-      const h = this.host.hit(e.world, e.pointerType);
-      this.host.setHover(h?.id ?? null);
-    }
+    // Keep highlighting what the next click would pick, also after the first pick.
+    const h = this.refs.length < 3 ? this.host.hit(e.world, e.pointerType) : null;
+    this.pickable = h && !this.refs.includes(h.id) ? h.id : null;
+    this.host.setHover(this.pickable);
     this.host.requestRender();
   }
   onUp() {}
@@ -115,6 +119,8 @@ export class DimensionTool implements Tool {
   }
 
   draw(p: Painter) {
+    // Over something pickable the click adds it, so the placement preview would mislead (and hide the highlight).
+    if (this.pickable) return;
     const pr = this.proposal();
     if (!pr || !this.cursorPos) return;
     const d = { id: "#preview", ...this.draft(pr, this.cursorPos) };

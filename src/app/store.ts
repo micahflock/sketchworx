@@ -84,7 +84,7 @@ export class Store {
       combs: false,
       artSelection: [],
       artHover: null,
-      themePref: "light",
+      themePref: "system",
       theme: "light",
     };
   }

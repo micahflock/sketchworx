@@ -11,14 +11,15 @@ but no longer copies the CommandManager's look.
   button's tooltip gives its name and key (taken from the user's keymap, so rebinding shows up). Flyouts are
   unchanged and now list keys too. Touch devices get 42 px buttons.
 - **Command search** (right end of the toolbar): type to find any toolbar command plus New Sketch, Delete
-  Selection, Shortcut Bar and the three theme choices. Ctrl/⌘+K or `/` focuses it; ↑ ↓ Enter run; Esc closes.
+  Selection, Shortcut Bar, the three theme choices, and the less used commands that are no longer on the
+  toolbar: Sketch Picture, Curvature Combs, Grid Snap and Keyboard Shortcuts (toggles that are on say so). Ctrl/⌘+K or `/` focuses it; ↑ ↓ Enter run; Esc closes.
   Matches name starts, word starts ("sm di"), initials ("sd") and extra words ("measure" finds Smart
   Dimension, "round" finds Sketch Fillet). Matching lives in `src/ui/commandSearch.ts`. The box is 230 px wide
-  from 1400 px windows, 140 px from 1300 px, and below that an icon that opens over the whole toolbar, so every
-  tool fits from 1200 px up.
+  from 1280 px windows, 140 px from 1180 px, and below that an icon that opens over the whole toolbar, so every
+  tool fits from 1060 px up.
 - **Left column**: unchanged (feature tree above the PropertyManager).
-- **Themes**: light (default), dark, or match system; the moon/sun button at the right of the toolbar flips
-  light and dark, and the command box has all three. The choice is kept per browser (`sketchworx.theme`).
+- **Themes**: match system (default), light or dark; it follows the OS live. The moon/sun button at the right
+  of the toolbar picks light or dark explicitly, and the command box has all three. The choice is kept per browser (`sketchworx.theme`).
   - Interface colors are CSS variables in `src/ui/global.css` (`--sw-*`), light on `:root` and dark on
     `:root[data-theme="dark"]`. No color literals are left in `ui.module.css` or the components.
   - Canvas colors are `lightTheme` / `darkTheme` in `src/render/theme.ts`; `setCanvasTheme` swaps the shared
@@ -28,7 +29,10 @@ but no longer copies the CommandManager's look.
   - In dark, fully defined geometry and dimensions turn near-white and the blues and reds are lifted. Art view
     keeps its white paper in both themes because it previews the exported artwork.
 
-Tests: `tests/ui.test.ts` (search ranking, initials, keywords, empty and no-match queries; theme resolution and
+- **Smart Dimension**: after the first pick, the item under the cursor is still highlighted (not ones already
+  picked). While over something pickable the placement preview is hidden, since the click will pick it.
+
+Tests: `tests/ui.test.ts` (Smart Dimension hover after the first pick, search ranking, initials, keywords, empty and no-match queries; theme resolution and
 palette swap). Checked in the browser at 1180–1920 px and on a phone, light and dark, with the keyboard flows.
 
 ## Art view: strokes and per-chain styling ✅

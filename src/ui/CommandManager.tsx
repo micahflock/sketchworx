@@ -61,9 +61,6 @@ export const groups: Group[] = [
       a("sketchView", "Sketch View", "sketchView", "view:sketch"),
       a("artView", "Art View", "artView", "view:art"),
       a("splitView", "Split View", "splitView", "view:split"),
-      a("picture", "Sketch Picture", "picture", "picture"),
-      a("combs", "Curvature Combs", "combs", "combs"),
-      a("grid", "Grid Snap", "grid", "toggleGridSnap"),
     ],
   },
   {
@@ -72,7 +69,6 @@ export const groups: Group[] = [
       a("open", "Open", "open", "open"),
       a("save", "Save", "save", "save"),
       a("export", "Export SVG", "export", "exportSvg"),
-      a("keys", "Keyboard", "keys", "keyboardPanel"),
       a("undo", "Undo", "undo", "undo"),
       a("redo", "Redo", "redo", "redo"),
     ],
@@ -122,8 +118,12 @@ const keywords: Record<string, string[]> = {
   shortcutBar: ["menu", "tools"],
 };
 
-/** Commands that only live in the command box. */
+/** Commands that only live in the command box (less used, so kept off the toolbar). */
 const extraCommands: Command[] = [
+  { id: "picture", label: "Sketch Picture", action: "picture", icon: "picture", group: "View" },
+  { id: "combs", label: "Curvature Combs", action: "combs", icon: "combs", group: "View" },
+  { id: "grid", label: "Grid Snap", action: "toggleGridSnap", icon: "grid", group: "View" },
+  { id: "keys", label: "Keyboard Shortcuts", action: "keyboardPanel", icon: "keys", group: "Help" },
   { id: "newSketch", label: "New Sketch", action: "newSketch", icon: "newSketch", group: "Sketches" },
   { id: "delete", label: "Delete Selection", action: "delete", icon: "trim", group: "Edit" },
   { id: "shortcutBar", label: "Shortcut Bar", action: "shortcutBar", icon: "keys", group: "Edit" },
@@ -306,7 +306,13 @@ function CommandBox() {
     close();
     app.runAction(c.action);
   };
-  const current = (c: Command) => c.action === `theme:${ui.themePref}`;
+  /** Shown after a name: the theme in use, or a toggle that is on. */
+  const note = (c: Command) =>
+    c.action === `theme:${ui.themePref}`
+      ? "current"
+      : (c.action === "combs" && ui.combs) || (c.action === "toggleGridSnap" && ui.gridSnap) || (c.action === "keyboardPanel" && ui.panel === "keyboard")
+        ? "on"
+        : null;
 
   return (
     <div class={`${css.cmdBox} ${open ? css.cmdBoxOpen : ""}`}>
@@ -363,7 +369,7 @@ function CommandBox() {
                 <Icon name={c.icon} />
                 <span class={css.cmdLabel}>
                   {c.label}
-                  {current(c) && <span class={css.cmdCurrent}> · current</span>}
+                  {note(c) && <span class={css.cmdCurrent}> · {note(c)}</span>}
                 </span>
                 <span class={css.cmdGroup}>{c.group}</span>
                 {key && <kbd class={css.kbd}>{key}</kbd>}
