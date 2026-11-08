@@ -527,10 +527,24 @@ export interface ArtFill {
   loops: Loop[];
 }
 
-export interface ArtScene {
-  strokes: ArtStroke[];
+/** One sketch's drawing: its fills, then its strokes over them. */
+export interface ArtLayer {
+  feature: Id;
   /** Outermost first, so islands inside holes paint over. */
   fills: ArtFill[];
+  strokes: ArtStroke[];
+}
+
+export interface ArtScene {
+  /** Every stroke, in painting order. */
+  strokes: ArtStroke[];
+  /** Every fill, in painting order. */
+  fills: ArtFill[];
+  /**
+   * One layer per visible sketch in tree order: the top sketch is painted first and each sketch below
+   * it paints over the ones above. Profiles nest (cut holes) only within their own sketch.
+   */
+  layers: ArtLayer[];
   /** Everything drawn, stroke widths included. */
   bounds: Box;
 }
@@ -595,7 +609,14 @@ export function buildArtScene(doc: Doc, tol: number): ArtScene {
     }
     for (const p of center) boxAdd(bounds, p);
   }
-  return { strokes, fills: nestFills(strokes.filter((s) => s.style.fill)), bounds };
+  const layers: ArtLayer[] = [];
+  for (const s of strokes) {
+    let l = layers[layers.length - 1];
+    if (!l || l.feature !== s.chain.feature) layers.push((l = { feature: s.chain.feature, fills: [], strokes: [] }));
+    l.strokes.push(s);
+  }
+  for (const l of layers) l.fills = nestFills(l.strokes.filter((s) => s.style.fill));
+  return { strokes, fills: layers.flatMap((l) => l.fills), layers, bounds };
 }
 
 const sceneCache = new WeakMap<Doc, Map<number, ArtScene>>();
@@ -611,8 +632,8 @@ export function artScene(doc: Doc, tol: number): ArtScene {
 }
 
 /**
- * The chain under `p`: the nearest stroke within `tol` of its painted band, else the smallest
- * filled profile containing the point.
+ * The chain under `p`: the nearest stroke within `tol` of its painted band, else the filled profile
+ * on top at the point (the latest sketch's; within a sketch, the smallest).
  */
 export function hitChain(scene: ArtScene, p: Vec2, tol: number): Chain | null {
   let best: Chain | null = null;
@@ -628,9 +649,11 @@ export function hitChain(scene: ArtScene, p: Vec2, tol: number): Chain | null {
   }
   if (best) return best;
   let inside: ArtStroke | null = null;
+  // Strokes run in painting order, so a later sketch's profile replaces an earlier one.
   for (const s of scene.strokes) {
     if (!s.style.fill) continue;
-    if (pointInPolygon(p, loopPolygon({ segs: s.chain.segs, area: s.chain.area })) && (!inside || s.chain.area < inside.chain.area)) inside = s;
+    if (!pointInPolygon(p, loopPolygon({ segs: s.chain.segs, area: s.chain.area }))) continue;
+    if (!inside || inside.chain.feature !== s.chain.feature || s.chain.area < inside.chain.area) inside = s;
   }
   return inside?.chain ?? null;
 }

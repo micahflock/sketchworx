@@ -101,27 +101,30 @@ export function paintArt(ctx: CanvasRenderingContext2D, scene: ArtScene, t: ArtT
     ctx.stroke(pathsOf(s).stroke);
   }
   const sideOf = new Map(scene.strokes.map((s) => [s.chain.key, s.style]));
-  for (const f of scene.fills) {
-    const fill = new Path2D();
-    for (const l of f.loops) segsPath(l.segs, true, fill);
-    ctx.fillStyle = f.color;
-    ctx.fill(fill, "nonzero");
-    // An outside stroke meets the fill exactly at the edge, where anti-aliasing leaves a faint seam.
-    // A hairline in the fill color under the stroke closes it.
-    const st = sideOf.get(f.chain.key);
-    if (st && st.side === "right" && st.weight > 0) {
-      ctx.strokeStyle = f.color;
-      ctx.lineWidth = t.unit;
-      ctx.stroke(segsPath(f.loops[0].segs, true));
+  // Sketch by sketch in tree order, each one's fills then its strokes, so later sketches cover earlier ones.
+  for (const layer of scene.layers) {
+    for (const f of layer.fills) {
+      const fill = new Path2D();
+      for (const l of f.loops) segsPath(l.segs, true, fill);
+      ctx.fillStyle = f.color;
+      ctx.fill(fill, "nonzero");
+      // An outside stroke meets the fill exactly at the edge, where anti-aliasing leaves a faint seam.
+      // A hairline in the fill color under the stroke closes it.
+      const st = sideOf.get(f.chain.key);
+      if (st && st.side === "right" && st.weight > 0) {
+        ctx.strokeStyle = f.color;
+        ctx.lineWidth = t.unit;
+        ctx.stroke(segsPath(f.loops[0].segs, true));
+      }
     }
-  }
-  for (const s of scene.strokes) {
-    if (s.style.weight <= 0) continue;
-    ctx.strokeStyle = s.style.color;
-    ctx.lineWidth = s.style.weight;
-    ctx.lineJoin = s.join;
-    ctx.lineCap = s.cap;
-    ctx.stroke(pathsOf(s).stroke);
+    for (const s of layer.strokes) {
+      if (s.style.weight <= 0) continue;
+      ctx.strokeStyle = s.style.color;
+      ctx.lineWidth = s.style.weight;
+      ctx.lineJoin = s.join;
+      ctx.lineCap = s.cap;
+      ctx.stroke(pathsOf(s).stroke);
+    }
   }
   ctx.lineJoin = "round";
   ctx.lineCap = "butt";

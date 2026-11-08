@@ -2,6 +2,15 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Art view: sketches layer in tree order ✅
+
+Art view, PNG and SVG paint sketch by sketch in tree order: the top sketch first, and each sketch below it
+over the ones above (its fills, then its strokes). Before, every fill was painted first and every stroke on
+top, so an earlier sketch's lines showed through a later sketch's fill. Filled profiles now cut holes only
+within their own sketch; a later sketch's shape covers an earlier fill instead of punching through it.
+Clicking where filled profiles of different sketches overlap picks the one on top (the later sketch).
+`ArtScene.layers` in `src/model/art.ts`; tests in `tests/art.test.ts`.
+
 ## Version label ✅
 
 The right end of the status bar shows `v<package version> · <short commit>` (phones: the commit only); the
