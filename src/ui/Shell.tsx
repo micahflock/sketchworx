@@ -54,8 +54,8 @@ function TouchKeys() {
         <button class={selecting ? css.active : ""} onClick={() => app.setFingerMode("select")}>
           Select
         </button>
-        <button class={selecting ? "" : css.active} onClick={() => app.setFingerMode("draw")}>
-          {toolTitle(drawTool)}
+        <button class={selecting ? "" : css.active} title={toolTitle(drawTool)} onClick={() => app.setFingerMode("draw")}>
+          Draw
         </button>
       </div>
       <button onClick={() => app.escape()}>Esc</button>

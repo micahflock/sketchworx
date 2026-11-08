@@ -913,8 +913,11 @@ export class App implements ToolHost, ArtHost {
   // ---- pen
   // Once a pen has been used, fingers no longer draw or select (the palm rests on the screen while
   // writing): two fingers still pan, pinch-zoom and tap-undo. While the pen is down, or just lifted
-  // or hovering, every touch is treated as the palm and ignored. The status bar flag turns this off.
+  // or hovering, every touch is treated as the palm and ignored. The status bar flag switches to
+  // Pencil + fingers: the pencil only draws and one finger only selects.
   private penPressed(id: number) {
+    // Pencil + fingers: the pencil only draws, so it picks the drawing tool back up.
+    if (this.fingersSelect() && this.tool.id === "select") this.setTool(this.lastDrawTool);
     this.penDown = id;
     this.penSeenAt = performance.now();
     if (!this.store.state.penSeen) this.store.set({ penSeen: true, pencilOnly: true });
@@ -939,7 +942,15 @@ export class App implements ToolHost, ArtHost {
   togglePencilOnly() {
     const on = !this.store.state.pencilOnly;
     this.store.set({ pencilOnly: on });
-    this.flash(on ? "Pencil draws; fingers pan and zoom" : "Fingers draw and select too");
+    this.flash(on ? "Pencil draws and selects; fingers pan and zoom" : "Pencil draws; finger selects");
+  }
+  /** Pencil + fingers mode: the pencil only draws and one finger only selects. */
+  private fingersSelect(): boolean {
+    return this.store.state.penSeen && !this.store.state.pencilOnly;
+  }
+  /** A single finger is about to act: in Pencil + fingers mode it always selects. */
+  private fingerToSelect() {
+    if (this.fingersSelect() && this.tool.id !== "select") this.setTool("select");
   }
 
   // ---- touch
@@ -961,7 +972,7 @@ export class App implements ToolHost, ArtHost {
       // Hold the touch back briefly: a second finger turns it into a pinch instead.
       this.pendingTouch = { id: e.pointerId, pe };
       this.pendingTimer = window.setTimeout(() => this.flushPendingTouch(), 150);
-      if (this.tool.id === "select" && !this.overArt(pe)) {
+      if ((this.tool.id === "select" || this.fingersSelect()) && !this.overArt(pe)) {
         this.longPress = window.setTimeout(() => {
           const t = this.touches.get(e.pointerId);
           if (!t || this.touches.size !== 1 || Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) > 10) return;
@@ -971,6 +982,7 @@ export class App implements ToolHost, ArtHost {
             this.drawingTouch = null;
           }
           this.pendingTouch = null;
+          this.fingerToSelect();
           const h = this.hit(this.view.toWorld(t.last), "touch");
           if (h) {
             if (!this.store.state.selection.includes(h.id)) this.select([...this.store.state.selection, h.id]);
@@ -998,6 +1010,7 @@ export class App implements ToolHost, ArtHost {
     this.pendingTouch = null;
     this.drawingTouch = p.id;
     this.store.set({ showShortcutBar: null });
+    this.fingerToSelect();
     this.pressDown(p.pe);
   }
 
@@ -1046,6 +1059,7 @@ export class App implements ToolHost, ArtHost {
       const down = this.pendingTouch.pe;
       this.pendingTouch = null;
       this.store.set({ showShortcutBar: null });
+      this.fingerToSelect();
       this.pressDown(down);
       this.pressUp(pe);
       this.checkDoubleTap(pe);

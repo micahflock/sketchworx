@@ -20,7 +20,7 @@ export const relationNames: Record<RelationType, string> = {
   onEdge: "On Edge",
 };
 
-/** Short glyph text drawn in the green relation badges. */
+/** Short glyph text drawn in the relation tags. Empty where the tag draws a line icon instead (relationIcons). */
 export const relationGlyphs: Record<RelationType, string> = {
   coincident: "◉",
   horizontal: "—",
@@ -34,9 +34,18 @@ export const relationGlyphs: Record<RelationType, string> = {
   coradial: "⊚",
   midpoint: "M",
   symmetric: "⫼",
-  fix: "⚓",
+  fix: "",
   equalCurvature: "κ",
   onEdge: "⊡",
+};
+
+/**
+ * Line icons for tags whose usual symbol is an emoji on some systems (⚓ is). SVG path data in a 10×10 box,
+ * stroked in the tag's text color, so they match the text glyphs on the canvas and in the panels.
+ */
+export const relationIcons: Partial<Record<RelationType, string>> = {
+  // Anchor: ring, shank, stock, and curved arms with barbs.
+  fix: "M5 3V8.9M3.1 4.4H6.9M1.5 6.2C1.8 8 3.2 8.9 5 8.9S8.2 8 8.5 6.2M1 7.1L1.5 6.2L2.4 6.7M9 7.1L8.5 6.2L7.6 6.7M6.1 1.9A1.1 1.1 0 1 1 3.9 1.9A1.1 1.1 0 1 1 6.1 1.9",
 };
 
 /** Display order in Add Relations (most common first, as in SolidWorks). */

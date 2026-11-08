@@ -2,6 +2,24 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Fix relation tag: line anchor instead of the ⚓ emoji ✅
+
+- ⚓ has emoji presentation, so iOS and others drew it as a color picture. The Fix tag now draws a stroked
+  anchor in the tag's text color (`relationIcons` in `src/model/relations.ts`), on the canvas
+  (`Painter.badge` icon argument) and in the panels (inline SVG), like the text glyphs of the other tags.
+- Conflicting relation tags in the panels use `--sw-glyph-bad-fg` (as the canvas does), so the glyph is no
+  longer red on red in HELL MODE.
+
+## Pencil + fingers, Draw key, HELL MODE touch keys ✅
+
+- **Pencil + fingers** (tap the ✎ Pencil flag): the pencil only draws and one finger only selects. A pencil
+  press while Select is on switches back to the last drawing tool; a finger tap, drag or long-press while a
+  drawing tool is on switches to Select. Two fingers still pan and zoom. (Pencil only, the default once a
+  pen is seen, is unchanged: the pencil does both, following the Select/Draw key.)
+- The touch key beside Select reads **Draw** instead of the drawing tool's name (the name is its tooltip).
+- HELL MODE: the "on" touch key (Select or Draw, latched Ctrl) is inverted, since the theme has no fill
+  for active state.
+
 ## Apple Pencil, drag-to-draw on touch, HELL MODE colors ✅
 
 - **Pencil and palm rejection:** pen input (Apple Pencil reports `pointerType: "pen"`) was handled like a

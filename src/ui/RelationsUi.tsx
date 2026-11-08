@@ -1,12 +1,23 @@
 import { useState } from "preact/hooks";
-import { describeRelation, relationGlyphs, relationNames, relationsOf } from "../model/relations";
+import { describeRelation, relationGlyphs, relationIcons, relationNames, relationsOf } from "../model/relations";
 import type { Relation, RelationType } from "../model/types";
 import { useApp, useUi } from "./hooks";
 import { Section } from "./PropertyManager";
 import css from "./ui.module.css";
 
 export function Glyph({ type, bad }: { type: RelationType; bad?: boolean }) {
-  return <span class={`${css.glyph} ${bad ? css.glyphBad : ""}`}>{relationGlyphs[type]}</span>;
+  const icon = relationIcons[type];
+  return (
+    <span class={`${css.glyph} ${bad ? css.glyphBad : ""}`}>
+      {icon ? (
+        <svg viewBox="0 0 10 10" width="11" height="11" aria-hidden="true">
+          <path d={icon} fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      ) : (
+        relationGlyphs[type]
+      )}
+    </span>
+  );
 }
 
 function RelationRow({ r }: { r: Relation }) {
