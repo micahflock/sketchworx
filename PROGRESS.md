@@ -2,6 +2,32 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Art view: strokes and per-chain styling ✅
+
+Art view now draws every non-construction curve as a black stroke, not just filled closed loops.
+
+- **Chains**: each visible sketch's curves are chained (`buildChains` in `src/model/outline.ts`). Closed loops
+  are **profiles** (circles included); everything else becomes open chains that stop at ends and branch
+  points. Each curve is in exactly one chain. Loop finding no longer gives up when a walk starts on a tail, so a
+  profile with a line hanging off it is still found.
+- **Default weight**: one line weight for the document (Art View panel → Defaults), in sketch units (default 2).
+- **Per-chain style** (click a chain in Art view or in the split view's art pane; Shift/Ctrl-click adds; drag
+  pans; Esc clears; Ctrl+A selects all): weight (or "Use default weight"), width direction (Centered, Left,
+  Right) and, for profiles, Filled. Profiles always run counter-clockwise, so Left is Inside and Right is Outside
+  (labelled that way when only profiles are selected). Open chains run along their first curve, and the selected
+  chain shows an arrow so left and right are clear. Side strokes are drawn along a mitered offset of the chain.
+- **Fills**: off by default. Nested filled profiles cut holes (nonzero, oriented by nesting among filled
+  profiles only), so filling just the inner one fills it solid.
+- **Storage**: `doc.art = { weight, styles }`, styles keyed by curve id and written to every curve of the chain,
+  so a piece split off by Trim keeps the style. Saved in the file (still version 3; older files open with
+  defaults); styles of deleted curves are dropped on save. Style edits are undo steps and do not re-solve.
+- **Export**: PNG matches Art view. SVG has "As in Art view" (on by default): a stroked path per chain with its
+  weight plus one nonzero path for filled profiles; off gives the old every-loop-filled output.
+- In Art view, Delete does nothing (the sketch is hidden) and switching to it cancels a half-drawn entity.
+
+Tests: `tests/art.test.ts` (chains, tails and branches, style defaults and overrides, fills and holes, offsets,
+hit testing, save/load and pruning, SVG). Checked in the browser on the slot and oval samples.
+
 ## Feature tree (after the scope change) ✅
 
 A document is an ordered list of sketches (file format version 3), shown in the **Sketches** tree above the

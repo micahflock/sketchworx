@@ -19,7 +19,12 @@ export function ExportPanel() {
         </button>
       </div>
       <Section title="SVG">
-        <div class={css.info}>Filled outlines only (construction excluded), nonzero fill, one path.</div>
+        <label class={css.check}>
+          <input type="checkbox" checked={!!o.art} onChange={(e) => set({ art: (e.target as HTMLInputElement).checked })} /> As in Art view (line weights, filled profiles)
+        </label>
+        <div class={css.info}>
+          {o.art ? "Each chain is a stroked path; filled profiles are one nonzero path." : "Every closed loop filled (construction excluded), nonzero fill, one path."}
+        </div>
         <label class={css.field}>
           <span>Arcs as</span>
           <select value={o.arcs} onChange={(e) => set({ arcs: (e.target as HTMLSelectElement).value as SvgOptions["arcs"] })}>

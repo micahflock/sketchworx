@@ -1,6 +1,8 @@
 import { DOC_VERSION } from "../model/types";
 import type { Doc, Entity, Sketch, SketchFeature } from "../model/types";
 import { FIRST_FEATURE, ORIGIN, originPoint } from "../model/sketch";
+import { DEFAULT_ART_WEIGHT, prunedArt } from "../model/art";
+import type { ArtSettings, ArtStyle } from "../model/types";
 
 export const FILE_EXT = ".sketch.json";
 
@@ -21,6 +23,7 @@ export function serializeDoc(doc: Doc): string {
       dimensions: Object.values(f.sketch.dimensions),
     })),
     ...(doc.picture ? { picture: doc.picture } : {}),
+    ...(doc.art ? { art: prunedArt(doc) } : {}),
   };
   return JSON.stringify(out, null, 1);
 }
@@ -47,6 +50,24 @@ function readSketch(src: any, known: Set<string>, keepDangling: boolean): Sketch
   const dimensions: Sketch["dimensions"] = {};
   for (const d of src.dimensions ?? []) if (Array.isArray(d.refs) && d.refs.every(ok)) dimensions[d.id] = d;
   return { entities, relations, dimensions };
+}
+
+/** Art view settings from a file; anything malformed is dropped. */
+function readArt(raw: any): ArtSettings | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const weight = typeof raw.weight === "number" && Number.isFinite(raw.weight) && raw.weight >= 0 ? raw.weight : undefined;
+  const styles: Record<string, ArtStyle> = {};
+  if (raw.styles && typeof raw.styles === "object")
+    for (const [id, st] of Object.entries<any>(raw.styles)) {
+      if (!st || typeof st !== "object") continue;
+      const out: ArtStyle = {};
+      if (typeof st.weight === "number" && Number.isFinite(st.weight) && st.weight >= 0) out.weight = st.weight;
+      if (st.side === "left" || st.side === "right") out.side = st.side;
+      if (st.fill === true) out.fill = true;
+      if (Object.keys(out).length) styles[id] = out;
+    }
+  if (weight === undefined && !Object.keys(styles).length) return undefined;
+  return { weight: weight ?? DEFAULT_ART_WEIGHT, styles };
 }
 
 export function parseDoc(text: string): Doc {
@@ -99,6 +120,7 @@ export function parseDoc(text: string): Doc {
     bump(f.id);
     for (const rec of [f.sketch.entities, f.sketch.relations, f.sketch.dimensions]) for (const id of Object.keys(rec)) bump(id);
   }
+  const art = readArt(raw.art);
   const active = features.some((f) => f.id === raw.active) ? raw.active : features[features.length - 1].id;
   return {
     version: DOC_VERSION,
@@ -107,5 +129,6 @@ export function parseDoc(text: string): Doc {
     features,
     active,
     ...(picture ? { picture } : {}),
+    ...(art ? { art } : {}),
   };
 }

@@ -5,14 +5,18 @@ import type { Loop, Outline, Seg } from "../model/outline";
 import { docOutline, segPoints } from "../model/outline";
 import { arcGeom, ptv } from "../model/sketch";
 import type { Doc, Sketch } from "../model/types";
+import { artScene, MITER_LIMIT } from "../model/art";
+import { paintArt } from "../render/artPaint";
 
 export interface SvgOptions {
   arcs: "arc" | "cubic";
   /** Presentation export: also stroke construction geometry. */
   construction: boolean;
+  /** As in Art view (stroked chains with their weights, filled profiles); otherwise every closed loop filled. */
+  art?: boolean;
 }
 
-export const defaultSvgOptions: SvgOptions = { arcs: "arc", construction: false };
+export const defaultSvgOptions: SvgOptions = { arcs: "arc", construction: false, art: true };
 
 const n = (v: number) => {
   const r = Math.round(v * 10000) / 10000;
@@ -37,36 +41,41 @@ export function arcToCubics(c: Vec2, r: number, a0: number, sweep: number): Vec2
   return out;
 }
 
-/** SVG path data for loops. Sketch space is y-up; SVG is y-down, so y is negated. */
-export function loopsToPathData(loops: Loop[], arcs: "arc" | "cubic", dx = 0): string {
+/** SVG path data for one chain. Sketch space is y-up; SVG is y-down, so y is negated. */
+export function segsToPathData(segs: Seg[], closed: boolean, arcs: "arc" | "cubic", dx = 0): string {
+  if (!segs.length) return "";
   const X = (p: Vec2) => n(p.x + dx);
   const Y = (p: Vec2) => n(-p.y);
-  const parts: string[] = [];
-  for (const l of loops) {
-    if (!l.segs.length) continue;
-    const d: string[] = [`M${X(l.segs[0].start)} ${Y(l.segs[0].start)}`];
-    l.segs.forEach((s, i) => {
-      const last = i === l.segs.length - 1;
-      if (s.kind === "line") {
-        if (!last) d.push(`L${X(s.end)} ${Y(s.end)}`);
-      } else if (s.kind === "arc") {
-        if (arcs === "arc") {
-          const large = Math.abs(s.sweep) > Math.PI + 1e-12 ? 1 : 0;
-          // CCW in y-up becomes the negative-angle direction after the y flip.
-          const sweepFlag = s.sweep > 0 ? 0 : 1;
-          const r = n(s.r);
-          if (Math.abs(Math.abs(s.sweep) - 2 * Math.PI) < 1e-9) {
-            const mid = { x: s.c.x + s.r * Math.cos(s.a0 + s.sweep / 2), y: s.c.y + s.r * Math.sin(s.a0 + s.sweep / 2) };
-            d.push(`A${r} ${r} 0 0 ${sweepFlag} ${X(mid)} ${Y(mid)}`);
-          }
-          d.push(`A${r} ${r} 0 ${large} ${sweepFlag} ${X(s.end)} ${Y(s.end)}`);
-        } else for (const c of arcToCubics(s.c, s.r, s.a0, s.sweep)) d.push(`C${X(c[1])} ${Y(c[1])} ${X(c[2])} ${Y(c[2])} ${X(c[3])} ${Y(c[3])}`);
-      } else d.push(`C${X(s.c1)} ${Y(s.c1)} ${X(s.c2)} ${Y(s.c2)} ${X(s.end)} ${Y(s.end)}`);
-    });
-    d.push("Z");
-    parts.push(d.join(""));
-  }
-  return parts.join("");
+  const d: string[] = [`M${X(segs[0].start)} ${Y(segs[0].start)}`];
+  segs.forEach((s, i) => {
+    const last = i === segs.length - 1;
+    if (s.kind === "line") {
+      if (!last || !closed) d.push(`L${X(s.end)} ${Y(s.end)}`);
+    } else if (s.kind === "arc") {
+      if (arcs === "arc") {
+        const large = Math.abs(s.sweep) > Math.PI + 1e-12 ? 1 : 0;
+        // CCW in y-up becomes the negative-angle direction after the y flip.
+        const sweepFlag = s.sweep > 0 ? 0 : 1;
+        const r = n(s.r);
+        if (Math.abs(Math.abs(s.sweep) - 2 * Math.PI) < 1e-9) {
+          const mid = { x: s.c.x + s.r * Math.cos(s.a0 + s.sweep / 2), y: s.c.y + s.r * Math.sin(s.a0 + s.sweep / 2) };
+          d.push(`A${r} ${r} 0 0 ${sweepFlag} ${X(mid)} ${Y(mid)}`);
+        }
+        d.push(`A${r} ${r} 0 ${large} ${sweepFlag} ${X(s.end)} ${Y(s.end)}`);
+      } else for (const c of arcToCubics(s.c, s.r, s.a0, s.sweep)) d.push(`C${X(c[1])} ${Y(c[1])} ${X(c[2])} ${Y(c[2])} ${X(c[3])} ${Y(c[3])}`);
+    } else d.push(`C${X(s.c1)} ${Y(s.c1)} ${X(s.c2)} ${Y(s.c2)} ${X(s.end)} ${Y(s.end)}`);
+  });
+  if (closed) d.push("Z");
+  return d.join("");
+}
+
+/** SVG path data for closed loops. */
+export function loopsToPathData(loops: Loop[], arcs: "arc" | "cubic", dx = 0): string {
+  return loops.map((l) => segsToPathData(l.segs, true, arcs, dx)).join("");
+}
+
+function polylineData(pts: Vec2[], closed: boolean): string {
+  return pts.map((p, i) => `${i ? "L" : "M"}${n(p.x)} ${n(-p.y)}`).join("") + (closed ? "Z" : "");
 }
 
 /** Stroked path data for construction geometry (presentation export). */
@@ -102,11 +111,37 @@ export function outlineBounds(o: Outline): Box {
   return b;
 }
 
-/** Filled outlines as SVG: one path, nonzero fill, viewBox from the geometry bounds. */
+function viewBoxOf(box: Box, pad = 0.02) {
+  if (!boxValid(box)) return { x: 0, y: 0, w: 100, h: 100 };
+  const m = Math.max(box.maxX - box.minX, box.maxY - box.minY) * pad;
+  return { x: box.minX - m, y: -box.maxY - m, w: box.maxX - box.minX + 2 * m, h: box.maxY - box.minY + 2 * m };
+}
+
+/** Art view as SVG elements: one filled path for the filled profiles, one stroked path per chain. */
+function artElements(doc: Doc, arcs: "arc" | "cubic"): { paths: string[]; box: Box } {
+  const box0 = artScene(doc, 1).bounds;
+  const size = boxValid(box0) ? Math.max(box0.maxX - box0.minX, box0.maxY - box0.minY) : 100;
+  const scene = artScene(doc, size * 2e-4);
+  const paths: string[] = [];
+  if (scene.fills.length) paths.push(`  <path d="${loopsToPathData(scene.fills, arcs)}" fill="#000" fill-rule="nonzero"/>`);
+  for (const s of scene.strokes) {
+    if (s.style.weight <= 0) continue;
+    const d = s.centered ? segsToPathData(s.chain.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
+    paths.push(`  <path d="${d}" fill="none" stroke="#000" stroke-width="${n(s.style.weight)}" stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"/>`);
+  }
+  return { paths, box: scene.bounds };
+}
+
+/** The sketch as SVG: Art view styling, or (art off) every closed loop filled as one nonzero path. */
 export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
-  const outline = docOutline(doc);
-  const box = outlineBounds(outline);
-  const paths = [`  <path d="${loopsToPathData(outline.loops, o.arcs)}" fill="#000" fill-rule="nonzero"/>`];
+  let paths: string[];
+  let box: Box;
+  if (o.art) ({ paths, box } = artElements(doc, o.arcs));
+  else {
+    const outline = docOutline(doc);
+    box = outlineBounds(outline);
+    paths = [`  <path d="${loopsToPathData(outline.loops, o.arcs)}" fill="#000" fill-rule="nonzero"/>`];
+  }
   if (o.construction) {
     const cd = doc.features
       .filter((f) => f.visible)
@@ -114,11 +149,7 @@ export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
       .join("");
     if (cd) paths.push(`  <path d="${cd}" fill="none" stroke="#3f6fd8" stroke-width="1" stroke-dasharray="8 3 2 3" vector-effect="non-scaling-stroke"/>`);
   }
-  let vb = { x: 0, y: 0, w: 100, h: 100 };
-  if (boxValid(box)) {
-    const m = Math.max(box.maxX - box.minX, box.maxY - box.minY) * 0.02;
-    vb = { x: box.minX - m, y: -box.maxY - m, w: box.maxX - box.minX + 2 * m, h: box.maxY - box.minY + 2 * m };
-  }
+  const vb = viewBoxOf(box);
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(vb.x)} ${n(vb.y)} ${n(vb.w)} ${n(vb.h)}" width="${n(vb.w)}" height="${n(vb.h)}">`,
@@ -128,10 +159,9 @@ export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
   ].join("\n");
 }
 
-/** Art view (black fills) of the sketch as a PNG of the given size. */
+/** Art view of the document as a PNG of the given size. */
 export async function exportPng(doc: Doc, size: number): Promise<Blob> {
-  const outline = docOutline(doc);
-  const b = outlineBounds(outline);
+  const b = artScene(doc, 1).bounds;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -144,8 +174,7 @@ export async function exportPng(doc: Doc, size: number): Promise<Blob> {
     const sc = (size * 0.9) / Math.max(w, h, 1e-9);
     const ox = (size - w * sc) / 2 - b.minX * sc;
     const oy = (size - h * sc) / 2 + b.maxY * sc;
-    ctx.setTransform(sc, 0, 0, sc, ox, oy);
-    ctx.fill(new Path2D(loopsToPathData(outline.loops, "arc")), "nonzero");
+    paintArt(ctx, artScene(doc, 0.3 / sc), { k: sc, ox, oy, unit: 1 / sc });
   }
   return new Promise((resolve, reject) => canvas.toBlob((bl) => (bl ? resolve(bl) : reject(new Error("PNG encode failed"))), "image/png"));
 }

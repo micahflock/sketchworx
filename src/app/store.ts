@@ -38,6 +38,9 @@ export interface UiState {
   dynamicMirror: Id | null;
   /** Curvature combs on splines and arcs. */
   combs: boolean;
+  /** Art view: selected chains, by a curve in each (the chain's key). */
+  artSelection: Id[];
+  artHover: Id | null;
 }
 
 type Listener = () => void;
@@ -74,6 +77,8 @@ export class Store {
       touchUi: false,
       dynamicMirror: null,
       combs: false,
+      artSelection: [],
+      artHover: null,
     };
   }
 

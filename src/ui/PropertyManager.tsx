@@ -13,6 +13,7 @@ import { activeFeature } from "../model/sketch";
 import { VariablesPanel } from "./VariablesPanel";
 import { KeyboardPanel } from "./KeyboardPanel";
 import { ExportPanel } from "./ExportPanel";
+import { ArtPanel } from "./ArtPanel";
 
 export function Section({ title, children, open = true }: { title: string; children: ComponentChildren; open?: boolean }) {
   const [isOpen, setOpen] = useState(open);
@@ -176,6 +177,8 @@ export function PropertyManager() {
   if (ui.panel === "variables") return <VariablesPanel />;
   if (ui.panel === "keyboard") return <KeyboardPanel />;
   if (ui.panel === "export") return <ExportPanel />;
+  // Art view styles chains; split view shows it while something is selected in the art pane.
+  if (ui.viewMode === "art" || (ui.viewMode === "split" && ui.artSelection.length)) return <ArtPanel />;
   const tool = app.tool;
   if (tool.id !== "select") {
     const opts = tool.options?.() ?? [];

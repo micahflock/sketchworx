@@ -1,6 +1,6 @@
 /**
- * Outline extraction: chains non-construction geometry into closed loops for the
- * fill preview and SVG export, and reports open ends and self-intersections.
+ * Outline extraction: chains non-construction geometry into closed loops (fills) and open
+ * chains (Art view strokes), and reports open ends and self-intersections.
  */
 import { toCubics } from "../geom/bezier";
 import type { Curve } from "../geom/curves";
@@ -11,11 +11,12 @@ import { arcGeom, ptv } from "./sketch";
 import type { Doc, Id, Sketch } from "./types";
 
 /** One piece of an outline, oriented from `start` to `end`. */
+/** `rev` is set when the piece runs against its entity's own direction. */
 export type Seg =
-  | { kind: "line"; start: Vec2; end: Vec2; src: Id }
+  | { kind: "line"; start: Vec2; end: Vec2; src: Id; rev?: boolean }
   /** sweep > 0 is CCW (y-up). */
-  | { kind: "arc"; start: Vec2; end: Vec2; c: Vec2; r: number; a0: number; sweep: number; src: Id }
-  | { kind: "cubic"; start: Vec2; end: Vec2; c1: Vec2; c2: Vec2; src: Id };
+  | { kind: "arc"; start: Vec2; end: Vec2; c: Vec2; r: number; a0: number; sweep: number; src: Id; rev?: boolean }
+  | { kind: "cubic"; start: Vec2; end: Vec2; c1: Vec2; c2: Vec2; src: Id; rev?: boolean };
 
 export interface Loop {
   segs: Seg[];
@@ -30,10 +31,17 @@ export interface Outline {
   bounds: Box;
 }
 
-function reverse(s: Seg): Seg {
-  if (s.kind === "line") return { ...s, start: s.end, end: s.start };
-  if (s.kind === "arc") return { ...s, start: s.end, end: s.start, a0: s.a0 + s.sweep, sweep: -s.sweep };
-  return { ...s, start: s.end, end: s.start, c1: s.c2, c2: s.c1 };
+export function reverseSeg(s: Seg): Seg {
+  const rev = !s.rev || undefined;
+  if (s.kind === "line") return { ...s, start: s.end, end: s.start, rev };
+  if (s.kind === "arc") return { ...s, start: s.end, end: s.start, a0: s.a0 + s.sweep, sweep: -s.sweep, rev };
+  return { ...s, start: s.end, end: s.start, c1: s.c2, c2: s.c1, rev };
+}
+const reverse = reverseSeg;
+
+/** A chain reversed (pieces in reverse order, each flipped). */
+export function reverseChain(segs: Seg[]): Seg[] {
+  return segs.map(reverse).reverse();
 }
 
 /** Segments of every fillable (non-construction) curve. Full circles become standalone loops. */
@@ -110,7 +118,7 @@ export function loopPolygon(l: Loop, n = 16): Vec2[] {
   return pts;
 }
 
-function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
+export function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i];
@@ -120,15 +128,14 @@ function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
   return inside;
 }
 
-/** Build closed loops; orient them so nested loops alternate direction (holes render with nonzero). */
-export function buildOutline(s: Sketch, diagnostics = true): Outline {
-  const { segs, circles } = collect(s);
-  const bounds = emptyBox();
-  for (const sg of segs) for (const p of segPoints(sg, 8)) boxAdd(bounds, p);
-  for (const c of circles) for (const sg of c.segs) for (const p of segPoints(sg, 8)) boxAdd(bounds, p);
-  const size = Math.max(1, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
-  const tol = 1e-5 * size;
-  // Cluster endpoints into nodes.
+interface Graph {
+  nodes: Vec2[];
+  edges: { sg: Seg; a: number; b: number; used: boolean }[];
+  adj: Map<number, number[]>;
+}
+
+/** Endpoints clustered into nodes (tolerance relative to the geometry size). */
+function graphOf(segs: Seg[], tol: number): Graph {
   const nodes: Vec2[] = [];
   const nodeOf = (p: Vec2) => {
     for (let i = 0; i < nodes.length; i++) if (dist(nodes[i], p) <= tol) return i;
@@ -144,13 +151,31 @@ export function buildOutline(s: Sketch, diagnostics = true): Outline {
       l.push(i);
     }
   });
-  const openEnds: Vec2[] = [];
-  for (const [n, l] of adj) if (l.length % 2 === 1) openEnds.push(nodes[n]);
-  const loops: Loop[] = [...circles];
+  return { nodes, edges, adj };
+}
+
+/** Snap a chain's joints exactly (each piece ends where the next starts). */
+function snapJoints(path: Seg[], closed: boolean): Seg[] {
+  const n = closed ? path.length : path.length - 1;
+  for (let k = 0; k < n; k++) {
+    const nxt = path[(k + 1) % path.length];
+    path[k] = { ...path[k], end: nxt.start };
+  }
+  return path;
+}
+
+/**
+ * Closed loops of the graph. A walk that does not come back to its start (it ran into a dead end or
+ * a side loop) gives its edges back, so a tail or a side branch does not stop a loop being found.
+ * Marks the edges of every loop used.
+ */
+function findLoops(g: Graph): Seg[][] {
+  const { edges, adj } = g;
+  const loops: Seg[][] = [];
   for (let i = 0; i < edges.length; i++) {
     if (edges[i].used) continue;
-    // Walk forward from edge i.
     const path: Seg[] = [];
+    const walked: number[] = [];
     let cur = i;
     let at = edges[i].a;
     const startNode = at;
@@ -158,6 +183,7 @@ export function buildOutline(s: Sketch, diagnostics = true): Outline {
     for (let guard = 0; guard <= edges.length; guard++) {
       const e = edges[cur];
       e.used = true;
+      walked.push(cur);
       const forward = e.a === at;
       path.push(forward ? e.sg : reverse(e.sg));
       at = forward ? e.b : e.a;
@@ -169,15 +195,82 @@ export function buildOutline(s: Sketch, diagnostics = true): Outline {
       if (next === undefined) break;
       cur = next;
     }
-    if (!closed) continue;
-    // Snap joints exactly.
-    for (let k = 0; k < path.length; k++) {
-      const nxt = path[(k + 1) % path.length];
-      path[k] = { ...path[k], end: nxt.start };
+    if (!closed) {
+      for (const k of walked) edges[k].used = false;
+      continue;
     }
-    loops.push({ segs: path, area: polyArea(loopPolygon({ segs: path, area: 0 })) });
+    loops.push(snapJoints(path, true));
   }
-  // Nesting depth → orientation (even depth CCW, odd CW).
+  return loops;
+}
+
+/**
+ * Open chains from the edges not in a loop: runs between nodes where the chain ends or branches
+ * (any node not joining exactly two remaining pieces). Any left-over ring is returned closed.
+ */
+function findOpenChains(g: Graph): { segs: Seg[]; closed: boolean }[] {
+  const { edges, adj } = g;
+  // Ends and branch points of what is left after the loops: open chains start and stop there.
+  const stops = new Set<number>();
+  for (const [n, l] of adj) {
+    const d = l.filter((k) => !edges[k].used).length;
+    if (d > 0 && d !== 2) stops.add(n);
+  }
+  const out: { segs: Seg[]; closed: boolean }[] = [];
+  const walk = (cur: number, at: number) => {
+    const startNode = at;
+    const path: Seg[] = [];
+    for (let guard = 0; guard <= edges.length; guard++) {
+      const e = edges[cur];
+      e.used = true;
+      const forward = e.a === at;
+      path.push(forward ? e.sg : reverse(e.sg));
+      at = forward ? e.b : e.a;
+      if (at === startNode && !stops.has(at)) return void out.push({ segs: snapJoints(path, true), closed: true });
+      if (stops.has(at)) break;
+      const next = (adj.get(at) ?? []).find((k) => !edges[k].used);
+      if (next === undefined) break;
+      cur = next;
+    }
+    out.push({ segs: snapJoints(path, false), closed: false });
+  };
+  for (const n of stops) for (const k of adj.get(n) ?? []) if (!edges[k].used) walk(k, n);
+  for (let i = 0; i < edges.length; i++) if (!edges[i].used) walk(i, edges[i].a);
+  return out;
+}
+
+function sizeTol(segs: Seg[], circles: Loop[]): { bounds: Box; tol: number } {
+  const bounds = emptyBox();
+  for (const sg of segs) for (const p of segPoints(sg, 8)) boxAdd(bounds, p);
+  for (const c of circles) for (const sg of c.segs) for (const p of segPoints(sg, 8)) boxAdd(bounds, p);
+  const size = Math.max(1, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+  return { bounds, tol: 1e-5 * size };
+}
+
+/** One connected run of non-construction geometry, in walk order. */
+export interface RawChain {
+  segs: Seg[];
+  closed: boolean;
+  /** Signed area (closed chains; 0 for open ones). */
+  area: number;
+}
+
+/**
+ * Every non-construction curve of a sketch, chained: closed loops (profiles, circles included) and
+ * open chains between ends and branch points. Each piece belongs to exactly one chain.
+ */
+export function buildChains(s: Sketch): RawChain[] {
+  const { segs, circles } = collect(s);
+  const { tol } = sizeTol(segs, circles);
+  const g = graphOf(segs, tol);
+  const out: RawChain[] = circles.map((c) => ({ segs: c.segs, closed: true, area: c.area }));
+  for (const path of findLoops(g)) out.push({ segs: path, closed: true, area: polyArea(loopPolygon({ segs: path, area: 0 })) });
+  for (const c of findOpenChains(g)) out.push({ ...c, area: c.closed ? polyArea(loopPolygon({ segs: c.segs, area: 0 })) : 0 });
+  return out;
+}
+
+/** Orient loops in place by nesting depth (even depth CCW, odd CW), so holes cut with nonzero fill. */
+export function orientNested(loops: Loop[]): Loop[] {
   const polys = loops.map((l) => loopPolygon(l));
   loops.forEach((l, i) => {
     const probe = polys[i][0];
@@ -187,10 +280,23 @@ export function buildOutline(s: Sketch, diagnostics = true): Outline {
     });
     const wantCCW = depth % 2 === 0;
     if (l.area > 0 !== wantCCW) {
-      l.segs = l.segs.map(reverse).reverse();
+      l.segs = reverseChain(l.segs);
       l.area = -l.area;
     }
   });
+  return loops;
+}
+
+/** Build closed loops; orient them so nested loops alternate direction (holes render with nonzero). */
+export function buildOutline(s: Sketch, diagnostics = true): Outline {
+  const { segs, circles } = collect(s);
+  const { bounds, tol } = sizeTol(segs, circles);
+  const g = graphOf(segs, tol);
+  const openEnds: Vec2[] = [];
+  for (const [n, l] of g.adj) if (l.length % 2 === 1) openEnds.push(g.nodes[n]);
+  const loops: Loop[] = [...circles];
+  for (const path of findLoops(g)) loops.push({ segs: path, area: polyArea(loopPolygon({ segs: path, area: 0 })) });
+  orientNested(loops);
   // Self-intersections: any two segments of the outline crossing away from shared endpoints.
   const selfIntersections: Vec2[] = [];
   const all = diagnostics ? loops.flatMap((l) => l.segs) : [];

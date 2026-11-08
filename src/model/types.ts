@@ -157,6 +157,25 @@ export interface SketchFeature {
   sketch: Sketch;
 }
 
+/** Which side of a chain its stroke grows on (left of the chain's direction; for a profile, left is inside). */
+export type ArtSide = "center" | "left" | "right";
+
+/** Art view style of one chain, stored on each of its curves. Unset fields use the defaults. */
+export interface ArtStyle {
+  /** Stroke weight in sketch units (unset: the document's default weight). */
+  weight?: number;
+  side?: ArtSide;
+  /** Fill a closed profile. */
+  fill?: boolean;
+}
+
+export interface ArtSettings {
+  /** Default stroke weight in sketch units. */
+  weight: number;
+  /** Per-curve styles by entity id. */
+  styles: Record<Id, ArtStyle>;
+}
+
 export interface Doc {
   version: number;
   nextId: number;
@@ -166,6 +185,8 @@ export interface Doc {
   /** The sketch being edited. */
   active: Id;
   picture?: Picture;
+  /** Art view styling (unset: defaults everywhere). */
+  art?: ArtSettings;
 }
 
 export const DOC_VERSION = 3;

@@ -9,6 +9,11 @@ import type { Doc, Id, Sketch } from "../model/types";
 import { addFeature, deleteFeature, moveFeature, renameFeature, setActive, setVisible } from "../model/features";
 import { docOutline } from "../model/outline";
 import { loopsToPathData } from "../io/svg";
+import { artScene, chainsFor, docChains, hitChain, setArtWeight, setChainStyle } from "../model/art";
+import type { Chain, StylePatch } from "../model/art";
+import { paintArt } from "../render/artPaint";
+import { ArtSelectTool } from "../tools/artSelect";
+import type { ArtHost } from "../tools/artSelect";
 import { entitySamples, hitTest } from "../render/hit";
 import type { Hit } from "../render/hit";
 import { Painter } from "../render/painter";
@@ -31,7 +36,7 @@ import { fmt } from "../tools/line";
 import type { Dimension, Variable } from "../model/types";
 import { isExpression } from "../model/expr";
 import { drawDiagnostics, fillOutline, outlineOf } from "../render/art";
-import { outlineBounds, exportSvg, exportPng } from "../io/svg";
+import { exportSvg, exportPng } from "../io/svg";
 import type { SvgOptions } from "../io/svg";
 import { downloadBlob, pickFile } from "../io/storage";
 import { PictureScaleTool } from "../tools/picture";
@@ -62,7 +67,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 /** Commands whose new entities Dynamic Mirror copies. */
 const DRAW_COMMANDS = new Set(["Line", "Centerline", "Arc", "Tangent Arc", "Circle", "Point", "Style Spline", "Rectangle"]);
 
-export class App implements ToolHost {
+export class App implements ToolHost, ArtHost {
   readonly store = new Store();
   readonly view = new View();
   canvas: HTMLCanvasElement | null = null;
@@ -96,6 +101,12 @@ export class App implements ToolHost {
   private lastDrawTool = "line";
   /** Status bar cursor readout hook. */
   onCursor: ((p: Vec2) => void) | null = null;
+  /** Pointer handling over the Art view (full canvas, or the right pane in split view). */
+  private artTool = new ArtSelectTool(this);
+  /** The split view's art pane as last drawn (it is fitted to the drawing every frame). */
+  private artPane: View | null = null;
+  /** Whichever of the active tool or the art tool took the current press. */
+  private pressInput: Tool | null = null;
 
   constructor(solver: Solver = new WorkerSolver()) {
     this.solver = new SolverService(this.store, solver);
@@ -511,7 +522,8 @@ export class App implements ToolHost {
 
   deleteSelection() {
     const sel = this.store.state.selection;
-    if (!sel.length) return;
+    // Art view hides the sketch, so a sketch selection there is not what the user is looking at.
+    if (!sel.length || this.store.state.viewMode === "art") return;
     const s = this.sketch();
     if (sel.every((id) => s.ext?.[id])) return this.flash(`That belongs to ${this.extFeatureName(sel[0])}. Edit that sketch to change it`, "error");
     this.commit("Delete", (ed) => ed.deleteAny(sel));
@@ -685,7 +697,6 @@ export class App implements ToolHost {
       const pe = this.toEvent(e);
       this.lastPointer = pe;
       if (pe.pointerType !== "mouse" && !this.store.state.touchUi) this.store.set({ touchUi: true });
-      if (this.store.state.viewMode === "split" && pe.screen.x > this.view.width) return;
       if (pe.pointerType === "touch") return this.touchDown(e, pe);
       if (e.button === 1 || (e.button === 0 && e.altKey && pe.pointerType === "mouse")) {
         this.panning = { last: pe.screen };
@@ -694,7 +705,7 @@ export class App implements ToolHost {
       }
       if (e.button === 2) return;
       this.store.set({ showShortcutBar: null });
-      this.tool.onDown(pe);
+      this.pressDown(pe);
     });
     c.addEventListener("pointermove", (e) => {
       const pe = this.toEvent(e);
@@ -707,7 +718,7 @@ export class App implements ToolHost {
         return;
       }
       this.onCursor?.(pe.world);
-      this.tool.onMove(pe);
+      this.pressMove(pe);
     });
     const up = (e: PointerEvent) => {
       const pe = this.toEvent(e);
@@ -717,11 +728,14 @@ export class App implements ToolHost {
         return;
       }
       if (e.button === 2) return;
-      this.tool.onUp(pe);
+      this.pressUp(pe);
     };
     c.addEventListener("pointerup", up);
     c.addEventListener("pointercancel", up);
-    c.addEventListener("dblclick", (e) => this.tool.onDoubleClick?.(this.toEvent(e)));
+    c.addEventListener("dblclick", (e) => {
+      const pe = this.toEvent(e);
+      if (!this.overArt(pe)) this.tool.onDoubleClick?.(pe);
+    });
     c.addEventListener(
       "wheel",
       (e) => {
@@ -733,12 +747,83 @@ export class App implements ToolHost {
       },
       { passive: false },
     );
-    c.addEventListener("pointerleave", () => this.setHover(null));
+    c.addEventListener("pointerleave", () => {
+      this.setHover(null);
+      this.setArtHover(null);
+    });
     window.addEventListener("keydown", (e) => this.onKeyDown(e));
     window.addEventListener("keyup", (e) => {
       if (e.key === "Control" || e.key === "Meta") this.store.set({ ctrl: false });
     });
     window.addEventListener("blur", () => this.store.set({ ctrl: false }));
+  }
+
+  // ---- routing between the sketch tools and the Art view
+  /** The pointer is over Art view (the whole canvas, or the right pane of split view). */
+  private overArt(pe: PEvent): boolean {
+    const mode = this.store.state.viewMode;
+    return mode === "art" || (mode === "split" && pe.screen.x > this.view.width);
+  }
+  private pressDown(pe: PEvent) {
+    const art = this.overArt(pe);
+    // Working in the sketch pane of split view drops the art selection, so the PropertyManager follows.
+    if (!art && this.store.state.artSelection.length) this.store.set({ artSelection: [] });
+    this.pressInput = art ? this.artTool : this.tool;
+    this.pressInput.onDown(pe);
+  }
+  private pressMove(pe: PEvent) {
+    const art = this.overArt(pe);
+    if (!this.pressInput && !art) this.setArtHover(null);
+    (this.pressInput ?? (art ? this.artTool : this.tool)).onMove(pe);
+  }
+  private pressUp(pe: PEvent) {
+    const t = this.pressInput ?? (this.overArt(pe) ? this.artTool : this.tool);
+    this.pressInput = null;
+    t.onUp(pe);
+  }
+  private pressCancel() {
+    (this.pressInput ?? this.tool).cancel();
+    this.pressInput = null;
+  }
+
+  // ---- Art view (ArtHost)
+  /** The view and local screen point for a pointer over Art view. */
+  private artViewAt(pe: PEvent): { v: View; screen: Vec2 } {
+    if (this.store.state.viewMode === "split" && this.artPane) return { v: this.artPane, screen: { x: pe.screen.x - this.view.width, y: pe.screen.y } };
+    return { v: this.view, screen: pe.screen };
+  }
+  artPick(pe: PEvent): Id | null {
+    const { v, screen } = this.artViewAt(pe);
+    const scene = artScene(this.store.doc, v.px(0.3));
+    return hitChain(scene, v.toWorld(screen), this.tol(pe.pointerType) * (this.view.scale / v.scale))?.key ?? null;
+  }
+  artSelection(): Id[] {
+    return this.store.state.artSelection;
+  }
+  setArtSelection(ids: Id[]) {
+    this.store.set({ artSelection: ids });
+  }
+  setArtHover(id: Id | null) {
+    if (this.store.state.artHover !== id) this.store.set({ artHover: id });
+  }
+  artPan(_pe: PEvent, dx: number, dy: number) {
+    if (this.store.state.viewMode !== "art") return; // the split pane is fitted automatically
+    this.view.panBy(dx, dy);
+    this.requestRender();
+  }
+  /** Chains selected in Art view. */
+  selectedChains(): Chain[] {
+    return chainsFor(docChains(this.store.doc), this.store.state.artSelection);
+  }
+  selectAllChains() {
+    this.setArtSelection(docChains(this.store.doc).map((c) => c.key));
+  }
+  setArtWeight(weight: number) {
+    this.commitDoc(setArtWeight(this.store.doc, weight), "Default Line Weight");
+  }
+  setChainStyle(chains: Chain[], patch: StylePatch) {
+    const label = patch.fill !== undefined ? (patch.fill ? "Fill Profile" : "Unfill Profile") : patch.side ? "Line Side" : "Line Weight";
+    this.commitDoc(setChainStyle(this.store.doc, chains, patch), label);
   }
 
   // ---- touch
@@ -755,13 +840,13 @@ export class App implements ToolHost {
       // Hold the touch back briefly: a second finger turns it into a pinch instead.
       this.pendingTouch = { id: e.pointerId, pe };
       this.pendingTimer = window.setTimeout(() => this.flushPendingTouch(), 150);
-      if (this.tool.id === "select") {
+      if (this.tool.id === "select" && !this.overArt(pe)) {
         this.longPress = window.setTimeout(() => {
           const t = this.touches.get(e.pointerId);
           if (!t || this.touches.size !== 1 || Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) > 10) return;
           this.longPressFired = true;
           if (this.drawingTouch !== null) {
-            this.tool.cancel();
+            this.pressCancel();
             this.drawingTouch = null;
           }
           this.pendingTouch = null;
@@ -776,7 +861,7 @@ export class App implements ToolHost {
       // Second finger: abandon any single-finger action and start pinch/pan.
       this.pendingTouch = null;
       if (this.drawingTouch !== null) {
-        this.tool.cancel();
+        this.pressCancel();
         this.drawingTouch = null;
       }
       const [a, b] = [...this.touches.values()];
@@ -792,7 +877,7 @@ export class App implements ToolHost {
     this.pendingTouch = null;
     this.drawingTouch = p.id;
     this.store.set({ showShortcutBar: null });
-    this.tool.onDown(p.pe);
+    this.pressDown(p.pe);
   }
 
   private touchMove(e: PointerEvent, pe: PEvent) {
@@ -818,7 +903,7 @@ export class App implements ToolHost {
     }
     if (this.drawingTouch === e.pointerId) {
       this.onCursor?.(pe.world);
-      this.tool.onMove(pe);
+      this.pressMove(pe);
     }
   }
 
@@ -838,14 +923,14 @@ export class App implements ToolHost {
       const down = this.pendingTouch.pe;
       this.pendingTouch = null;
       this.store.set({ showShortcutBar: null });
-      this.tool.onDown(down);
-      this.tool.onUp(pe);
+      this.pressDown(down);
+      this.pressUp(pe);
       this.checkDoubleTap(pe);
       return;
     }
     if (this.drawingTouch === e.pointerId) {
       this.drawingTouch = null;
-      this.tool.onUp(pe);
+      this.pressUp(pe);
       this.checkDoubleTap(pe);
     }
   }
@@ -856,7 +941,7 @@ export class App implements ToolHost {
     const last = this.lastTap;
     if (last && now - last.t < 350 && Math.hypot(pe.screen.x - last.at.x, pe.screen.y - last.at.y) < 24) {
       this.lastTap = null;
-      this.tool.onDoubleClick?.(pe);
+      if (!this.overArt(pe)) this.tool.onDoubleClick?.(pe);
     } else this.lastTap = { t: now, at: pe.screen };
   }
 
@@ -886,7 +971,10 @@ export class App implements ToolHost {
       else if (k === "y" || (k === "z" && e.shiftKey)) this.redo();
       else if (k === "s") this.saveFile(e.shiftKey);
       else if (k === "o") this.openFile();
-      else if (k === "a") this.select(Object.keys(ownSketch(this.store.doc).entities));
+      else if (k === "a") {
+        if (this.store.state.viewMode === "art") this.selectAllChains();
+        else this.select(Object.keys(ownSketch(this.store.doc).entities));
+      }
       else return;
       e.preventDefault();
       return;
@@ -919,6 +1007,8 @@ export class App implements ToolHost {
       this.store.set({ showShortcutBar: null, contextBar: null, modify: null });
       return;
     }
+    if (this.artTool.cancel()) return;
+    if (st.viewMode !== "sketch" && st.artSelection.length) return this.setArtSelection([]);
     if (this.tool.cancel()) return;
     if (this.tool.id !== "select") return this.setTool("select");
     if (st.selection.length) this.select([]);
@@ -952,7 +1042,10 @@ export class App implements ToolHost {
       case "view:sketch":
       case "view:art":
       case "view:split": {
-        this.store.set({ viewMode: action.slice(5) as "sketch" | "art" | "split" });
+        const mode = action.slice(5) as "sketch" | "art" | "split";
+        // Art view hides the sketch: abandon a half-drawn entity rather than leave it waiting unseen.
+        if (mode === "art") this.tool.cancel();
+        this.store.set({ viewMode: mode, artHover: null });
         this.layoutViews();
         return this.requestRender();
       }
@@ -1036,8 +1129,9 @@ export class App implements ToolHost {
       art.width = this.canvasW - v.width;
       art.height = v.height;
       art.dpr = v.dpr;
-      const b = outlineBounds(docOutline(this.store.doc, false));
+      const b = artScene(this.store.doc, this.artPane ? this.artPane.px(0.3) : 1).bounds;
       if (boxValid(b)) art.fit(b, 30);
+      this.artPane = art;
       ctx.save();
       ctx.translate(v.width, 0);
       ctx.beginPath();
@@ -1050,17 +1144,21 @@ export class App implements ToolHost {
     }
   }
 
-  /** Art view: black nonzero fills on white, no chrome. */
+  /** Art view: every non-construction chain stroked in black on white, filled profiles, no sketch chrome. */
   private drawArt(ctx: CanvasRenderingContext2D, v: View, offsetX = 0) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, v.width, v.height);
-    const path = this.docPath();
-    ctx.save();
+    const st = this.store.state;
     const k = v.dpr;
-    ctx.setTransform(k * v.scale, 0, 0, k * v.scale, k * (offsetX + v.width / 2 - v.cx * v.scale), k * (v.height / 2 + v.cy * v.scale));
-    ctx.fillStyle = theme.fill;
-    ctx.fill(path, "nonzero");
-    ctx.restore();
+    const selected = new Set(this.selectedChains().map((c) => c.key));
+    // The hover key may be any curve of its chain after an edit; highlight the chain it belongs to.
+    const hover = st.artHover ? (chainsFor(docChains(this.store.doc), [st.artHover])[0]?.key ?? null) : null;
+    paintArt(
+      ctx,
+      artScene(this.store.doc, v.px(0.3)),
+      { k: k * v.scale, ox: k * (offsetX + v.width / 2 - v.cx * v.scale), oy: k * (v.height / 2 + v.cy * v.scale), unit: v.px(1) },
+      { selected, hover },
+    );
   }
 
   private drawPicture(ctx: CanvasRenderingContext2D, v: View, s: Sketch) {
