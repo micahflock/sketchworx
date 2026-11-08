@@ -113,3 +113,53 @@ describe("HELL MODE colors", () => {
     }
   });
 });
+
+describe("relations added while drawing", () => {
+  const click = (tool: LineTool, p: unknown) => {
+    tool.onMove(p);
+    tool.onDown(p);
+    tool.onUp(p);
+  };
+  const types = (rels: { type: string }[]) => rels.map((r) => r.type).sort();
+
+  it("adds horizontal and the chain's coincident joint", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(100, 100, "mouse"));
+    click(tool, ev(300, 101, "mouse")); // snaps level
+    click(tool, ev(300, 300, "mouse")); // snaps plumb
+    expect(types(relations())).toEqual(["coincident", "horizontal", "vertical"]);
+  });
+
+  it("snaps perpendicular to the previous segment without adding a perpendicular relation", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(100, 100, "mouse"));
+    click(tool, ev(200, 150, "mouse"));
+    click(tool, ev(152, 247, "mouse")); // near the perpendicular from (200,150)
+    const s = host.sketch();
+    const lines = Object.values(s.entities).filter((e) => e.type === "line") as { p1: string; p2: string }[];
+    const v = (l: { p1: string; p2: string }) => {
+      const a = s.entities[l.p1] as { x: number; y: number };
+      const b = s.entities[l.p2] as { x: number; y: number };
+      return { x: b.x - a.x, y: b.y - a.y };
+    };
+    const [d1, d2] = lines.map(v);
+    expect(Math.abs(d1.x * d2.x + d1.y * d2.y)).toBeLessThan(1e-6); // placed exactly perpendicular
+    expect(types(relations())).toEqual(["coincident"]);
+  });
+
+  it("snaps to a midpoint without adding a midpoint relation", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(100, 100, "mouse"));
+    click(tool, ev(300, 100, "mouse"));
+    tool.cancel();
+    click(tool, ev(201, 103, "mouse")); // near the midpoint (200, 100)
+    click(tool, ev(260, 300, "mouse"));
+    const s = host.sketch();
+    const starts = Object.values(s.entities).filter((e) => e.type === "point" && Math.hypot((e as { x: number }).x - 200 + 400, (e as { y: number }).y - 300 + 100) < 1e-6);
+    expect(starts.length).toBeGreaterThan(0);
+    expect(types(relations())).toEqual(["horizontal"]);
+  });
+});

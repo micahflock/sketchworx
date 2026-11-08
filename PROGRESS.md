@@ -2,6 +2,16 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Drawing adds only coincident, horizontal and vertical ✅
+
+- Snapping is unchanged (midpoint, tangent and perpendicular still place the point or direction exactly and
+  show their tag while drawing), but drawing no longer adds midpoint, tangent or perpendicular relations
+  for those snaps. Inferred relations are now only coincident (point on point, point on curve) and
+  horizontal/vertical.
+- Relations that define a tool's shape stay: rectangle sides (H/V, parallel, perpendicular, center
+  diagonals), the tangent of Tangent Arc and the line chain's tangent-arc mode, the midpoint of Midpoint
+  Line. Editing tools (trim, fillet, mirror, offset, ...) are unchanged.
+
 ## Fix relation tag: line anchor instead of the ⚓ emoji ✅
 
 - ⚓ has emoji presentation, so iOS and others drew it as a color picture. The Fix tag now draws a stroked

@@ -285,8 +285,7 @@ export class LineTool implements Tool {
         else applySnap(ed, r.p1, st.snap);
         applySnap(ed, r.p2, sn);
       }
-      applyHV(ed, r.line, sn);
-      if (sn.dirRel && ed.s.entities[sn.dirRel.ref]) ed.addRelation({ type: sn.dirRel.type, refs: [sn.dirRel.ref, r.line] });
+      applyHV(ed, r.line, sn); // a tangent/perpendicular snap only sets the direction
       made = r;
     });
     const m = made as { line: Id; p2: Id } | null;
