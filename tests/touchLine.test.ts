@@ -115,7 +115,7 @@ describe("HELL MODE colors", () => {
 });
 
 describe("relations added while drawing", () => {
-  const click = (tool: LineTool, p: unknown) => {
+  const click = (tool: LineTool, p: Parameters<LineTool["onDown"]>[0]) => {
     tool.onMove(p);
     tool.onDown(p);
     tool.onUp(p);

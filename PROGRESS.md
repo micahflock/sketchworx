@@ -2,6 +2,13 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Context bar docked on phones ✅
+
+- On a phone-width screen (≤ 600 px) with the touch keys showing, the relations context bar always opens in
+  the same place, just above the Select/Draw keys (stacked with them in `.touchDock`), and wraps instead of
+  running off the screen. Elsewhere it still floats by the cursor, now flipped to the other side when it
+  would leave the canvas.
+
 ## Drawing adds only coincident, horizontal and vertical ✅
 
 - Snapping is unchanged (midpoint, tangent and perpendicular still place the point or direction exactly and
