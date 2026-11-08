@@ -41,6 +41,10 @@ export function StatusBar() {
         </span>
       )}
       <span class={css.fname}>{ui.fileName ?? "untitled"}</span>
+      <span class={css.version} title={`Sketchworx ${__APP_VERSION__}, built ${__APP_BUILT__} from commit ${__APP_COMMIT__}`}>
+        <span class={css.versionNum}>v{__APP_VERSION__} · </span>
+        {__APP_COMMIT__}
+      </span>
     </div>
   );
 }

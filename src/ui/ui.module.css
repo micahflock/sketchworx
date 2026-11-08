@@ -963,6 +963,20 @@
 .fname {
   color: var(--sw-text-3);
 }
+.version {
+  font-size: 11px;
+  color: var(--sw-text-3);
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* Phones: just the commit, which is what tells an old cached copy apart. */
+@media (max-width: 600px) {
+  .versionNum {
+    display: none;
+  }
+}
 .err {
   color: var(--sw-error);
 }

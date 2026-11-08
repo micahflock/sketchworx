@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { execSync } from "node:child_process";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import preact from "@preact/preset-vite";
@@ -20,12 +21,27 @@ function serviceWorker(): Plugin {
   };
 }
 
-export default defineConfig({
+/** Short commit the build comes from: git, else GitHub Actions' GITHUB_SHA, else "unknown". */
+function commit(): string {
+  try {
+    return execSync("git rev-parse --short=7 HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown";
+  }
+}
+
+export default defineConfig(({ command }) => ({
   base: "./",
+  define: {
+    __APP_VERSION__: JSON.stringify(JSON.parse(readFileSync("package.json", "utf8")).version),
+    // The dev server shows "dev": its code is whatever is on disk, not a commit.
+    __APP_COMMIT__: JSON.stringify(command === "build" ? commit() : "dev"),
+    __APP_BUILT__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   plugins: [preact(), serviceWorker()],
   worker: { format: "es" },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
   },
-} as any);
+}) as any);

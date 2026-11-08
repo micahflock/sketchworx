@@ -2,6 +2,14 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Version label ✅
+
+The right end of the status bar shows `v<package version> · <short commit>` (phones: the commit only); the
+tooltip adds the build date. The values are set at build time in `vite.config.ts` (`__APP_VERSION__`,
+`__APP_COMMIT__`, `__APP_BUILT__`); the commit comes from git, else `GITHUB_SHA`, and the dev server shows
+"dev". Comparing the commit with the latest one on `main` tells whether the browser is still running an
+older cached copy of the offline app.
+
 ## Reordering and deleting sketches that reference each other ✅
 
 A sketch may only reference sketches above it. Moving one above geometry it uses no longer refuses: the move
