@@ -23,6 +23,10 @@ export const theme = {
   dimDriven: "#7a7a7a",
   dimConflict: "#e01b1b",
   construction: "#3f6fd8",
+  /** Geometry of earlier sketches (referenceable, locked). */
+  reference: "#8b93a3",
+  /** Sketches below the active one. */
+  later: "rgba(110,120,140,0.35)",
   openEnd: "#ff7a00",
   fill: "#141414",
   boxWindow: "rgba(0,120,255,0.12)",

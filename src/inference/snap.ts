@@ -45,7 +45,7 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
   // 1. Existing points.
   let best: { id: Id; d: number } | null = null;
   for (const e of Object.values(s.entities)) {
-    if (e.type !== "point" || o.skip?.has(e.id)) continue;
+    if (e.type !== "point" || o.skip?.has(e.id) || s.ext?.[e.id]?.hidden) continue;
     if (e.owner) {
       const own = s.entities[e.owner];
       if (own?.type === "spline" && own.derived) continue;
@@ -72,7 +72,7 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
 
   // 2. Line midpoints.
   for (const e of Object.values(s.entities)) {
-    if (e.type !== "line" || o.skip?.has(e.id)) continue;
+    if (e.type !== "line" || o.skip?.has(e.id) || s.ext?.[e.id]?.hidden) continue;
     const m = mid(ptv(s, e.p1), ptv(s, e.p2));
     if (dist(raw, m) <= tol * 0.8) return { pos: m, midpointOf: e.id, guides: [], glyphs: ["midpoint"] };
   }
@@ -117,7 +117,7 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
   let alignedX = res.hv === "vertical";
   let alignedY = res.hv === "horizontal";
   for (const e of Object.values(s.entities)) {
-    if (e.type !== "point" || o.skip?.has(e.id)) continue;
+    if (e.type !== "point" || o.skip?.has(e.id) || s.ext?.[e.id]?.hidden) continue;
     if (o.from && dist(e, o.from) < 1e-9) continue;
     if (!alignedX && Math.abs(e.x - raw.x) < tol * 0.7 && Math.abs(e.y - raw.y) > tol) {
       pos.x = e.x;
@@ -158,7 +158,7 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
 export function closestCurve(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>): { id: Id; pt: Vec2; d: number } | null {
   let best: { id: Id; pt: Vec2; d: number } | null = null;
   for (const e of Object.values(s.entities)) {
-    if (e.type === "point" || skip?.has(e.id)) continue;
+    if (e.type === "point" || skip?.has(e.id) || s.ext?.[e.id]?.hidden) continue;
     let pt: Vec2 | null = null;
     if (e.type === "line") pt = closestOnSegment(p, ptv(s, e.p1), ptv(s, e.p2));
     else if (e.type === "circle") {

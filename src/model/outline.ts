@@ -8,7 +8,7 @@ import { intersect } from "../geom/curves";
 import type { Box, Vec2 } from "../geom/vec";
 import { boxAdd, ccwSweep, dist, emptyBox } from "../geom/vec";
 import { arcGeom, ptv } from "./sketch";
-import type { Id, Sketch } from "./types";
+import type { Doc, Id, Sketch } from "./types";
 
 /** One piece of an outline, oriented from `start` to `end`. */
 export type Seg =
@@ -222,3 +222,25 @@ export function segCurve(s: Seg): Curve {
   return { kind: "bezier", cps: [s.start, s.c1, s.c2, s.end] };
 }
 
+
+const docCache = new WeakMap<Doc, { diag: boolean; o: Outline }>();
+
+/**
+ * Outline of the document: every visible sketch, each chained into loops on its own (a loop never
+ * runs through two sketches), drawn together.
+ */
+export function docOutline(doc: Doc, diagnostics = true): Outline {
+  const hit = docCache.get(doc);
+  if (hit && (hit.diag || !diagnostics)) return hit.o;
+  const parts = doc.features.filter((f) => f.visible).map((f) => buildOutline(f.sketch, diagnostics));
+  const bounds = emptyBox();
+  for (const p of parts) if (p.bounds.minX <= p.bounds.maxX) (boxAdd(bounds, { x: p.bounds.minX, y: p.bounds.minY }), boxAdd(bounds, { x: p.bounds.maxX, y: p.bounds.maxY }));
+  const o: Outline = {
+    loops: parts.flatMap((p) => p.loops),
+    openEnds: parts.flatMap((p) => p.openEnds),
+    selfIntersections: parts.flatMap((p) => p.selfIntersections),
+    bounds,
+  };
+  docCache.set(doc, { diag: diagnostics, o });
+  return o;
+}

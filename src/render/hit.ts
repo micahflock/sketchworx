@@ -41,7 +41,7 @@ export function hitTest(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>, filter?
   let bestPoint: Hit | null = null;
   let bestCurve: Hit | null = null;
   for (const e of Object.values(s.entities)) {
-    if (skip?.has(e.id)) continue;
+    if (skip?.has(e.id) || s.ext?.[e.id]?.hidden) continue;
     if (filter && !filter(e)) continue;
     if (e.type === "point" && e.owner) {
       const o = s.entities[e.owner];
@@ -85,7 +85,7 @@ export function entitySamples(s: Sketch, e: Entity): Vec2[] {
 export function boxSelect(s: Sketch, box: Box, crossing: boolean): Id[] {
   const out: Id[] = [];
   for (const e of Object.values(s.entities)) {
-    if (e.id === "origin") continue;
+    if (e.id === "origin" || s.ext?.[e.id]) continue; // other sketches' geometry is picked one at a time
     const pts = entitySamples(s, e);
     if (e.type === "point") {
       if (inBox(pts[0], box)) out.push(e.id);

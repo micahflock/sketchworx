@@ -63,6 +63,9 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
   const derived = (e: Entity) =>
     (e.type === "spline" && !!e.derived) || (e.type === "point" && !!e.owner && s.entities[e.owner]?.type === "spline" && !!(s.entities[e.owner] as { derived?: unknown }).derived);
   if (ents.some(derived)) return [];
+  // Geometry of earlier sketches is locked here: a relation needs at least one entity of this sketch.
+  const ext = ents.filter((e) => !!s.ext?.[e.id]);
+  if (ext.length === ents.length) return [];
   const n = ents.length;
   const P = ents.filter((e) => e.type === "point");
   const L = ents.filter((e) => e.type === "line");
@@ -121,6 +124,14 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
       const [a, b] = ents.filter((e) => e !== axis);
       const round = (e: Entity) => e.type === "circle" || e.type === "arc";
       if (a.type === b.type || (round(a) && round(b))) out.add("symmetric");
+    }
+  }
+  if (ext.length) {
+    out.delete("fix"); // one Fix per entity would land on the locked ones
+    if (L.length === n) {
+      // Horizontal/Vertical on lines is one relation per line.
+      out.delete("horizontal");
+      out.delete("vertical");
     }
   }
   return relationOrder.filter((r) => out.has(r));
@@ -186,8 +197,15 @@ export function relationsOf(s: Sketch, ids: Id[]): Relation[] {
   return Object.values(s.relations).filter((r) => r.refs.some((x) => set.has(x)));
 }
 
-export function describeRelation(s: Sketch, r: Relation): string {
-  return r.refs.map((id) => (s.entities[id] ? entityLabel(s.entities[id]) : `${id} (missing)`)).join(", ");
+export function describeRelation(s: Sketch, r: Relation, featureName?: (id: Id) => string | undefined): string {
+  return r.refs
+    .map((id) => {
+      const e = s.entities[id];
+      if (!e) return `${id} (missing)`;
+      const f = s.ext?.[id] && featureName?.(s.ext[id].feature);
+      return f ? `${entityLabel(e)} @ ${f}` : entityLabel(e);
+    })
+    .join(", ");
 }
 
 /** Hide point-point coincident glyphs (chain joints) to avoid clutter, as SolidWorks does. */

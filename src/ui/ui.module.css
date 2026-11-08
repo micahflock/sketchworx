@@ -160,8 +160,145 @@
   cursor: pointer;
   color: #556;
 }
+.leftCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+/* ---------------- Feature tree */
+.ft {
+  flex: none;
+  max-height: 38%;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #c8cfd9;
+  background: #fff;
+}
+.ftHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #f0f3f7;
+  border-bottom: 1px solid #dde2ea;
+}
+.ftToggle {
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: inherit;
+  padding: 0;
+}
+.ftList {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+.ftRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  min-height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.ftRow:hover {
+  background: #f2f6fc;
+}
+.ftActive {
+  background: #e3ecf9;
+  border-color: #9dbbe6;
+}
+.ftActive:hover {
+  background: #e3ecf9;
+}
+.ftHidden .ftLabel {
+  color: #8a93a3;
+}
+.ftIcon {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #4a5366;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 2px;
+  border-radius: 3px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ftIcon:hover:not(:disabled) {
+  background: #d6e2f3;
+}
+.ftIcon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ftState {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  width: 18px;
+}
+.ftBad,
+.ftWarn {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  font-size: 10px;
+  line-height: 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 6px;
+  text-align: center;
+  color: #fff;
+}
+.ftBad {
+  background: #e01b1b;
+}
+.ftWarn {
+  background: #c97a00;
+}
+.ftLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ftActive .ftLabel {
+  font-weight: 600;
+}
+.ftRefs {
+  font-weight: 400;
+  color: #7a8396;
+  font-size: 11px;
+}
+.ftName {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid #9dbbe6;
+  border-radius: 3px;
+}
+.ftActions {
+  flex: none;
+  display: inline-flex;
+}
 .pm {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
   user-select: text;

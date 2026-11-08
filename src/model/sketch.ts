@@ -1,6 +1,6 @@
 import type { Vec2 } from "../geom/vec";
 import { DOC_VERSION } from "./types";
-import type { ArcEntity, CircleEntity, Doc, Entity, Id, LineEntity, PointEntity, Sketch, SplineEntity } from "./types";
+import type { ArcEntity, CircleEntity, Doc, Entity, ExtRef, Id, LineEntity, PointEntity, Sketch, SketchFeature, SplineEntity } from "./types";
 
 /** Every sketch has a fixed origin point that can be related and dimensioned to. */
 export const ORIGIN = "origin";
@@ -10,16 +10,87 @@ export function createSketch(): Sketch {
   return { entities: { [ORIGIN]: originPoint() }, relations: {}, dimensions: {} };
 }
 
+export const FIRST_FEATURE = "sk1";
+
 export function createDoc(): Doc {
   return {
     version: DOC_VERSION,
     nextId: 2,
     variables: [],
-    sketch: createSketch(),
+    features: [{ id: FIRST_FEATURE, name: "Sketch1", visible: true, sketch: createSketch() }],
+    active: FIRST_FEATURE,
   };
 }
 
-export const activeSketch = (doc: Doc): Sketch => doc.sketch;
+/** Index of a feature (falls back to the first one). */
+export function featureIndex(doc: Doc, id: Id = doc.active): number {
+  const i = doc.features.findIndex((f) => f.id === id);
+  return i < 0 ? 0 : i;
+}
+
+export const activeFeature = (doc: Doc): SketchFeature => doc.features[featureIndex(doc)];
+
+/** The stored geometry of a sketch (its own entities only). */
+export const ownSketch = (doc: Doc, id: Id = doc.active): Sketch => doc.features[featureIndex(doc, id)].sketch;
+
+/** Merged entities of the sketches above a feature, memoized on their identities. */
+interface Upstream {
+  keys: unknown[];
+  entities: Record<Id, Entity>;
+  ext: Record<Id, ExtRef>;
+}
+let upstreamCache: Upstream | null = null;
+function upstreamOf(doc: Doc, i: number): Upstream {
+  const keys: unknown[] = [];
+  for (let j = 0; j < i; j++) keys.push(doc.features[j].id, doc.features[j].sketch, doc.features[j].visible);
+  const c = upstreamCache;
+  if (c && c.keys.length === keys.length && c.keys.every((k, j) => k === keys[j])) return c;
+  const entities: Record<Id, Entity> = {};
+  const ext: Record<Id, ExtRef> = {};
+  for (let j = 0; j < i; j++) {
+    const f = doc.features[j];
+    for (const e of Object.values(f.sketch.entities)) {
+      if (e.id === ORIGIN) continue; // every sketch shares the one origin
+      entities[e.id] = e;
+      ext[e.id] = { feature: f.id, hidden: !f.visible };
+    }
+  }
+  upstreamCache = { keys, entities, ext };
+  return upstreamCache;
+}
+
+const contextCache = new WeakMap<Sketch, { up: Upstream; picture: Doc["picture"]; ctx: Sketch }>();
+
+/**
+ * The working view of a sketch: its own geometry, relations and dimensions plus every entity of the
+ * sketches above it (listed in `ext`) and the document picture. With a single sketch and no picture
+ * this is the stored sketch itself.
+ */
+export function contextSketch(doc: Doc, id: Id = doc.active): Sketch {
+  const i = featureIndex(doc, id);
+  const own = doc.features[i].sketch;
+  if (i === 0 && !doc.picture) return own;
+  const up = upstreamOf(doc, i);
+  const hit = contextCache.get(own);
+  if (hit && hit.up === up && hit.picture === doc.picture) return hit.ctx;
+  const ctx: Sketch = {
+    entities: i === 0 ? own.entities : { ...up.entities, ...own.entities },
+    relations: own.relations,
+    dimensions: own.dimensions,
+    ...(doc.picture ? { picture: doc.picture } : {}),
+    ...(i === 0 ? {} : { ext: up.ext }),
+  };
+  contextCache.set(own, { up, picture: doc.picture, ctx });
+  return ctx;
+}
+
+/** The active sketch's working view (see contextSketch). */
+export const activeSketch = (doc: Doc): Sketch => contextSketch(doc);
+
+/** Entity borrowed from an earlier sketch (read-only here). */
+export const isExt = (s: Sketch, id: Id): boolean => !!s.ext?.[id];
+/** Borrowed from a hidden sketch: not drawn or pickable. */
+export const isHiddenExt = (s: Sketch, id: Id): boolean => !!s.ext?.[id]?.hidden;
 
 export function pt(s: Sketch, id: Id): PointEntity {
   const e = s.entities[id];

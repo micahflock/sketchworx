@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { CommandManager } from "./CommandManager";
 import { useApp, useUi } from "./hooks";
 import { PropertyManager } from "./PropertyManager";
+import { FeatureTree } from "./FeatureTree";
 import { StatusBar } from "./StatusBar";
 import { Overlays } from "./Overlays";
 import css from "./ui.module.css";
@@ -19,7 +20,12 @@ export function Shell() {
       <CommandManager />
       <div class={css.main}>
         <div class={`${css.pmWrap} ${pmOpen ? "" : css.pmClosed}`}>
-          {pmOpen && <PropertyManager />}
+          {pmOpen && (
+            <div class={css.leftCol}>
+              <FeatureTree />
+              <PropertyManager />
+            </div>
+          )}
           <button class={css.pmToggle} title={pmOpen ? "Collapse PropertyManager" : "Show PropertyManager"} onClick={() => setPmOpen(!pmOpen)}>
             {pmOpen ? "◂" : "▸"}
           </button>

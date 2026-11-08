@@ -210,7 +210,7 @@ export function drawDimensions(
 ): AnnotationHit[] {
   const hits: AnnotationHit[] = [];
   for (const d of Object.values(s.dimensions)) {
-    if (d.hidden) continue;
+    if (d.hidden || d.refs.some((id) => !s.entities[id])) continue; // dangling: listed in Relations, not drawn
     const hot = opts.hover === d.id || opts.selection.has(d.id);
     const color = opts.conflicts.has(d.id) ? theme.dimConflict : opts.selection.has(d.id) ? theme.selected : d.driven ? theme.dimDriven : theme.dim;
     const extra = opts.labelOffset?.(d.id);

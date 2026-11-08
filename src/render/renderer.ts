@@ -13,6 +13,8 @@ export interface SceneOptions {
   showGrid: boolean;
   /** Ids highlighted because a related glyph/relation is hovered. */
   related?: Set<Id>;
+  /** Draw everything in one faded color (sketches below the active one: visible, not pickable). */
+  muted?: boolean;
 }
 
 export function gridStep(view: View): number {
@@ -64,18 +66,20 @@ export function drawGrid(p: Painter) {
   ctx.fill();
 }
 
-export function entityColor(id: Id, opts: SceneOptions): string {
+export function entityColor(id: Id, opts: SceneOptions, s?: Sketch): string {
+  if (opts.muted) return theme.later;
   if (opts.selection.has(id)) return theme.selected;
   if (opts.hover === id || opts.related?.has(id)) return theme.hover;
+  if (s?.ext?.[id]) return theme.reference; // geometry of an earlier sketch
   const st: EntityState = opts.status.entity[id] ?? "under";
   return theme.state[st];
 }
 
-export function strokeFor(e: Entity, opts: SceneOptions): StrokeStyle {
-  const color = entityColor(e.id, opts);
+export function strokeFor(e: Entity, opts: SceneOptions, s?: Sketch): StrokeStyle {
+  const color = entityColor(e.id, opts, s);
   const emph = opts.selection.has(e.id) || opts.hover === e.id;
   if (e.type === "line" && e.owner) return { color, width: emph ? 2 : 0.9, dash: [4, 3] }; // spline control polygon
-  if (e.type === "spline" && e.derived) return { color: emph ? color : "#6b6b8a", width: emph ? 2.5 : 1.6 };
+  if (e.type === "spline" && e.derived) return { color: emph || opts.muted ? color : "#6b6b8a", width: emph ? 2.5 : 1.6 };
   return {
     color,
     width: emph ? 2.5 : 1.6,
@@ -108,12 +112,15 @@ export function drawEntity(p: Painter, s: Sketch, e: Entity, st: StrokeStyle) {
 
 /** Draw all sketch geometry (curves, then points on top). */
 export function drawSketch(p: Painter, s: Sketch, opts: SceneOptions) {
-  const ents = Object.values(s.entities);
-  for (const e of ents) if (e.type !== "point") drawEntity(p, s, e, strokeFor(e, opts));
+  const ents = Object.values(s.entities).filter((e) => !s.ext?.[e.id]?.hidden);
+  for (const e of ents) if (e.type !== "point") drawEntity(p, s, e, strokeFor(e, opts, s));
   for (const e of ents) {
     if (e.type !== "point") continue;
-    const color = entityColor(e.id, opts);
+    if (opts.muted && e.id === "origin") continue;
+    const color = entityColor(e.id, opts, s);
     const emph = opts.selection.has(e.id) || opts.hover === e.id;
+    // Endpoints of other sketches' curves only show when picked, to keep the view quiet.
+    if (e.owner && (opts.muted || s.ext?.[e.id]) && !emph && !opts.related?.has(e.id)) continue;
     if (e.id === "origin") {
       if (emph || opts.related?.has(e.id)) p.ring(e, 6, color, 2);
       continue;

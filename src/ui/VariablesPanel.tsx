@@ -31,7 +31,7 @@ export function VariablesPanel() {
     setErr(null);
   };
   const usage = (name: string) =>
-    Object.values(doc.sketch.dimensions).filter((d) => new RegExp(`\\b${name}\\b`).test(d.expr)).length;
+    doc.features.flatMap((f) => Object.values(f.sketch.dimensions)).filter((d) => new RegExp(`\\b${name}\\b`).test(d.expr)).length;
 
   return (
     <div class={css.pm}>

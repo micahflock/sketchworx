@@ -14,18 +14,20 @@ function RelationRow({ r }: { r: Relation }) {
   const ui = useUi();
   const s = app.sketch();
   const bad = ui.status.conflicts.includes(r.id);
+  const dangling = ui.status.dangling.includes(r.id);
+  const desc = describeRelation(s, r, (fid) => app.store.doc.features.find((f) => f.id === fid)?.name);
   return (
     <li
       onMouseEnter={() => app.setHover(r.id)}
       onMouseLeave={() => app.setHover(null)}
       onClick={() => app.select([r.id])}
       class={bad ? css.conflict : ""}
-      title={describeRelation(s, r)}
+      title={desc}
     >
       <span>
-        <Glyph type={r.type} bad={bad} /> {relationNames[r.type]}
-        {bad ? " (over defining)" : ""}
-        <span class={css.info}> {describeRelation(s, r)}</span>
+        <Glyph type={r.type} bad={bad || dangling} /> {relationNames[r.type]}
+        {bad ? " (over defining)" : dangling ? " (dangling)" : ""}
+        <span class={css.info}> {desc}</span>
       </span>
       <button
         class={css.small}
@@ -106,6 +108,39 @@ export function ConflictList() {
   );
 }
 
+/** Relations/dimensions whose referenced geometry (usually in an earlier sketch) was deleted. */
+export function DanglingList() {
+  const app = useApp();
+  const ui = useUi();
+  const s = app.sketch();
+  const ids = ui.status.dangling.filter((id) => s.relations[id] || s.dimensions[id]);
+  if (!ids.length) return null;
+  return (
+    <Section title="Dangling references">
+      <div class={css.info}>These point at geometry that no longer exists (deleted in an earlier sketch). They are not solved. Delete them, or undo the deletion.</div>
+      <ul class={css.list}>
+        {ids.map((id) => {
+          const r = s.relations[id];
+          const d = s.dimensions[id];
+          return (
+            <li key={id} class={css.conflict} onMouseEnter={() => app.setHover(id)} onMouseLeave={() => app.setHover(null)}>
+              <span>{r ? <><Glyph type={r.type} bad /> {relationNames[r.type]} <span class={css.info}>{describeRelation(s, r)}</span></> : `Dimension ${d!.expr}`}</span>
+              <button class={css.small} onClick={() => app.commit("Delete", (ed) => ed.deleteAny([id]))}>
+                Delete
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {ids.length > 1 && (
+        <button class={css.small} style={{ marginTop: "6px" }} onClick={() => app.commit("Delete Dangling", (ed) => ed.deleteAny(ids))}>
+          Delete all dangling
+        </button>
+      )}
+    </Section>
+  );
+}
+
 type Filter = "all" | "selected" | "dangling" | "over";
 
 /** Display/Delete Relations panel. */
@@ -161,6 +196,7 @@ export function RelationsPanel() {
         </button>
       )}
       <ConflictList />
+      <DanglingList />
     </div>
   );
 }

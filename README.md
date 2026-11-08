@@ -13,7 +13,8 @@ npm run build    # static build in dist/
 
 See `PROGRESS.md` for milestone status, decisions and known gaps.
 
-- `src/model` document, relations, dimensions, expressions, outlines (pure data, no DOM)
+- `src/model` document, feature tree (ordered sketches that reference earlier ones), relations, dimensions,
+  expressions, outlines (pure data, no DOM)
 - `src/solver` solver interface, relation → constraint translation, DOF analysis, PlaneGCS adapter + worker
 - `src/solver/planegcs` vendored PlaneGCS WebAssembly build with the Equal Curvature constraint (`solver-wasm/` rebuilds it)
 - `src/tools`, `src/inference`, `src/render`, `src/ui`, `src/io` as in the spec

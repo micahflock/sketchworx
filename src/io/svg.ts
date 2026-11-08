@@ -2,7 +2,7 @@ import { toCubics } from "../geom/bezier";
 import type { Box, Vec2 } from "../geom/vec";
 import { boxAdd, boxValid, emptyBox } from "../geom/vec";
 import type { Loop, Outline, Seg } from "../model/outline";
-import { buildOutline, segPoints } from "../model/outline";
+import { docOutline, segPoints } from "../model/outline";
 import { arcGeom, ptv } from "../model/sketch";
 import type { Doc, Sketch } from "../model/types";
 
@@ -104,12 +104,14 @@ export function outlineBounds(o: Outline): Box {
 
 /** Filled outlines as SVG: one path, nonzero fill, viewBox from the geometry bounds. */
 export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
-  const s = doc.sketch;
-  const outline = buildOutline(s);
+  const outline = docOutline(doc);
   const box = outlineBounds(outline);
   const paths = [`  <path d="${loopsToPathData(outline.loops, o.arcs)}" fill="#000" fill-rule="nonzero"/>`];
   if (o.construction) {
-    const cd = constructionPath(s, 0);
+    const cd = doc.features
+      .filter((f) => f.visible)
+      .map((f) => constructionPath(f.sketch, 0))
+      .join("");
     if (cd) paths.push(`  <path d="${cd}" fill="none" stroke="#3f6fd8" stroke-width="1" stroke-dasharray="8 3 2 3" vector-effect="non-scaling-stroke"/>`);
   }
   let vb = { x: 0, y: 0, w: 100, h: 100 };
@@ -128,7 +130,7 @@ export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
 
 /** Art view (black fills) of the sketch as a PNG of the given size. */
 export async function exportPng(doc: Doc, size: number): Promise<Blob> {
-  const outline = buildOutline(doc.sketch);
+  const outline = docOutline(doc);
   const b = outlineBounds(outline);
   const canvas = document.createElement("canvas");
   canvas.width = size;

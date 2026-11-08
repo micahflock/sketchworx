@@ -293,23 +293,28 @@ export function refreshExpressions(doc: Doc): Doc {
     }
     return v;
   });
-  const s = doc.sketch;
-  let dims: Sketch["dimensions"] | null = null;
-  for (const d of Object.values(s.dimensions)) {
-    if (!isExpression(d.expr)) continue;
-    let val: number;
-    try {
-      val = evalExpr(parseExpr(d.expr), (n) => ev.values.get(n));
-    } catch {
-      continue;
+  // Every sketch uses the same variables.
+  const features = doc.features.map((f) => {
+    const s = f.sketch;
+    let dims: Sketch["dimensions"] | null = null;
+    for (const d of Object.values(s.dimensions)) {
+      if (!isExpression(d.expr)) continue;
+      let val: number;
+      try {
+        val = evalExpr(parseExpr(d.expr), (n) => ev.values.get(n));
+      } catch {
+        continue;
+      }
+      if (Number.isFinite(val) && val !== d.value) {
+        dims ??= { ...s.dimensions };
+        dims[d.id] = { ...d, value: val };
+      }
     }
-    if (Number.isFinite(val) && val !== d.value) {
-      dims ??= { ...s.dimensions };
-      dims[d.id] = { ...d, value: val };
-    }
-  }
-  if (dims) changed = true;
-  return changed ? { ...doc, variables, sketch: dims ? { ...s, dimensions: dims } : s } : doc;
+    if (!dims) return f;
+    changed = true;
+    return { ...f, sketch: { ...s, dimensions: dims } };
+  });
+  return changed ? { ...doc, variables, features } : doc;
 }
 
 export const dimPrefix = (d: Dimension) => (d.type === "radius" ? "R" : d.type === "diameter" ? "⌀" : d.type === "arcLength" ? "⌒" : "");

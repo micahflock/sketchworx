@@ -9,13 +9,15 @@ export interface SolverPoint {
   id: SId;
   x: number;
   y: number;
+  /** Locked (geometry of an earlier sketch): not a solver unknown. */
+  fixed?: boolean;
 }
 
 export type SolverGeom =
   | { kind: "line"; id: SId; p1: SId; p2: SId }
-  | { kind: "circle"; id: SId; c: SId; r: number }
-  /** Counter-clockwise from s to e. Radius is implied by |s - c|. */
-  | { kind: "arc"; id: SId; c: SId; s: SId; e: SId };
+  | { kind: "circle"; id: SId; c: SId; r: number; fixed?: boolean }
+  /** Counter-clockwise from s to e. Radius is implied by |s - c|. `fixed`: locked with its points. */
+  | { kind: "arc"; id: SId; c: SId; s: SId; e: SId; fixed?: boolean };
 
 export interface SolverParams {
   points: SolverPoint[];
@@ -112,8 +114,10 @@ export interface SketchStatus {
   entity: Record<string, EntityState>;
   /** Relation/dimension ids flagged red. */
   conflicts: string[];
+  /** Relations/dimensions whose referenced geometry no longer exists (shown, not solved). */
+  dangling: string[];
   solving: boolean;
   ms: number;
 }
 
-export const emptyStatus = (): SketchStatus => ({ state: "empty", dof: 0, entity: {}, conflicts: [], solving: false, ms: 0 });
+export const emptyStatus = (): SketchStatus => ({ state: "empty", dof: 0, entity: {}, conflicts: [], dangling: [], solving: false, ms: 0 });

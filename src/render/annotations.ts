@@ -71,7 +71,7 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
           : r.refs;
     for (const id of targets) {
       const e = s.entities[id];
-      if (!e) continue;
+      if (!e || s.ext?.[id]?.hidden) continue;
       const k = count.get(id) ?? 0;
       count.set(id, k + 1);
       const { at, dir } = glyphAnchor(p, s, e);

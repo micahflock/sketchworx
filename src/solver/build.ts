@@ -53,20 +53,25 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
   const points: SolverPoint[] = [];
   const geoms: SolverGeom[] = [];
   const derived = derivedIds(s);
+  const locked = s.ext ? lockedRefs(s) : null;
   for (const e of Object.values(s.entities)) {
     if (derived.has(e.id)) continue;
+    // Geometry of earlier sketches: only what this sketch references, and locked in place.
+    const fixed = !!s.ext?.[e.id];
+    if (fixed && !locked!.has(e.id)) continue;
+    const fx = fixed ? { fixed: true as const } : {};
     switch (e.type) {
       case "point":
-        points.push({ id: e.id, x: e.x, y: e.y });
+        points.push({ id: e.id, x: e.x, y: e.y, ...fx });
         break;
       case "line":
         geoms.push({ kind: "line", id: e.id, p1: e.p1, p2: e.p2 });
         break;
       case "circle":
-        geoms.push({ kind: "circle", id: e.id, c: e.c, r: e.r });
+        geoms.push({ kind: "circle", id: e.id, c: e.c, r: e.r, ...fx });
         break;
       case "arc":
-        geoms.push({ kind: "arc", id: e.id, c: e.c, s: e.s, e: e.e });
+        geoms.push({ kind: "arc", id: e.id, c: e.c, s: e.s, e: e.e, ...fx });
         break;
       case "spline":
         break; // control vertices are points; polygon sides are construction lines
@@ -102,6 +107,23 @@ export function buildSolverInput(s: Sketch, opts: { dimensions?: boolean } = {})
       extras.push({ id: c.t, value: bezierClosest(cps, ptv(s, c.p)).t });
     }
   return { params: { points, geoms, ...(extras.length ? { extras } : {}) }, constraints, unsupported };
+}
+
+/** Borrowed (ext) entities this sketch's relations and dimensions use, with their defining points. */
+function lockedRefs(s: Sketch): Set<Id> {
+  const out = new Set<Id>();
+  const add = (id: Id) => {
+    const e = s.entities[id];
+    if (!e || !s.ext?.[id] || out.has(id)) return;
+    out.add(id);
+    if (e.type !== "point") for (const p of definingPoints(e)) out.add(p);
+  };
+  for (const r of Object.values(s.relations)) r.refs.forEach(add);
+  for (const d of Object.values(s.dimensions)) {
+    d.refs.forEach(add);
+    for (const pair of d.align ?? []) pair.forEach(add);
+  }
+  return out;
 }
 
 type C = SolverConstraint;

@@ -131,14 +131,39 @@ export interface Sketch {
   entities: Record<Id, Entity>;
   relations: Record<Id, Relation>;
   dimensions: Record<Id, Dimension>;
+  /** Document background picture (copied into the working view; stored on the Doc). */
   picture?: Picture;
+  /**
+   * Working view only (never stored): entities borrowed from earlier sketches, by id → source sketch.
+   * They can be referenced by relations and dimensions but not changed from this sketch.
+   */
+  ext?: Record<Id, ExtRef>;
+}
+
+export interface ExtRef {
+  /** Sketch feature the entity belongs to. */
+  feature: Id;
+  /** That sketch is hidden: the entity still drives this sketch but is not drawn or pickable. */
+  hidden: boolean;
+}
+
+/** One sketch in the feature tree. */
+export interface SketchFeature {
+  id: Id;
+  name: string;
+  visible: boolean;
+  sketch: Sketch;
 }
 
 export interface Doc {
   version: number;
   nextId: number;
   variables: Variable[];
-  sketch: Sketch;
+  /** Feature tree, in rebuild order: a sketch may reference geometry of the sketches above it. */
+  features: SketchFeature[];
+  /** The sketch being edited. */
+  active: Id;
+  picture?: Picture;
 }
 
-export const DOC_VERSION = 2;
+export const DOC_VERSION = 3;

@@ -133,6 +133,12 @@ export class SelectTool implements Tool {
     const s = this.host.sketch();
     const e = s.entities[id];
     if (!e) return;
+    if (s.ext?.[id]) {
+      // Geometry of an earlier sketch is locked here.
+      this.host.flash("That belongs to an earlier sketch. Edit that sketch in the feature tree to change it");
+      this.pending = null;
+      return;
+    }
     const base: { point?: Id; radiusOf?: Id; x: number; y: number; r?: number }[] = [];
     if (e.type === "point") base.push({ point: id, ...ptv(s, id) });
     else if (e.type === "circle") {

@@ -15,6 +15,8 @@ export interface UiState {
   /** Short instruction for the status bar ("Click to set the end point"). */
   prompt: string;
   status: SketchStatus;
+  /** Rebuild state of every sketch in the feature tree. */
+  featureStatus: Record<Id, { state: SketchStatus["state"]; dangling: number }>;
   panel: "auto" | "relations" | "variables" | "keyboard" | "export";
   viewMode: ViewMode;
   showShortcutBar: { x: number; y: number } | null;
@@ -56,6 +58,7 @@ export class Store {
       toolId: "select",
       prompt: "",
       status: emptyStatus(),
+      featureStatus: {},
       panel: "auto",
       viewMode: "sketch",
       showShortcutBar: null,

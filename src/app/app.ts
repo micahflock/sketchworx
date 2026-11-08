@@ -4,8 +4,11 @@ import type { SnapOptions, SnapResult } from "../inference/snap";
 import { snap } from "../inference/snap";
 import { applyCommand } from "../model/editor";
 import type { CommandFn } from "../model/editor";
-import { activeSketch } from "../model/sketch";
+import { activeSketch, featureIndex, ownSketch } from "../model/sketch";
 import type { Doc, Id, Sketch } from "../model/types";
+import { addFeature, deleteFeature, moveFeature, renameFeature, setActive, setVisible } from "../model/features";
+import { docOutline } from "../model/outline";
+import { loopsToPathData } from "../io/svg";
 import { entitySamples, hitTest } from "../render/hit";
 import type { Hit } from "../render/hit";
 import { Painter } from "../render/painter";
@@ -107,7 +110,7 @@ export class App implements ToolHost {
     reg(new MirrorTool(this));
     reg(new DynamicMirrorTool(this));
     reg(new PictureScaleTool(this));
-    this.solver.postSolve = (doc) => applyCommand(doc, recomputeDerived);
+    this.solver.postSolve = (doc, featureId) => applyCommand(doc, recomputeDerived, featureId);
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
   }
@@ -212,10 +215,16 @@ export class App implements ToolHost {
       ...opts,
     });
   }
-  hit(world: Vec2, pointerType?: string, opts?: { skip?: Set<Id>; points?: boolean; curves?: boolean }): Hit | null {
-    return hitTest(this.sketch(), world, this.tol(pointerType), opts?.skip, (e) =>
-      e.type === "point" ? opts?.points !== false : opts?.curves !== false,
+  hit(world: Vec2, pointerType?: string, opts?: { skip?: Set<Id>; points?: boolean; curves?: boolean; own?: boolean }): Hit | null {
+    const s = this.sketch();
+    return hitTest(s, world, this.tol(pointerType), opts?.skip, (e) =>
+      opts?.own && s.ext?.[e.id] ? false : e.type === "point" ? opts?.points !== false : opts?.curves !== false,
     );
+  }
+  /** Name of the sketch an entity of the working view belongs to, when it is borrowed. */
+  extFeatureName(id: Id): string | null {
+    const ref = this.sketch().ext?.[id];
+    return ref ? (this.store.doc.features.find((f) => f.id === ref.feature)?.name ?? null) : null;
   }
   hitAnnotation(screen: Vec2): { id: Id; kind: "dimension" | "relation" } | null {
     const h = hitAnnotations(this.annotationHits, screen);
@@ -260,6 +269,9 @@ export class App implements ToolHost {
 
   /** Place a new dimension; prompt for driven if it would over-define the sketch. */
   async placeDimension(draft: Omit<Dimension, "id">) {
+    // Between earlier sketches' geometry only: it can measure, not drive.
+    const ext = this.sketch().ext;
+    if (ext && draft.refs.every((r) => ext[r] || r === "origin")) draft = { ...draft, driven: true };
     let id = "";
     this.commit("Smart Dimension", (ed) => (id = ed.addDimension(draft)));
     await this.solver.settled();
@@ -300,6 +312,8 @@ export class App implements ToolHost {
     const s = this.sketch();
     const d = s.dimensions[id];
     if (!d || d.driven === driven) return;
+    if (!driven && d.refs.every((r) => s.ext?.[r] || r === "origin"))
+      return this.flash("This dimension only measures other sketches' geometry, so it cannot drive it", "error");
     const value = Math.abs(measure(s, d));
     this.commit(driven ? "Make Driven" : "Make Driving", (ed) =>
       ed.updateDimension(id, driven ? { driven } : { driven, value, expr: isExpression(d.expr) ? d.expr : fmt(value) }),
@@ -310,16 +324,23 @@ export class App implements ToolHost {
   renameVariable(from: string, to: string) {
     const re = new RegExp(`\\b${from}\\b`, "g");
     const doc = this.store.doc;
-    const dims = { ...doc.sketch.dimensions };
-    for (const d of Object.values(dims))
-      if (re.test(d.expr)) {
+    const features = doc.features.map((f) => {
+      const dims = { ...f.sketch.dimensions };
+      let hit = false;
+      for (const d of Object.values(dims)) {
         re.lastIndex = 0;
-        dims[d.id] = { ...d, expr: d.expr.replace(re, to) };
+        if (re.test(d.expr)) {
+          re.lastIndex = 0;
+          dims[d.id] = { ...d, expr: d.expr.replace(re, to) };
+          hit = true;
+        }
       }
+      return hit ? { ...f, sketch: { ...f.sketch, dimensions: dims } } : f;
+    });
     const next: Doc = {
       ...doc,
       variables: doc.variables.map((v) => ({ ...v, name: v.name === from ? to : v.name, expr: v.expr.replace(re, to) })),
-      sketch: { ...doc.sketch, dimensions: dims },
+      features,
     };
     this.commitDoc(refreshExpressions(next), "Rename Variable");
   }
@@ -349,15 +370,15 @@ export class App implements ToolHost {
     const b = this.view.visibleBox();
     const scale = ((b.maxX - b.minX) * 0.6) / img.naturalWidth;
     this.commit("Sketch Picture", (ed) =>
-      ed.setSketchField("picture", { dataUrl, x: b.minX + (b.maxX - b.minX) * 0.2, y: b.minY + (b.maxY - b.minY) * 0.2, scale, opacity: 0.5 }),
+      ed.setPicture({ dataUrl, x: b.minX + (b.maxX - b.minX) * 0.2, y: b.minY + (b.maxY - b.minY) * 0.2, scale, opacity: 0.5 }),
     );
     this.flash("Picture added. Use Calibrate scale in the PropertyManager to set its size from a known feature");
   }
   setPicture(patch: Partial<NonNullable<Sketch["picture"]>> | null) {
     const pic = this.sketch().picture;
-    if (patch === null) return void this.commit("Remove Picture", (ed) => ed.setSketchField("picture", undefined));
+    if (patch === null) return void this.commit("Remove Picture", (ed) => ed.setPicture(undefined));
     if (!pic) return;
-    this.commit("Edit Picture", (ed) => ed.setSketchField("picture", { ...pic, ...patch }));
+    this.commit("Edit Picture", (ed) => ed.setPicture({ ...pic, ...patch }));
   }
   private imageFor(url: string): HTMLImageElement | null {
     let img = this.images.get(url);
@@ -446,7 +467,7 @@ export class App implements ToolHost {
   }
   private pruneSelection() {
     const s = this.sketch();
-    const sel = this.store.state.selection.filter((id) => s.entities[id] || s.relations[id] || s.dimensions[id]);
+    const sel = this.store.state.selection.filter((id) => (s.entities[id] && !s.ext?.[id]?.hidden) || s.relations[id] || s.dimensions[id]);
     if (sel.length !== this.store.state.selection.length) this.store.select(sel);
   }
 
@@ -478,13 +499,15 @@ export class App implements ToolHost {
   deleteSelection() {
     const sel = this.store.state.selection;
     if (!sel.length) return;
+    const s = this.sketch();
+    if (sel.every((id) => s.ext?.[id])) return this.flash(`That belongs to ${this.extFeatureName(sel[0])}. Edit that sketch to change it`, "error");
     this.commit("Delete", (ed) => ed.deleteAny(sel));
     this.store.set({ selection: [], hover: null, contextBar: null });
   }
 
   toggleConstruction() {
     const s = this.sketch();
-    const ids = this.store.state.selection.filter((id) => s.entities[id] && s.entities[id].type !== "point");
+    const ids = this.store.state.selection.filter((id) => s.entities[id] && s.entities[id].type !== "point" && !s.ext?.[id]);
     if (!ids.length) return this.flash("Select sketch entities to toggle construction");
     const on = !ids.every((id) => s.entities[id].construction);
     this.commit("For construction", (ed) => {
@@ -493,11 +516,15 @@ export class App implements ToolHost {
   }
 
   zoomToFit() {
-    const s = this.sketch();
     const b = emptyBox();
-    for (const e of Object.values(s.entities)) {
-      if (e.id === "origin") continue;
-      for (const p of entitySamples(s, e)) boxAdd(b, p);
+    const doc = this.store.doc;
+    for (const f of doc.features) {
+      if (!f.visible && f.id !== doc.active) continue;
+      const s = f.sketch;
+      for (const e of Object.values(s.entities)) {
+        if (e.id === "origin") continue;
+        for (const p of entitySamples(s, e)) boxAdd(b, p);
+      }
     }
     if (!boxValid(b)) {
       this.view.cx = 0;
@@ -505,6 +532,48 @@ export class App implements ToolHost {
       this.view.scale = 1;
     } else this.view.fit(b);
     this.requestRender();
+  }
+
+  // ------------------------------------------------------------------ feature tree
+  /** Leave the current sketch cleanly (tool, selection, open boxes) before switching. */
+  private leaveSketch() {
+    this.tool.cancel();
+    if (this.tool.id !== "select") this.setTool("select");
+    this.store.set({ selection: [], hover: null, contextBar: null, modify: null, showShortcutBar: null, dynamicMirror: null });
+  }
+  /** Add a sketch at the end of the tree and start editing it. */
+  newSketch() {
+    this.leaveSketch();
+    const next = addFeature(this.store.doc);
+    this.commitDoc(next, "New Sketch");
+    this.flash(`Editing ${next.features[next.features.length - 1].name}. Earlier sketches can be referenced but not changed from here`);
+  }
+  /** Edit another sketch. Not an undo step of its own: undo returns to the sketch a change was made in. */
+  activateSketch(id: Id) {
+    const doc = this.store.doc;
+    if (doc.active === id || this.store.inTransient) return;
+    this.leaveSketch();
+    this.store.amendDoc(setActive(doc, id));
+    this.afterChange();
+  }
+  renameSketch(id: Id, name: string) {
+    this.commitDoc(renameFeature(this.store.doc, id, name), "Rename Sketch");
+  }
+  setSketchVisible(id: Id, visible: boolean) {
+    this.commitDoc(setVisible(this.store.doc, id, visible), visible ? "Show Sketch" : "Hide Sketch");
+    if (!visible) this.pruneSelection();
+  }
+  deleteSketch(id: Id) {
+    const r = deleteFeature(this.store.doc, id);
+    if (typeof r === "string") return this.flash(r, "error");
+    if (r.active !== this.store.doc.active) this.leaveSketch();
+    this.commitDoc(r, "Delete Sketch");
+  }
+  moveSketch(id: Id, dir: -1 | 1) {
+    const r = moveFeature(this.store.doc, id, dir);
+    if (typeof r === "string") return this.flash(r, "error");
+    this.leaveSketch();
+    this.commitDoc(r, "Reorder Sketches");
   }
 
   // ------------------------------------------------------------------ files
@@ -686,7 +755,7 @@ export class App implements ToolHost {
       else if (k === "y" || (k === "z" && e.shiftKey)) this.redo();
       else if (k === "s") this.saveFile(e.shiftKey);
       else if (k === "o") this.openFile();
-      else if (k === "a") this.select(Object.keys(this.sketch().entities));
+      else if (k === "a") this.select(Object.keys(ownSketch(this.store.doc).entities));
       else return;
       e.preventDefault();
       return;
@@ -814,7 +883,7 @@ export class App implements ToolHost {
     ctx.beginPath();
     ctx.rect(0, 0, v.width, v.height);
     ctx.clip();
-    if (mode === "art") this.drawArt(ctx, v, s);
+    if (mode === "art") this.drawArt(ctx, v);
     else {
       ctx.fillStyle = theme.bg;
       ctx.fillRect(0, 0, v.width, v.height);
@@ -832,15 +901,14 @@ export class App implements ToolHost {
       art.width = this.canvasW - v.width;
       art.height = v.height;
       art.dpr = v.dpr;
-      const { o } = outlineOf(s, false);
-      const b = outlineBounds(o);
+      const b = outlineBounds(docOutline(this.store.doc, false));
       if (boxValid(b)) art.fit(b, 30);
       ctx.save();
       ctx.translate(v.width, 0);
       ctx.beginPath();
       ctx.rect(0, 0, art.width, art.height);
       ctx.clip();
-      this.drawArt(ctx, art, s, v.width);
+      this.drawArt(ctx, art, v.width);
       ctx.restore();
       ctx.fillStyle = "#b9c3d2";
       ctx.fillRect(v.width - 0.5, 0, 1, v.height);
@@ -848,10 +916,10 @@ export class App implements ToolHost {
   }
 
   /** Art view: black nonzero fills on white, no chrome. */
-  private drawArt(ctx: CanvasRenderingContext2D, v: View, s: Sketch, offsetX = 0) {
+  private drawArt(ctx: CanvasRenderingContext2D, v: View, offsetX = 0) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, v.width, v.height);
-    const { path } = outlineOf(s, false);
+    const path = this.docPath();
     ctx.save();
     const k = v.dpr;
     ctx.setTransform(k * v.scale, 0, 0, k * v.scale, k * (offsetX + v.width / 2 - v.cx * v.scale), k * (v.height / 2 + v.cy * v.scale));
@@ -872,15 +940,32 @@ export class App implements ToolHost {
     ctx.restore();
   }
 
+  /** Filled outline of every visible sketch (Art view, export). */
+  private pathCache: { doc: Doc; path: Path2D } | null = null;
+  private docPath(): Path2D {
+    const doc = this.store.doc;
+    if (this.pathCache?.doc !== doc) this.pathCache = { doc, path: new Path2D(loopsToPathData(docOutline(doc, false).loops, "arc")) };
+    return this.pathCache.path;
+  }
+
   /** Overridable layer drawing (relations, dimensions, fills are added later). */
   drawLayers(p: Painter, s: Sketch, opts: SceneOptions) {
-    // Fill preview and loop diagnostics (diagnostics are skipped while dragging to stay fast).
+    const doc = this.store.doc;
+    const ai = featureIndex(doc);
+    // Fill preview of every visible sketch, each chained on its own; diagnostics only for the
+    // sketch being edited (and skipped while dragging to stay fast).
     const live = this.store.inTransient;
-    const { o, path } = outlineOf(s, !live);
-    fillOutline(p.ctx, p.view, path, "rgba(30,40,70,0.10)");
-    if (this.store.state.combs) drawCurvatureCombs(p, s);
+    fillOutline(p.ctx, p.view, this.docPath(), "rgba(30,40,70,0.10)");
+    const own = doc.features[ai].sketch;
+    const o = live ? null : outlineOf(own, true).o;
+    // Sketches below the active one: faded, not pickable.
+    for (let i = ai + 1; i < doc.features.length; i++) {
+      const f = doc.features[i];
+      if (f.visible) drawSketch(p, f.sketch, { ...opts, muted: true, selection: new Set(), hover: null, related: undefined });
+    }
+    if (this.store.state.combs) drawCurvatureCombs(p, own);
     drawSketch(p, s, opts);
-    if (!live) drawDiagnostics(p, o);
+    if (o) drawDiagnostics(p, o);
     const conflicts = new Set(this.store.state.status.conflicts);
     const glyphs = drawRelationGlyphs(p, s, conflicts, this.store.state.hover, opts.selection);
     const sel = this.tools.get("select") as SelectTool;

@@ -8,7 +8,8 @@ import { fmt } from "../tools/line";
 import type { ToolOption } from "../tools/tool";
 import { useApp, useUi } from "./hooks";
 import css from "./ui.module.css";
-import { ConflictList, RelationsSections, RelationsPanel } from "./RelationsUi";
+import { ConflictList, DanglingList, RelationsSections, RelationsPanel } from "./RelationsUi";
+import { activeFeature } from "../model/sketch";
 import { VariablesPanel } from "./VariablesPanel";
 import { KeyboardPanel } from "./KeyboardPanel";
 import { ExportPanel } from "./ExportPanel";
@@ -194,8 +195,9 @@ export function PropertyManager() {
   if (!ui.selection.length) {
     return (
       <div class={css.pm}>
-        <div class={css.pmTitle}>Sketch</div>
+        <div class={css.pmTitle}>{activeFeature(app.store.doc).name}</div>
         <ConflictList />
+        <DanglingList />
         <div class={css.info}>{ui.prompt}</div>
         <SketchSummary s={s} />
         <PictureSection />
@@ -205,28 +207,41 @@ export function PropertyManager() {
   const single = ents.length === 1 ? ents[0] : null;
   const dim = ui.selection.length === 1 ? s.dimensions[ui.selection[0]] : undefined;
   if (dim) return <DimensionPm id={dim.id} />;
+  const own = ents.filter((e) => !s.ext?.[e.id]);
+  const lockedIn = single && s.ext?.[single.id] ? app.extFeatureName(single.id) : null;
+  const label = (id: string) => {
+    const e = s.entities[id];
+    if (!e) return s.relations[id] ? `Relation ${id}` : s.dimensions[id] ? `Dimension ${id}` : id;
+    const f = app.extFeatureName(id);
+    return f ? `${entityLabel(e)} @ ${f}` : entityLabel(e);
+  };
   return (
     <div class={css.pm}>
-      <div class={css.pmTitle}>{single ? entityLabel(single) : `${ui.selection.length} items selected`}</div>
+      <div class={css.pmTitle}>{single ? label(single.id) : `${ui.selection.length} items selected`}</div>
+      {lockedIn && (
+        <div class={css.prompt}>
+          Belongs to {lockedIn}, so it is locked here. Relate or dimension to it, or edit {lockedIn} in the tree to change it.
+        </div>
+      )}
       <ConflictList />
       <Section title="Selected Entities">
         <ul class={css.list}>
           {ui.selection.map((id) => (
             <li key={id} onMouseEnter={() => app.setHover(id)} onMouseLeave={() => app.setHover(null)}>
-              {s.entities[id] ? entityLabel(s.entities[id]) : s.relations[id] ? `Relation ${id}` : s.dimensions[id] ? `Dimension ${id}` : id}
+              {label(id)}
             </li>
           ))}
         </ul>
       </Section>
       <RelationsSections />
-      {ents.some((e) => e.type !== "point") && (
+      {own.some((e) => e.type !== "point") && (
         <Section title="Options">
           <label class={css.check}>
-            <input type="checkbox" checked={ents.filter((e) => e.type !== "point").every((e) => e.construction)} onChange={() => app.toggleConstruction()} /> For construction
+            <input type="checkbox" checked={own.filter((e) => e.type !== "point").every((e) => e.construction)} onChange={() => app.toggleConstruction()} /> For construction
           </label>
         </Section>
       )}
-      {single && (
+      {single && !lockedIn && (
         <Section title="Parameters">
           <Parameters s={s} e={single} />
         </Section>
@@ -316,7 +331,7 @@ function PictureSection() {
 }
 
 function SketchSummary({ s }: { s: Sketch }) {
-  const n = Object.values(s.entities).filter((e) => e.id !== "origin" && (e.type !== "point" || !e.owner)).length;
+  const n = Object.values(s.entities).filter((e) => e.id !== "origin" && !s.ext?.[e.id] && (e.type !== "point" || !e.owner)).length;
   return (
     <div class={css.info}>
       {n} entities · {Object.keys(s.relations).length} relations · {Object.keys(s.dimensions).length} dimensions

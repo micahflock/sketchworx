@@ -27,7 +27,7 @@ export interface ToolHost {
   /** Snap tolerance in sketch units for the given pointer type. */
   tol(pointerType?: string): number;
   snap(raw: Vec2, opts?: Partial<SnapOptions>): SnapResult;
-  hit(world: Vec2, pointerType?: string, opts?: { skip?: Set<Id>; points?: boolean; curves?: boolean }): Hit | null;
+  hit(world: Vec2, pointerType?: string, opts?: { skip?: Set<Id>; points?: boolean; curves?: boolean; /** Only the active sketch's own geometry (not earlier sketches'). */ own?: boolean }): Hit | null;
   /** Hit test non-geometry objects (dimensions, relation glyphs) at a screen position. */
   hitAnnotation(screen: Vec2): { id: Id; kind: "dimension" | "relation" } | null;
   selection(): Id[];

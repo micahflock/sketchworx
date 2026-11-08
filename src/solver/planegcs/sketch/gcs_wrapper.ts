@@ -254,7 +254,8 @@ export class GcsWrapper {
         const p = this.sketch_index.get_sketch_point(c.c_id);
         this.push_point(p);
 
-        this.push_p_params(c.id, [c.radius], false);
+        // Sketchworx: honour `fixed` on circles (locked reference geometry).
+        this.push_p_params(c.id, [c.radius], (c as { fixed?: boolean }).fixed === true);
     }
 
     private push_arc(a: SketchArc) {
@@ -267,7 +268,8 @@ export class GcsWrapper {
         const end = this.sketch_index.get_sketch_point(a.end_id);
         this.push_point(end);
 
-        this.push_p_params(a.id, [a.start_angle, a.end_angle, a.radius], false);
+        // Sketchworx: honour `fixed` on arcs (locked reference geometry).
+        this.push_p_params(a.id, [a.start_angle, a.end_angle, a.radius], (a as { fixed?: boolean }).fixed === true);
     }
 
     private push_ellipse(e: SketchEllipse) {

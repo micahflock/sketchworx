@@ -37,6 +37,7 @@ export function cutters(s: Sketch, skip: Id): { id: Id; cv: Curve }[] {
   for (const e of Object.values(s.entities)) {
     if (e.id === skip || e.type === "point") continue;
     if (e.type === "line" && e.owner) continue;
+    if (s.ext?.[e.id]?.hidden) continue; // hidden sketches do not bound anything
     const cv = entityCurve(s, e);
     if (cv) out.push({ id: e.id, cv });
   }

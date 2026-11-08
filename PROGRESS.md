@@ -2,6 +2,47 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Feature tree (after the scope change) ✅
+
+A document is an ordered list of sketches (file format version 3), shown in the **Sketches** tree above the
+PropertyManager, like the SolidWorks FeatureManager.
+
+- **New sketch** adds a sketch at the bottom and starts editing it. Click a sketch in the tree to edit it;
+  switching is not an undo step, so undo returns to the sketch a change was made in.
+- **References**: a sketch sees every entity of the sketches above it, drawn gray. It can snap to them and
+  relate or dimension to them (the relations and dimensions are stored in the new sketch). That geometry is
+  locked: it cannot be dragged, deleted, trimmed, extended, filleted or toggled to construction from the later
+  sketch. A relation needs at least one entity of the active sketch; a dimension between locked geometry only
+  is driven. Offset Entities and Mirror work on earlier geometry and stay linked to it.
+- **Solving**: sketches rebuild top to bottom. Each one solves with the referenced geometry of earlier sketches
+  as fixed PlaneGCS parameters (only what it references, so DOF counts only its own geometry; locked arcs keep
+  their radius and angles and get no arc rules). Editing a sketch re-solves it and every sketch below; while
+  dragging, the sketches below update live (latest frame wins). Variables are global, so changing one rebuilds
+  everything.
+- **Status per sketch**: the tree shows each sketch's state (under / fully / over defined, failed) and a
+  warning when it has dangling references.
+- **Dangling references**: deleting geometry that a later sketch references keeps that sketch's relation or
+  dimension, unsolved, listed under "Dangling references" (Delete / Delete all) and in Display/Delete
+  Relations. Trimming in an earlier sketch re-points later sketches' references to the split pieces.
+- **Order**: a sketch may only reference sketches above it. Move up/down and Delete are refused (with the
+  reason) when they would break that; the last sketch cannot be deleted.
+- **Visibility**: the eye toggles a sketch. Hidden sketches still solve and drive later ones but are not drawn,
+  snapped to or picked. While editing a sketch, the visible sketches below it are drawn faded and are not
+  pickable.
+- **Fills and export**: each visible sketch is chained into loops on its own (a loop never runs through two
+  sketches), and the loops are combined. A shape in one sketch does not cut a hole in another sketch's fill.
+- The sketch picture now belongs to the document. Version 1 and 2 files open as a single "Sketch1".
+- Vendored wrapper change: `src/solver/planegcs/sketch/gcs_wrapper.ts` honours `fixed` on circles and arcs
+  (two lines, marked "Sketchworx").
+
+Not done yet: Convert Entities (copy earlier geometry into the active sketch, linked); repairing a dangling
+reference by dragging it onto new geometry (delete and re-add it instead).
+
+Acceptance (`tests/features.test.ts`, plus Playwright on the production build): a line in Sketch2 from
+Sketch1's corner is fully defined with zero DOF and no redundancy; changing Sketch1's width moves it; dragging
+Sketch1 moves Sketch2 mid-drag; locked circles/arcs keep their size; offsets of Sketch1 geometry follow it;
+dangling references are reported, not counted as conflicts; delete/reorder refusals; v3 round trip and v2 load.
+
 ## Scope change (after milestone 7)
 
 No font features: no font export toolkits or UI. Removed metric guides, glyph slots and advance widths, the

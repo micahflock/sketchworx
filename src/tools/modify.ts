@@ -143,7 +143,7 @@ export class TrimTool implements Tool {
   }
   onMove(e: PEvent) {
     if (!this.stroke) {
-      const h = this.host.hit(e.world, e.pointerType, { points: false });
+      const h = this.host.hit(e.world, e.pointerType, { points: false, own: true });
       this.hover = h?.id ?? null;
       this.host.setHover(this.hover);
       return;
@@ -155,7 +155,7 @@ export class TrimTool implements Tool {
     const seg = { kind: "line" as const, a: prev, b: e.world };
     const crossings: { id: Id; p: Vec2 }[] = [];
     for (const ent of Object.values(s.entities)) {
-      if (ent.type === "point" || (ent.type === "line" && ent.owner) || (ent.type === "spline" && ent.derived)) continue;
+      if (ent.type === "point" || (ent.type === "line" && ent.owner) || (ent.type === "spline" && ent.derived) || s.ext?.[ent.id]) continue;
       const box = { minX: Math.min(prev.x, e.world.x), minY: Math.min(prev.y, e.world.y), maxX: Math.max(prev.x, e.world.x), maxY: Math.max(prev.y, e.world.y) };
       const samples = entitySamples(s, ent);
       let near = false;
@@ -177,7 +177,7 @@ export class TrimTool implements Tool {
   onUp(e: PEvent) {
     if (this.stroke && !this.trimmedAny && this.stroke.length <= 3) {
       // Click mode.
-      const h = this.host.hit(e.world, e.pointerType, { points: false });
+      const h = this.host.hit(e.world, e.pointerType, { points: false, own: true });
       if (h) {
         let msg: string | undefined;
         this.host.editApply((ed) => {
@@ -215,7 +215,7 @@ export class ExtendTool implements Tool {
   }
   onDown(e: PEvent) {
     if (e.button !== 0) return;
-    const h = this.host.hit(e.world, e.pointerType, { points: false });
+    const h = this.host.hit(e.world, e.pointerType, { points: false, own: true });
     if (!h) return;
     let msg: string | undefined;
     this.host.commit("Extend", (ed) => {
@@ -225,7 +225,7 @@ export class ExtendTool implements Tool {
     this.preview = null;
   }
   onMove(e: PEvent) {
-    const h = this.host.hit(e.world, e.pointerType, { points: false });
+    const h = this.host.hit(e.world, e.pointerType, { points: false, own: true });
     this.host.setHover(h?.id ?? null);
     this.preview = null;
     if (h) {
@@ -268,7 +268,7 @@ export class FilletTool implements Tool {
   onDown(e: PEvent) {
     if (e.button !== 0) return;
     const s = this.host.sketch();
-    const h = this.host.hit(e.world, e.pointerType);
+    const h = this.host.hit(e.world, e.pointerType, { own: true });
     if (!h) return;
     let corner = h.kind === "point" ? cornerAt(s, h.id) : null;
     if (!corner && h.kind === "curve" && s.entities[h.id]?.type === "line") {
@@ -298,7 +298,7 @@ export class FilletTool implements Tool {
     if (msg) this.host.flash(msg, "error");
   }
   onMove(e: PEvent) {
-    const h = this.host.hit(e.world, e.pointerType);
+    const h = this.host.hit(e.world, e.pointerType, { own: true });
     this.host.setHover(h?.id ?? null);
   }
   onUp() {}

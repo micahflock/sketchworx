@@ -13,7 +13,7 @@ const radiusRef = (gid: string) => ({ o_id: gid, prop: "radius" as const });
 
 function toPrimitives(params: SolverParams, cons: SolverConstraint[]): Prim[] {
   const prims: Prim[] = [];
-  for (const p of params.points) prims.push({ id: p.id, type: "point", x: p.x, y: p.y, fixed: false });
+  for (const p of params.points) prims.push({ id: p.id, type: "point", x: p.x, y: p.y, fixed: !!p.fixed });
   const pos = new Map(params.points.map((p) => [p.id, p]));
   // B-splines must come straight after the points: the wrapper re-registers their poles.
   const bsplines = new Map<string, string>();
@@ -30,7 +30,7 @@ function toPrimitives(params: SolverParams, cons: SolverConstraint[]): Prim[] {
   for (const g of params.geoms) {
     geomKind.set(g.id, g.kind);
     if (g.kind === "line") prims.push({ id: g.id, type: "line", p1_id: g.p1, p2_id: g.p2 });
-    else if (g.kind === "circle") prims.push({ id: g.id, type: "circle", c_id: g.c, radius: g.r });
+    else if (g.kind === "circle") prims.push({ id: g.id, type: "circle", c_id: g.c, radius: g.r, ...(g.fixed ? { fixed: true } : {}) });
     else {
       const c = pos.get(g.c)!;
       const s = pos.get(g.s)!;
@@ -39,8 +39,9 @@ function toPrimitives(params: SolverParams, cons: SolverConstraint[]): Prim[] {
       const sa = Math.atan2(s.y - c.y, s.x - c.x);
       let ea = Math.atan2(e.y - c.y, e.x - c.x);
       while (ea <= sa) ea += Math.PI * 2;
-      prims.push({ id: g.id, type: "arc", c_id: g.c, start_id: g.s, end_id: g.e, radius: r, start_angle: sa, end_angle: ea });
-      prims.push({ id: `${g.id}#rules`, type: "arc_rules", a_id: g.id });
+      prims.push({ id: g.id, type: "arc", c_id: g.c, start_id: g.s, end_id: g.e, radius: r, start_angle: sa, end_angle: ea, ...(g.fixed ? { fixed: true } : {}) });
+      // A locked arc has locked angles and radius too (as FreeCAD does for external geometry): no rules.
+      if (!g.fixed) prims.push({ id: `${g.id}#rules`, type: "arc_rules", a_id: g.id });
     }
   }
   const isArc = (id: string) => geomKind.get(id) === "arc";
@@ -185,7 +186,7 @@ export class GcsCore {
   private read(w: GcsWrapper, params: SolverParams): SolverParams {
     const points = params.points.map((p) => {
       const q = w.sketch_index.get_primitive(p.id) as { x: number; y: number } | undefined;
-      return q ? { id: p.id, x: q.x, y: q.y } : p;
+      return q ? { ...p, x: q.x, y: q.y } : p;
     });
     const geoms = params.geoms.map((g) => {
       if (g.kind !== "circle") return g;
@@ -239,6 +240,15 @@ export class GcsCore {
   private finish(params: SolverParams, cons: SolverConstraint[], ok: boolean, conflicts: string[], redundant: string[], t0: number): SolveResult {
     const pi = indexParams(params);
     const res = buildResiduals(pi, cons);
+    // Locked parameters (geometry of earlier sketches) are known, not degrees of freedom.
+    const pin = (k: string) => {
+      const i = pi.index.get(k);
+      if (i === undefined) return;
+      const v0 = pi.values[i];
+      res.push({ owner: "#fixed", deps: [i], f: (x) => [x[i] - v0] });
+    };
+    for (const p of params.points) if (p.fixed) (pin(`${p.id}.x`), pin(`${p.id}.y`));
+    for (const g of params.geoms) if (g.kind === "circle" && g.fixed) pin(`${g.id}.r`);
     const an = analyse(pi, res);
     const entityStatus: Record<string, EntityState> = {};
     const det = (k: string) => an.determined[pi.index.get(k)!] === 1;
