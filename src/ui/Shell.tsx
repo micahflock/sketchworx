@@ -11,7 +11,8 @@ export function Shell() {
   const app = useApp();
   const ui = useUi();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [pmOpen, setPmOpen] = useState(true);
+  // Phones: start with the PropertyManager collapsed so the canvas gets the screen.
+  const [pmOpen, setPmOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 700);
   useEffect(() => {
     if (canvasRef.current) app.attach(canvasRef.current);
   }, [app]);
@@ -47,6 +48,13 @@ function TouchKeys() {
   const ui = useUi();
   return (
     <div class={css.touchKeys}>
+      <button
+        class={ui.fingerDraws ? css.active : ""}
+        title={ui.fingerDraws ? "One finger draws with the active tool (two fingers pan and zoom)" : "One finger pans (draw with Apple Pencil)"}
+        onClick={() => app.setFingerDraws(!ui.fingerDraws)}
+      >
+        {ui.fingerDraws ? "Finger: Draw" : "Finger: Pan"}
+      </button>
       <button onClick={() => app.escape()}>Esc</button>
       <button class={ui.touchCtrl ? css.active : ""} onClick={() => app.store.set({ touchCtrl: !ui.touchCtrl })}>
         Ctrl
