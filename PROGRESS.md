@@ -2,6 +2,16 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Pencil + fingers, Draw key, HELL MODE touch keys ✅
+
+- **Pencil + fingers** (tap the ✎ Pencil flag): the pencil only draws and one finger only selects. A pencil
+  press while Select is on switches back to the last drawing tool; a finger tap, drag or long-press while a
+  drawing tool is on switches to Select. Two fingers still pan and zoom. (Pencil only, the default once a
+  pen is seen, is unchanged: the pencil does both, following the Select/Draw key.)
+- The touch key beside Select reads **Draw** instead of the drawing tool's name (the name is its tooltip).
+- HELL MODE: the "on" touch key (Select or Draw, latched Ctrl) is inverted, since the theme has no fill
+  for active state.
+
 ## Apple Pencil, drag-to-draw on touch, HELL MODE colors ✅
 
 - **Pencil and palm rejection:** pen input (Apple Pencil reports `pointerType: "pen"`) was handled like a

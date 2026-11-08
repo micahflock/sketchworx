@@ -62,7 +62,7 @@ export function StatusBar() {
       {ui.penSeen && (
         <button
           class={`${css.penFlag} ${ui.pencilOnly ? "" : css.penFlagOff}`}
-          title={ui.pencilOnly ? "Pencil detected: only the pencil draws, fingers pan and zoom. Tap to let fingers draw too" : "Pencil detected: fingers draw too. Tap so only the pencil draws"}
+          title={ui.pencilOnly ? "Pencil detected: the pencil draws and selects, fingers pan and zoom. Tap so a finger selects" : "Pencil draws, finger selects. Tap so fingers only pan and zoom"}
           onClick={() => app.togglePencilOnly()}
         >
           ✎ Pencil{ui.pencilOnly ? "" : " + fingers"}

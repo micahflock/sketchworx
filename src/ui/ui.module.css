@@ -1210,6 +1210,11 @@
 :root[data-theme="hell"] .tbtn.active::after {
   bottom: -4px;
 }
+:root[data-theme="hell"] .touchKeys button.active {
+  /* The "on" key (Select or Draw, a latched Ctrl) is inverted. */
+  background: var(--sw-text) !important;
+  color: #000 !important;
+}
 :root[data-theme="hell"] .cmdmgr {
   overflow-y: visible;
 }
