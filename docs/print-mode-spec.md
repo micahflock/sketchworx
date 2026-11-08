@@ -231,8 +231,10 @@ meets the sharp inside corner of another. They are drawn in the sheet color (set
 of the satin sheet) so they are easy to spot, and a **Pinholes** count and largest size appear under the
 preview. They are information, not rule breaks: every outside corner makes some.
 
-A **Bed side** toggle mirrors the preview, to show the face as seen from below (the side that was on the
-sheet). **[Q10]**
+The preview is shown from the **bed side** by default: mirrored left to right, as the face that was on the
+sheet looks when the part is turned over. A **Top** toggle shows it unmirrored, as PrusaSlicer does. The
+toggle is kept per document (`doc.print.view`). Only the preview is mirrored: the sketch, Art view and every
+export stay in design coordinates, so mirror the bodies in CAD or flip the part in PrusaSlicer as usual.
 
 Changing the print order (dragging slots) updates the preview straight away, so the order can be chosen by
 how the edges come out.
@@ -281,6 +283,7 @@ interface PrintSettings {
   filaments: { slot: 1 | 2 | 3 | 4 | 5; name: string; color: string }[];
   base: number;          // slot of the background
   outline?: Id;          // chain key of the part outline (unset: outermost filled profile)
+  view?: "bed" | "top";  // As printed preview side (unset: "bed", mirrored)
 }
 // Doc.print?: PrintSettings      ArtStyle.filament?: number (slot)
 ```
@@ -337,7 +340,6 @@ re-solves because the `w` variable changes).
 | --- | --- | --- |
 | Q3 | How should overlaps resolve: drawing order (later on top), or an explicit order per chain? | Drawing order, with Bring to Front / Send to Back |
 | Q6 | mm everywhere in Print mode OK? Inches needed? | mm only |
-| Q10 | Should the preview show the face from the top (as PrusaSlicer does) or from the bed side (mirrored, the face that was on the sheet) by default? | Top, with a Bed side toggle |
 
 ## Decisions
 
@@ -351,3 +353,4 @@ re-solves because the `w` variable changes).
 | Q1 Color setup | MMU3 (5 slots) or manual swap (bodies printed in order with pauses, up to 8 slots, slot order = print order). Color only in XY; heights in CAD; no 3MF in v1 | Mid-layer changes work without the MMU by pausing between bodies |
 | CAD | Fusion 360 (Insert DXF, mm units in the header) | Your main CAD |
 | Q7 Preview | "As printed" stacks the colors in print order as a first layer: nozzle rounding at `w₁`, squish into empty space only, uncovered spots shown as pinholes. Bead view later | Your call: stack colors as on a multicolor first layer |
+| Q10 Preview side | Bed side (mirrored) by default, Top as a toggle; exports are never mirrored | Your call: graphics are printed face-down |
