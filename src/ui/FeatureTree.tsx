@@ -1,5 +1,6 @@
-import { useState } from "preact/hooks";
-import { parents } from "../model/features";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { moveConflict, parents } from "../model/features";
+import type { CrossRefs } from "../model/features";
 import type { SketchFeature } from "../model/types";
 import { useApp, useUi } from "./hooks";
 import css from "./ui.module.css";
@@ -35,12 +36,72 @@ function StateIcon({ state, dangling }: { state?: string; dangling: number }) {
   );
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const andList = (parts: string[]) => (parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0]);
+
+/** "removes 2 relations and 1 dimension and unlinks 1 offset" */
+export function lossText(c: CrossRefs): string {
+  const removed = [c.relations.length && plural(c.relations.length, "relation"), c.dimensions.length && plural(c.dimensions.length, "dimension")].filter(Boolean) as string[];
+  const out: string[] = [];
+  if (removed.length) out.push(`removes ${andList(removed)}`);
+  if (c.offsets.length) out.push(`unlinks ${plural(c.offsets.length, "offset")}`);
+  return out.join(" and ");
+}
+
+/** Asks before a move that would break references, right under the move button. */
+function MoveConfirm({ f, dir, refs, lower, upper, onDone }: { f: SketchFeature; dir: -1 | 1; refs: CrossRefs; lower: string; upper: string; onDone: () => void }) {
+  const app = useApp();
+  const ok = useRef<HTMLButtonElement>(null);
+  useEffect(() => ok.current?.focus(), []);
+  return (
+    <li
+      class={`${css.ftConfirm} ${dir < 0 ? css.ftConfirmUp : css.ftConfirmDown}`}
+      role="alertdialog"
+      aria-label="Confirm move"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onDone();
+        }
+      }}
+    >
+      <p>
+        {lower} uses {upper}. Moving {f.name} {dir < 0 ? "up" : "down"} {lossText(refs)} in {lower}.
+        {refs.offsets.length > 0 && " Unlinked offsets stay where they are as free curves."}
+      </p>
+      <div class={css.ftConfirmBtns}>
+        <button
+          ref={ok}
+          class={css.ftConfirmOk}
+          onClick={() => {
+            onDone();
+            app.moveSketch(f.id, dir, true);
+          }}
+        >
+          Remove and move
+        </button>
+        <button class={css.small} onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </li>
+  );
+}
+
 function Row({ f, index, count }: { f: SketchFeature; index: number; count: number }) {
   const app = useApp();
   const ui = useUi();
   const doc = app.store.doc;
   const active = doc.active === f.id;
   const [editing, setEditing] = useState(false);
+  const [pending, setPending] = useState<-1 | 1 | null>(null);
+  // Any change to the document (undo, another edit) drops a question that may no longer apply.
+  useEffect(() => setPending(null), [doc]);
+  const conflict = pending && active ? moveConflict(doc, f.id, pending) : null;
+  const move = (dir: -1 | 1) => {
+    if (moveConflict(doc, f.id, dir)) setPending(pending === dir ? null : dir);
+    else app.moveSketch(f.id, dir);
+  };
   const st = ui.featureStatus[f.id];
   const refs = parents(doc, f.id).map((p) => p.name);
   const finish = (value: string | null) => {
@@ -48,6 +109,7 @@ function Row({ f, index, count }: { f: SketchFeature; index: number; count: numb
     if (value !== null) app.renameSketch(f.id, value);
   };
   return (
+    <>
     <li
       class={`${css.ftRow} ${active ? css.ftActive : ""} ${f.visible ? "" : css.ftHidden}`}
       onClick={() => app.activateSketch(f.id)}
@@ -90,10 +152,10 @@ function Row({ f, index, count }: { f: SketchFeature; index: number; count: numb
       )}
       {active && (
         <span class={css.ftActions}>
-          <button class={css.ftIcon} title="Move up" disabled={index === 0} onClick={(e) => (e.stopPropagation(), app.moveSketch(f.id, -1))}>
+          <button class={`${css.ftIcon} ${pending === -1 ? css.active : ""}`} title="Move up" disabled={index === 0} onClick={(e) => (e.stopPropagation(), move(-1))}>
             ▲
           </button>
-          <button class={css.ftIcon} title="Move down" disabled={index === count - 1} onClick={(e) => (e.stopPropagation(), app.moveSketch(f.id, 1))}>
+          <button class={`${css.ftIcon} ${pending === 1 ? css.active : ""}`} title="Move down" disabled={index === count - 1} onClick={(e) => (e.stopPropagation(), move(1))}>
             ▼
           </button>
           <button class={css.ftIcon} title="Rename" onClick={(e) => (e.stopPropagation(), setEditing(true))}>
@@ -105,6 +167,10 @@ function Row({ f, index, count }: { f: SketchFeature; index: number; count: numb
         </span>
       )}
     </li>
+    {conflict && pending && (
+      <MoveConfirm f={f} dir={pending} refs={conflict.refs} lower={conflict.lower.name} upper={conflict.upper.name} onDone={() => setPending(null)} />
+    )}
+    </>
   );
 }
 

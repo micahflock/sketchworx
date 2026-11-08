@@ -3,7 +3,7 @@ import { Store } from "../src/app/store";
 import { SolverService } from "../src/app/solverService";
 import { parseDoc, serializeDoc } from "../src/io/native";
 import { applyCommand } from "../src/model/editor";
-import { addFeature, danglingOf, deleteFeature, dependents, moveFeature, setActive, setVisible } from "../src/model/features";
+import { addFeature, crossRefs, danglingOf, deleteFeature, dependents, moveConflict, moveFeature, setActive, setVisible } from "../src/model/features";
 import { docOutline } from "../src/model/outline";
 import { validRelations } from "../src/model/relations";
 import { activeSketch, createDoc, ownSketch, ptv } from "../src/model/sketch";
@@ -193,6 +193,62 @@ describe("feature tree model", () => {
     expect(typeof d).toBe("object");
     expect((d as Doc).features.map((f) => f.id)).toEqual([s1.id]);
     expect((d as Doc).active).toBe(s1.id);
+  });
+
+  it("a move that breaks references can remove them instead, in one step", () => {
+    const { doc, ids } = withDiagonal();
+    const [s1, s2] = doc.features;
+    const c = moveConflict(doc, s2.id, -1)!;
+    expect(c.lower.id).toBe(s2.id);
+    expect(c.upper.id).toBe(s1.id);
+    expect(c.refs.relations.length).toBe(1); // coincident with Sketch1's corner; the origin is shared, so it stays
+    expect(c.refs.dimensions).toEqual([]);
+    const moved = moveFeature(doc, s2.id, -1, true) as Doc;
+    expect(moved.features.map((f) => f.id)).toEqual([s2.id, s1.id]);
+    const kept = Object.values(ownSketch(moved, s2.id).relations);
+    expect(kept.length).toBe(1);
+    expect(kept[0].refs).toContain("origin");
+    expect(ownSketch(moved, s2.id).entities[ids.diag]).toBeDefined();
+    expect(danglingOf(moved, s2.id)).toEqual([]);
+    expect(dependents(moved, s1.id)).toEqual([]);
+    // Moving Sketch1 down is the same swap, so it removes the same reference.
+    const down = moveFeature(doc, s1.id, 1, true) as Doc;
+    expect(down.features.map((f) => f.id)).toEqual([s2.id, s1.id]);
+    expect(Object.values(ownSketch(down, s2.id).relations).length).toBe(1);
+  });
+
+  it("a move with nothing to break needs no confirmation", () => {
+    let doc = addFeature(base().doc);
+    expect(moveConflict(doc, doc.features[1].id, -1)).toBeNull();
+    doc = moveFeature(doc, doc.features[1].id, -1) as Doc;
+    expect(doc.features.map((f) => f.name)).toEqual(["Sketch2", "Sketch1"]);
+  });
+
+  it("removing references on a move unlinks offsets, keeping the curve", () => {
+    let sp = "";
+    let doc = applyCommand(createDoc(), (ed) => {
+      sp = addSpline(ed, [
+        { x: 0, y: 0 },
+        { x: 30, y: 40 },
+        { x: 70, y: 40 },
+        { x: 100, y: 0 },
+      ]).spline;
+    });
+    doc = addFeature(doc);
+    doc = applyCommand(doc, (ed) => {
+      const r = offsetChain(ed, sp, { distance: 5, side: 1, both: false, cap: "none", link: "" });
+      expect(r.message).toBeUndefined();
+    });
+    const [s1, s2] = doc.features;
+    const off = crossRefs(ownSketch(doc, s2.id), ownSketch(doc, s1.id)).offsets;
+    expect(off.length).toBeGreaterThan(0);
+    const moved = moveFeature(doc, s2.id, -1, true) as Doc;
+    for (const id of off) {
+      const e = ownSketch(moved, s2.id).entities[id];
+      expect(e?.type).toBe("spline");
+      expect((e as { derived?: unknown }).derived).toBeUndefined();
+    }
+    expect(dependents(moved, s1.id)).toEqual([]);
   });
 
   it("deleting referenced geometry leaves the later sketch's relation dangling", () => {

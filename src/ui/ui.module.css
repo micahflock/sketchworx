@@ -473,6 +473,65 @@
   flex: none;
   display: inline-flex;
 }
+/* Confirmation under the move buttons: what a move would remove. The arrow points at the button pressed
+   (move up is the 4th action from the right, move down the 3rd; each is 26 px, inside 4 px of padding). */
+.ftConfirm {
+  position: relative;
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--sw-badge-border);
+  border-radius: 6px;
+  background: var(--sw-badge-bg);
+  color: var(--sw-text);
+  font-size: 12px;
+  line-height: 1.4;
+  display: grid;
+  gap: 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.ftConfirm p {
+  margin: 0;
+}
+.ftConfirm::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: var(--arrow-right);
+  width: 10px;
+  height: 10px;
+  background: var(--sw-badge-bg);
+  border-left: 1px solid var(--sw-badge-border);
+  border-top: 1px solid var(--sw-badge-border);
+  transform: rotate(45deg);
+}
+.ftConfirmUp {
+  --arrow-right: 87px;
+}
+.ftConfirmDown {
+  --arrow-right: 61px;
+}
+.ftConfirmBtns {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.ftConfirmOk {
+  border: 1px solid var(--sw-over);
+  background: var(--sw-over);
+  color: var(--sw-on-strong);
+  border-radius: 4px;
+  padding: 2px 10px;
+  min-height: 26px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ftConfirmOk:focus-visible,
+.ftConfirm .small:focus-visible {
+  outline: 2px solid var(--sw-focus);
+  outline-offset: 1px;
+}
 .pm {
   flex: 1;
   min-height: 0;

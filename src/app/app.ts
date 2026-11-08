@@ -649,8 +649,9 @@ export class App implements ToolHost, ArtHost {
     if (r.active !== this.store.doc.active) this.leaveSketch();
     this.commitDoc(r, "Delete Sketch");
   }
-  moveSketch(id: Id, dir: -1 | 1) {
-    const r = moveFeature(this.store.doc, id, dir);
+  /** Move a sketch up or down. With `removeRefs`, references the move would break are removed in the same step. */
+  moveSketch(id: Id, dir: -1 | 1, removeRefs = false) {
+    const r = moveFeature(this.store.doc, id, dir, removeRefs);
     if (typeof r === "string") return this.flash(r, "error");
     this.leaveSketch();
     this.commitDoc(r, "Reorder Sketches");

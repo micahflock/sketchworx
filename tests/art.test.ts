@@ -370,3 +370,31 @@ describe("art export", () => {
     expect(svg).not.toContain("M0 -20");
   });
 });
+
+describe("round ends keep the drawn length", () => {
+  // A round cap reaches half the weight past the end of its path, so the path stops half the weight short.
+  const w = 10;
+  const lineDoc = () =>
+    setArtDefaults(
+      applyCommand(createDoc(), (ed) => {
+        addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 });
+      }),
+      { weight: w, roundEnds: true },
+    );
+  const strokeD = (doc: Doc) => (exportSvg(doc).match(/<path d="([^"]+)" fill="none" stroke="#000000" stroke-width="10"[^>]*stroke-linecap="round"/) ?? [])[1];
+
+  it("exports a centered line shortened by half the weight at each end", () => {
+    expect(strokeD(lineDoc())).toBe("M5 0L95 0");
+  });
+
+  it("shortens side strokes the same way", () => {
+    const d = lineDoc();
+    expect(strokeD(setChainStyle(d, docChains(d), { side: "left" }))).toBe("M5 -5L95 -5");
+    expect(strokeD(setChainStyle(d, docChains(d), { side: "right" }))).toBe("M5 5L95 5");
+  });
+
+  it("keeps square ends at full length", () => {
+    const d = setArtDefaults(lineDoc(), { roundEnds: false });
+    expect(exportSvg(d)).toContain('d="M0 0L100 0"');
+  });
+});

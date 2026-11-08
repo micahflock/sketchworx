@@ -2,6 +2,25 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Reordering sketches that reference each other ✅
+
+A sketch may only reference sketches above it. Moving one above geometry it uses no longer refuses: the move
+button opens a confirmation right under it ("Sketch2 uses Sketch1. Moving Sketch2 up removes 1 relation and
+1 dimension in Sketch2.") with **Remove and move** and **Cancel** (Esc also cancels; any document change
+closes it). Confirming deletes the relations and dimensions that use the other sketch and unlinks offsets
+that follow it (they stay where they are as free curves), then moves, as one undo step. Nothing is left
+dangling. Moves that break nothing happen at once, as before. Model: `crossRefs`, `moveConflict` and
+`moveFeature(doc, id, dir, removeRefs)` in `src/model/features.ts`. Deleting a referenced sketch is still
+refused.
+
+Round line ends in Art view were checked again: every case (centered and side strokes, rounded corners, arcs)
+stops the path half the weight short of each end, so the round cap ends exactly at the sketch endpoint in Art
+view and in SVG. Only a line shorter than its weight cannot be shortened enough. Regression tests in
+`tests/art.test.ts`.
+
+Tests: `tests/features.test.ts` (conflict detection, remove-and-move up and down, the shared origin is kept,
+offsets unlinked, plain moves).
+
 ## Toolbar, command search and theme plumbing ✅
 
 The interface keeps the SolidWorks color meanings (blue under defined, black fully defined, red over defined)
