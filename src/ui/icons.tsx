@@ -145,6 +145,13 @@ export const icons: Record<string, () => JSX.Element> = {
       <path d="M5 4v8a7 7 0 0 0 7 7h8" />
     </S>
   ),
+  convert: () => (
+    <S>
+      <path d="M4 17c3-7 9-9 16-9" stroke-dasharray="3 2" />
+      <path d="M4 20c3-7 9-9 16-9" />
+      <path d="M15 4l3 4-4 2" />
+    </S>
+  ),
   offset: () => (
     <S>
       <path d="M4 18c4-10 12-10 16 0" />

@@ -126,12 +126,20 @@ function lockedRefs(s: Sketch): Set<Id> {
   return out;
 }
 
+/** Whether a relation can be expressed for this sketch (right kinds of entities, shared ends, …). */
+export function relationSupported(s: Sketch, r: Relation): boolean {
+  return relationConstraints(s, r, CoincidenceGroups.of(s)) !== null;
+}
+
 type C = SolverConstraint;
-/** Driven (offset) splines and their control vertices: computed, not solved. */
+/**
+ * Driven (offset) splines and their control vertices: computed, not solved. Those of earlier sketches
+ * are plain locked geometry here, so they are not listed.
+ */
 export function derivedIds(s: Sketch): Set<Id> {
   const out = new Set<Id>();
   for (const e of Object.values(s.entities))
-    if (e.type === "spline" && e.derived) {
+    if (e.type === "spline" && e.derived && !s.ext?.[e.id]) {
       out.add(e.id);
       for (const p of e.cps) out.add(p);
     }
@@ -162,7 +170,7 @@ function relationConstraints(s: Sketch, r: Relation, groups: CoincidenceGroups):
       const curve = ents.find((e) => e.type !== "point")!;
       if (curve.type === "line") add({ kind: "pointOnLine", p, a: curve.p1, b: curve.p2 });
       else if (curve.type === "circle" || curve.type === "arc") add({ kind: "pointOnCircle", p, g: curve.id });
-      else if (curve.type === "spline" && !curve.derived) add({ kind: "pointOnBezier", p, cps: curve.cps, t: `${r.id}#t` });
+      else if (curve.type === "spline" && (!curve.derived || s.ext?.[curve.id])) add({ kind: "pointOnBezier", p, cps: curve.cps, t: `${r.id}#t` });
       else return null;
       return out;
     }
@@ -260,6 +268,17 @@ function relationConstraints(s: Sketch, r: Relation, groups: CoincidenceGroups):
     }
     case "tangent":
       return tangentConstraints(s, ents, groups, add) ? out : null;
+    case "onEdge": {
+      // The copy coincides with its source, point for point.
+      const [src, copy] = ents;
+      if (ents.length !== 2 || src.type !== copy.type) return null;
+      const a = src.type === "point" ? [src.id] : definingPoints(src);
+      const b = copy.type === "point" ? [copy.id] : definingPoints(copy);
+      if (a.length !== b.length) return null;
+      a.forEach((p, i) => add({ kind: "coincident", a: p, b: b[i] }));
+      if (src.type === "circle" && copy.type === "circle") add({ kind: "equalRadius", g1: src.id, g2: copy.id });
+      return out;
+    }
     case "equalCurvature": {
       if (!tangentConstraints(s, ents, groups, add)) return null;
       const g2 = curvatureConstraint(ents, groups);

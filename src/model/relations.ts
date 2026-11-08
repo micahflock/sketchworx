@@ -17,6 +17,7 @@ export const relationNames: Record<RelationType, string> = {
   symmetric: "Symmetric",
   fix: "Fix",
   equalCurvature: "Equal Curvature",
+  onEdge: "On Edge",
 };
 
 /** Short glyph text drawn in the green relation badges. */
@@ -35,6 +36,7 @@ export const relationGlyphs: Record<RelationType, string> = {
   symmetric: "⫼",
   fix: "⚓",
   equalCurvature: "κ",
+  onEdge: "⊡",
 };
 
 /** Display order in Add Relations (most common first, as in SolidWorks). */
@@ -61,7 +63,8 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
   if (!ents.length || ents.length !== ids.length) return [];
   // Driven offset geometry cannot take relations.
   const derived = (e: Entity) =>
-    (e.type === "spline" && !!e.derived) || (e.type === "point" && !!e.owner && s.entities[e.owner]?.type === "spline" && !!(s.entities[e.owner] as { derived?: unknown }).derived);
+    !s.ext?.[e.id] &&
+    ((e.type === "spline" && !!e.derived) || (e.type === "point" && !!e.owner && s.entities[e.owner]?.type === "spline" && !!(s.entities[e.owner] as { derived?: unknown }).derived));
   if (ents.some(derived)) return [];
   // Geometry of earlier sketches is locked here: a relation needs at least one entity of this sketch.
   const ext = ents.filter((e) => !!s.ext?.[e.id]);
@@ -78,7 +81,7 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
     out.add("horizontal");
     out.add("vertical");
   }
-  if (P.length === 1 && n === 2 && L.length + R.length + S.filter((e) => !e.derived).length === 1) {
+  if (P.length === 1 && n === 2 && L.length + R.length + S.filter((e) => !e.derived || s.ext?.[e.id]).length === 1) {
     const curve = ents.find((e) => e.type !== "point")!;
     const own = definingPoints(curve).includes(P[0].id);
     if (!own) {

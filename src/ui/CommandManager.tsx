@@ -47,6 +47,7 @@ export const groups: Group[] = [
       t("trim", "Trim Entities", "trim", "T"),
       t("extend", "Extend Entities"),
       t("fillet", "Sketch Fillet"),
+      a("convert", "Convert Entities", "convert", "convertEntities"),
       t("offset", "Offset Entities", "offset", "O"),
       { flyout: "mirror", items: [t("mirror", "Mirror Entities", "mirror", "M"), t("dynamicMirror", "Dynamic Mirror")] },
       a("construction", "Construction Geometry", "construction", "toggleConstruction", "Q"),
@@ -113,6 +114,7 @@ export function CommandManager() {
     (b.action === "toggleGridSnap" && ui.gridSnap) ||
     (b.id === "dynamicMirror" && !!ui.dynamicMirror) ||
     (b.action === "combs" && ui.combs) ||
+    (b.action === "convertEntities" && ui.toolId === "convert") ||
     (b.action === "exportSvg" && ui.panel === "export");
   return (
     <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>

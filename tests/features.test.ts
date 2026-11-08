@@ -13,7 +13,8 @@ import { GcsCore } from "../src/solver/gcs";
 import type { Solver } from "../src/solver/types";
 import { addArc, addCircle, addLine } from "../src/tools/common";
 import { buildLoop } from "../src/tools/shapes";
-import { mirrorEntities, offsetChain, recomputeDerived } from "../src/tools/edits";
+import { addSpline, convertEntities, convertible, mirrorEntities, offsetChain, recomputeDerived, trimAt } from "../src/tools/edits";
+import { missingKind, missingRefs, repairWith } from "../src/tools/repair";
 
 let core: GcsCore;
 beforeAll(async () => {
@@ -400,5 +401,140 @@ describe("file format", () => {
     expect(Object.keys(d.features[0].sketch.entities)).toHaveLength(4);
     expect(d.picture?.opacity).toBe(0.5);
     expect(d.nextId).toBeGreaterThan(4);
+  });
+});
+
+describe("convert entities", () => {
+  /** Sketch1 with one of each convertible kind, fully defined. */
+  function kinds() {
+    const ids: Record<string, Id> = {};
+    let doc = applyCommand(createDoc(), (ed) => {
+      const l = addLine(ed, { x: 0, y: 0 }, { x: 80, y: 0 });
+      ed.addRelation({ type: "coincident", refs: [l.p1, "origin"] });
+      ed.addRelation({ type: "fix", refs: [l.p2], values: [80, 0] });
+      const c = addCircle(ed, { x: 40, y: 50 }, 15);
+      ed.addRelation({ type: "fix", refs: [c.circle], values: [40, 50, 15] });
+      const a = addArc(ed, { x: 0, y: 0 }, { x: 30, y: 0 }, { x: 0, y: 30 });
+      ed.addRelation({ type: "fix", refs: [a.arc], values: [0, 0, 30, 0, 0, 30] });
+      const sp = addSpline(ed, [
+        { x: 100, y: 0 },
+        { x: 110, y: 30 },
+        { x: 140, y: 30 },
+        { x: 150, y: 0 },
+      ]);
+      ed.addRelation({ type: "fix", refs: [sp.spline], values: [100, 0, 110, 30, 140, 30, 150, 0] });
+      const p = ed.addPoint(-20, -20);
+      ed.addRelation({ type: "fix", refs: [p], values: [-20, -20] });
+      Object.assign(ids, { line: l.line, lp2: l.p2, circle: c.circle, arc: a.arc, spline: sp.spline, point: p });
+    });
+    doc = addFeature(doc);
+    return { doc, ids };
+  }
+
+  it("copies each kind fully defined, without redundancy, and refuses a second copy", () => {
+    const { doc: d0, ids } = kinds();
+    let created: Id[] = [];
+    const doc = applyCommand(d0, (ed) => {
+      const r = convertEntities(ed, [ids.line, ids.circle, ids.arc, ids.spline, ids.point]);
+      expect(r.message).toBeUndefined();
+      created = r.created;
+    });
+    expect(created).toHaveLength(5);
+    expect(Object.values(ownSketch(doc).relations).filter((r) => r.type === "onEdge")).toHaveLength(5);
+    const inp = buildSolverInput(activeSketch(doc));
+    expect(inp.unsupported).toEqual([]);
+    const r = core.solve(inp.params, inp.constraints);
+    expect(r.ok).toBe(true);
+    expect(r.dof).toBe(0);
+    expect(r.redundant).toEqual([]);
+    expect(r.conflicts).toEqual([]);
+    // Converting again adds nothing.
+    const again = applyCommand(doc, (ed) => expect(convertEntities(ed, [ids.line]).created).toEqual([]));
+    expect(again).toBe(doc);
+    // Endpoints and polygon sides are not converted on their own.
+    expect(convertible(activeSketch(doc), ids.lp2)).toBe(false);
+  });
+
+  it("converted geometry follows its source", async () => {
+    const { doc: d0, ids } = withDiagonal();
+    let copy = "";
+    const doc = applyCommand(d0, (ed) => (copy = convertEntities(ed, [ids.top]).created[0]));
+    const { store, svc } = service(doc);
+    let d = await settle(store, svc);
+    const [s1, s2] = d.features;
+    expect(store.state.status.conflicts).toEqual([]);
+    store.amendDoc(setActive(d, s1.id));
+    store.commitDoc(applyCommand(store.doc, (ed) => ed.updateDimension(ids.w, { expr: "130", value: 130 })), "Edit");
+    d = await settle(store, svc);
+    const l = ownSketch(d, s2.id).entities[copy] as { p1: Id; p2: Id };
+    const xs = [ptv(ownSketch(d, s2.id), l.p1).x, ptv(ownSketch(d, s2.id), l.p2).x].sort((a, b) => a - b);
+    expect(xs[0]).toBeCloseTo(0, 6);
+    expect(xs[1]).toBeCloseTo(130, 6);
+  });
+
+  it("trimming a converted line keeps it on its source (Collinear)", async () => {
+    const { doc: d0, ids } = withDiagonal();
+    let copy = "";
+    let doc = applyCommand(d0, (ed) => (copy = convertEntities(ed, [ids.top]).created[0]));
+    // A vertical cutter in Sketch2 at x = 30; trim the piece of the copy left of it.
+    doc = applyCommand(doc, (ed) => {
+      const v = addLine(ed, { x: 30, y: 80 }, { x: 30, y: 40 });
+      ed.addRelation({ type: "vertical", refs: [v.line] });
+    });
+    doc = applyCommand(doc, (ed) => expect(trimAt(ed, copy, { x: 10, y: 60 }).ok).toBe(true));
+    const rels = Object.values(ownSketch(doc).relations);
+    expect(rels.some((r) => r.type === "onEdge" && r.refs[1] === copy)).toBe(false);
+    expect(rels.some((r) => r.type === "collinear" && r.refs[0] === ids.top && r.refs[1] === copy)).toBe(true);
+    const { store, svc } = service(doc);
+    const d = await settle(store, svc);
+    expect(store.state.status.conflicts).toEqual([]);
+    const l = ownSketch(d).entities[copy] as { p1: Id; p2: Id };
+    expect(ptv(ownSketch(d), l.p1).y).toBeCloseTo(60, 6);
+    expect(ptv(ownSketch(d), l.p2).y).toBeCloseTo(60, 6);
+  });
+});
+
+describe("repair dangling references", () => {
+  it("re-points a dangling relation to new geometry, and refuses the wrong kind", async () => {
+    const { doc, ids } = withDiagonal();
+    const [s1, s2] = doc.features;
+    // Delete Sketch1's right side (its corner point goes with it), then add a free point there.
+    let np = "";
+    let d1 = applyCommand(setActive(doc, s1.id), (ed) => {
+      ed.deleteEntities([ids.right]);
+      np = ed.addPoint(100, 60);
+    });
+    d1 = setActive(d1, s2.id);
+    const s = activeSketch(d1);
+    const rel = s.relations[danglingOf(d1, s2.id)[0]];
+    expect(missingRefs(s, rel)).toEqual([ids.corner]);
+    expect(missingKind(ids.corner)).toBe("point");
+    expect(typeof repairWith(s, rel, ids.corner, ids.top)).toBe("string"); // a line for a point
+    const r = repairWith(s, rel, ids.corner, np);
+    expect(typeof r).toBe("object");
+    const fixed = applyCommand(d1, (ed) => ed.updateRelation(rel.id, { refs: (r as { relation: { refs: Id[] } }).relation.refs }));
+    expect(danglingOf(fixed, s2.id)).toEqual([]);
+    const { store, svc } = service(fixed);
+    await settle(store, svc);
+    expect(store.state.status.dangling).toEqual([]);
+    expect(store.state.status.conflicts).toEqual([]);
+  });
+
+  it("refuses geometry that does not fit the relation", () => {
+    const { doc: d0, ids } = withDiagonal();
+    const [s1, s2] = d0.features;
+    // Sketch2: a line perpendicular to Sketch1's top line.
+    let doc = applyCommand(d0, (ed) => {
+      const l = addLine(ed, { x: 50, y: 70 }, { x: 50, y: 90 });
+      ed.addRelation({ type: "perpendicular", refs: [l.line, ids.top] });
+    });
+    doc = applyCommand(setActive(doc, s1.id), (ed) => ed.deleteEntities([ids.top]));
+    doc = applyCommand(doc, (ed) => void addCircle(ed, { x: 50, y: 100 }, 5));
+    const circle = Object.values(ownSketch(doc, s1.id).entities).find((e) => e.type === "circle")!.id;
+    doc = setActive(doc, s2.id);
+    const s = activeSketch(doc);
+    const rel = Object.values(s.relations).find((r) => r.type === "perpendicular")!;
+    expect(repairWith(s, rel, ids.top, circle)).toBe("That does not fit this relation");
+    expect(typeof repairWith(s, rel, ids.top, ids.bottom)).toBe("object");
   });
 });

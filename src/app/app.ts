@@ -21,7 +21,9 @@ import { LineTool } from "../tools/line";
 import { DimensionTool } from "../tools/dimension";
 import { TangentArcTool } from "../tools/tangentArc";
 import { DynamicMirrorTool, ExtendTool, FilletTool, MirrorTool, OffsetTool, SplineTool, TrimTool } from "../tools/modify";
-import { mirrorEntities, recomputeDerived } from "../tools/edits";
+import { convertEntities, mirrorEntities, recomputeDerived } from "../tools/edits";
+import { ConvertTool } from "../tools/convert";
+import { RepairTool } from "../tools/repair";
 import { loadKeymap } from "./keymap";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
@@ -110,6 +112,8 @@ export class App implements ToolHost {
     reg(new MirrorTool(this));
     reg(new DynamicMirrorTool(this));
     reg(new PictureScaleTool(this));
+    reg(new ConvertTool(this));
+    reg(new RepairTool(this));
     this.solver.postSolve = (doc, featureId) => applyCommand(doc, recomputeDerived, featureId);
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
@@ -534,6 +538,45 @@ export class App implements ToolHost {
     this.requestRender();
   }
 
+  // ---- Convert Entities and dangling-reference repair
+  /** Convert Entities: copy earlier sketches' geometry into this sketch, linked (On Edge). */
+  convertIds(ids: Id[]) {
+    const s = this.sketch();
+    // A picked endpoint or control vertex stands for its curve.
+    const targets = Array.from(
+      new Set(
+        ids.map((id) => {
+          const e = s.entities[id];
+          return e?.type === "point" && e.owner && s.entities[e.owner] ? e.owner : id;
+        }),
+      ),
+    ).filter((id) => s.ext?.[id]);
+    if (!targets.length) return this.flash("Pick geometry of an earlier sketch to convert", "error");
+    let res: { created: Id[]; message?: string } = { created: [] };
+    this.commit("Convert Entities", (ed) => (res = convertEntities(ed, targets)));
+    if (res.message) this.flash(res.message, res.created.length ? "info" : "error");
+    else {
+      const n = res.created.length;
+      this.flash(`Converted ${n === 1 ? "1 entity. It follows" : `${n} entities. They follow`} ${this.extFeatureName(targets[0])} (On Edge)`);
+    }
+    this.store.set({ selection: res.created, contextBar: null });
+  }
+  /** Convert the selected earlier geometry, or start picking it. */
+  convertCommand() {
+    const s = this.sketch();
+    const sel = this.store.state.selection.filter((id) => s.ext?.[id]);
+    if (sel.length) return this.convertIds(sel);
+    if (!s.ext || !Object.values(s.ext).some((x) => !x.hidden)) return this.flash("Convert Entities copies geometry of an earlier sketch. Add a sketch below this one first", "error");
+    this.setTool("convert");
+  }
+  /** Pick replacement geometry for the missing references of a dangling relation or dimension. */
+  startRepair(itemId: Id) {
+    const t = this.tools.get("repair") as RepairTool;
+    this.setTool("select");
+    t.start(itemId);
+    this.setTool("repair");
+  }
+
   // ------------------------------------------------------------------ feature tree
   /** Leave the current sketch cleanly (tool, selection, open boxes) before switching. */
   private leaveSketch() {
@@ -831,6 +874,8 @@ export class App implements ToolHost {
         return this.store.set({ combs: !this.store.state.combs });
       case "picture":
         return void this.importPicture();
+      case "convertEntities":
+        return this.convertCommand();
       case "exportSvg":
         return this.store.set({ panel: this.store.state.panel === "export" ? "auto" : "export" });
       case "save":

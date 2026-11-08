@@ -68,7 +68,9 @@ export type RelationType =
   | "symmetric"
   | "fix"
   /** G2: tangent plus equal curvature where a style spline meets a spline or arc. */
-  | "equalCurvature";
+  | "equalCurvature"
+  /** Convert Entities: [source, copy]. The copy coincides with the source (made by Convert Entities only). */
+  | "onEdge";
 
 export interface Relation {
   id: Id;

@@ -110,6 +110,7 @@ export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
   if (!e || e.type === "point") return { ok: false };
   if (e.type === "line" && e.owner) return { ok: false, message: "Polygon sides cannot be trimmed" };
   if (e.type === "spline" && e.derived) return { ok: false, message: "Driven offsets follow their source" };
+  loosenOnEdge(ed, id);
   const cv = entityCurve(s, e)!;
   const tP = curveParam(cv, at);
   const hits: { t: number; p: Vec2; by: Id }[] = [];
@@ -241,6 +242,7 @@ export function extendTarget(s: Sketch, id: Id, at: Vec2): { pointId: Id; to: Ve
 export function extendAt(ed: Editor, id: Id, at: Vec2): TrimResult {
   const t = extendTarget(ed.s, id, at);
   if (!t) return { ok: false, message: "Nothing to extend to" };
+  loosenOnEdge(ed, id);
   detachEnd(ed, id, t.pointId);
   ed.movePoint(t.pointId, t.to.x, t.to.y);
   attach(ed, t.pointId, t.to, t.by, id);
@@ -279,6 +281,8 @@ export function filletCorner(ed: Editor, corner: { l1: Id; e1: Id; l2: Id; e2: I
   if (theta < 1e-3 || Math.PI - theta < 1e-3) return { message: "Lines are parallel" };
   const d = r / Math.tan(theta / 2);
   if (d >= dist(P, o1) || d >= dist(P, o2)) return { message: "Radius too large for these lines" };
+  loosenOnEdge(ed, corner.l1);
+  loosenOnEdge(ed, corner.l2);
   const T1 = add(P, scale(u1, d));
   const T2 = add(P, scale(u2, d));
   const C = add(P, scale(norm(add(u1, u2)), r / Math.sin(theta / 2)));
@@ -680,5 +684,74 @@ export function recomputeDerived(ed: Editor) {
       const q = fit.cps[Math.min(i, fit.cps.length - 1)];
       ed.movePoint(id, q.x, q.y);
     });
+  }
+}
+
+// ---------------------------------------------------------------- Convert Entities
+
+/** Entities of earlier sketches that Convert Entities can copy (not endpoints or spline polygon sides). */
+export function convertible(s: Sketch, id: Id): boolean {
+  const e = s.entities[id];
+  if (!e || !s.ext?.[id] || e.id === "origin") return false;
+  if (e.type === "point") return !e.owner;
+  if (e.type === "line") return !e.owner;
+  return true;
+}
+
+/**
+ * Convert Entities: copy geometry of earlier sketches into the active sketch, each copy tied to its
+ * source by an On Edge relation, so it is fully defined and follows the source.
+ */
+export function convertEntities(ed: Editor, ids: Id[]): { created: Id[]; message?: string } {
+  const s = ed.s;
+  const created: Id[] = [];
+  const done = new Set(Object.values(s.relations).filter((r) => r.type === "onEdge").map((r) => r.refs[0]));
+  let skipped = 0;
+  for (const id of ids) {
+    if (!convertible(s, id) || done.has(id)) {
+      skipped++;
+      continue;
+    }
+    const e = s.entities[id];
+    const c = !!e.construction;
+    let copy: Id;
+    switch (e.type) {
+      case "point":
+        copy = ed.addPoint(e.x, e.y, undefined, c);
+        break;
+      case "line":
+        copy = addLine(ed, ptv(s, e.p1), ptv(s, e.p2), c).line;
+        break;
+      case "circle":
+        copy = addCircle(ed, ptv(s, e.c), e.r, c).circle;
+        break;
+      case "arc":
+        copy = addArc(ed, ptv(s, e.c), ptv(s, e.s), ptv(s, e.e), c).arc;
+        break;
+      case "spline":
+        copy = addSpline(ed, e.cps.map((p) => ptv(s, p)), c).spline;
+        break;
+    }
+    ed.addRelation({ type: "onEdge", refs: [id, copy] });
+    done.add(id);
+    created.push(copy);
+  }
+  if (!created.length) return { created, message: skipped ? "Pick curves or points of an earlier sketch that are not converted yet" : "Nothing to convert" };
+  return { created };
+}
+
+/**
+ * Before reshaping a converted copy (trim, extend, fillet), loosen its On Edge link so it can change
+ * length but stays on its source: lines become Collinear, arcs and circles Coradial. A spline copy is
+ * unlinked.
+ */
+export function loosenOnEdge(ed: Editor, id: Id) {
+  for (const r of Object.values(ed.s.relations)) {
+    if (r.type !== "onEdge" || r.refs[1] !== id) continue;
+    const [src, copy] = r.refs;
+    const t = ed.s.entities[copy]?.type;
+    ed.deleteRelation(r.id);
+    if (t === "line") ed.addRelation({ type: "collinear", refs: [src, copy] });
+    else if (t === "arc" || t === "circle") ed.addRelation({ type: "coradial", refs: [src, copy] });
   }
 }

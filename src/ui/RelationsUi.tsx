@@ -117,7 +117,7 @@ export function DanglingList() {
   if (!ids.length) return null;
   return (
     <Section title="Dangling references">
-      <div class={css.info}>These point at geometry that no longer exists (deleted in an earlier sketch). They are not solved. Delete them, or undo the deletion.</div>
+      <div class={css.info}>These point at geometry that no longer exists (deleted in an earlier sketch). They are not solved. Repair one by clicking the geometry to use instead, or delete it.</div>
       <ul class={css.list}>
         {ids.map((id) => {
           const r = s.relations[id];
@@ -125,9 +125,14 @@ export function DanglingList() {
           return (
             <li key={id} class={css.conflict} onMouseEnter={() => app.setHover(id)} onMouseLeave={() => app.setHover(null)}>
               <span>{r ? <><Glyph type={r.type} bad /> {relationNames[r.type]} <span class={css.info}>{describeRelation(s, r)}</span></> : `Dimension ${d!.expr}`}</span>
-              <button class={css.small} onClick={() => app.commit("Delete", (ed) => ed.deleteAny([id]))}>
-                Delete
-              </button>
+              <span style={{ display: "inline-flex", gap: "4px" }}>
+                <button class={css.small} title="Click new geometry to use instead of the deleted one" onClick={() => app.startRepair(id)}>
+                  Repair
+                </button>
+                <button class={css.small} onClick={() => app.commit("Delete", (ed) => ed.deleteAny([id]))}>
+                  Delete
+                </button>
+              </span>
             </li>
           );
         })}

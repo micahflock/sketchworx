@@ -68,7 +68,9 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
         ? r.refs.filter((id) => s.entities[id]?.type === "point")
         : r.type === "symmetric"
           ? r.refs.slice(0, 2) // not on the centerline
-          : r.refs;
+          : r.type === "onEdge"
+            ? r.refs.slice(1) // on the converted copy only
+            : r.refs;
     for (const id of targets) {
       const e = s.entities[id];
       if (!e || s.ext?.[id]?.hidden) continue;

@@ -363,4 +363,6 @@ export const toolTitle = (id: string) =>
     offset: "Offset Entities",
     mirror: "Mirror Entities",
     dynamicMirror: "Dynamic Mirror",
+    convert: "Convert Entities",
+    repair: "Repair Reference",
   })[id] ?? id;

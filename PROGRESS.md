@@ -35,13 +35,28 @@ PropertyManager, like the SolidWorks FeatureManager.
 - Vendored wrapper change: `src/solver/planegcs/sketch/gcs_wrapper.ts` honours `fixed` on circles and arcs
   (two lines, marked "Sketchworx").
 
-Not done yet: Convert Entities (copy earlier geometry into the active sketch, linked); repairing a dangling
-reference by dragging it onto new geometry (delete and re-add it instead).
+- **Convert Entities** (Tools group, or the ⊡ button in the context bar when earlier geometry is selected):
+  copies lines, arcs, circles, style splines and standalone points of earlier sketches into the active one.
+  Each copy is tied to its source by an **On Edge** relation (glyph ⊡; point for point, plus equal radius for
+  circles), so it is fully defined and follows the source. With nothing selected the button starts a pick
+  mode (click to convert, Esc to finish); picking an endpoint converts its curve; a source already converted
+  into this sketch is skipped. Trim, Extend and Fillet on a copy loosen its link so it keeps lying on the
+  source: lines become Collinear, arcs and circles Coradial (a spline copy is unlinked). Driven offset
+  splines of earlier sketches count as ordinary locked geometry, so they can be converted and related to.
+- **Repair a dangling reference**: each row under "Dangling references" has Repair. Click the geometry to use
+  instead; the kind must match what was deleted (point ids start with `p`, curves with `e`), and the
+  relation or dimension must still make sense with it, otherwise the pick is refused with the reason. Items
+  with several missing references ask for each in turn. Offset square-end pairs pointing at removed geometry
+  are dropped.
 
 Acceptance (`tests/features.test.ts`, plus Playwright on the production build): a line in Sketch2 from
 Sketch1's corner is fully defined with zero DOF and no redundancy; changing Sketch1's width moves it; dragging
 Sketch1 moves Sketch2 mid-drag; locked circles/arcs keep their size; offsets of Sketch1 geometry follow it;
-dangling references are reported, not counted as conflicts; delete/reorder refusals; v3 round trip and v2 load.
+dangling references are reported, not counted as conflicts; delete/reorder refusals; v3 round trip and v2 load;
+each convertible kind converts fully defined with no redundancy and follows its source; a trimmed copy stays
+collinear with its source; a dangling relation is repaired onto a new point and a wrong-kind or ill-fitting
+pick is refused. In the browser: convert from the context bar and in pick mode, then delete the source and
+repair the On Edge link onto other geometry (sketch back to fully defined).
 
 ## Scope change (after milestone 7)
 
