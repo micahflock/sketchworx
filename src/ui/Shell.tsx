@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { CommandManager } from "./CommandManager";
 import { useApp, useUi } from "./hooks";
-import { PropertyManager } from "./PropertyManager";
+import { PropertyManager, toolTitle } from "./PropertyManager";
 import { FeatureTree } from "./FeatureTree";
 import { StatusBar } from "./StatusBar";
 import { Overlays } from "./Overlays";
@@ -46,15 +46,18 @@ export function Shell() {
 function TouchKeys() {
   const app = useApp();
   const ui = useUi();
+  const selecting = ui.toolId === "select";
+  const drawTool = app.drawToolId();
   return (
     <div class={css.touchKeys}>
-      <button
-        class={ui.fingerDraws ? css.active : ""}
-        title={ui.fingerDraws ? "One finger draws with the active tool (two fingers pan and zoom)" : "One finger pans (draw with Apple Pencil)"}
-        onClick={() => app.setFingerDraws(!ui.fingerDraws)}
-      >
-        {ui.fingerDraws ? "Finger: Draw" : "Finger: Pan"}
-      </button>
+      <div class={css.fingerMode} title="What one finger does. Two fingers always pan and zoom">
+        <button class={selecting ? css.active : ""} onClick={() => app.setFingerMode("select")}>
+          Select
+        </button>
+        <button class={selecting ? "" : css.active} onClick={() => app.setFingerMode("draw")}>
+          {toolTitle(drawTool)}
+        </button>
+      </div>
       <button onClick={() => app.escape()}>Esc</button>
       <button class={ui.touchCtrl ? css.active : ""} onClick={() => app.store.set({ touchCtrl: !ui.touchCtrl })}>
         Ctrl

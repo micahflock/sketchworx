@@ -123,10 +123,11 @@ Note: `spike/*.mjs` import the npm package that the spike used. To rerun them: `
   for presentation; splines above degree 3 become cubics) and PNG of the Art view at a chosen size.
 - PWA: manifest, icons, and a service worker generated at build time that precaches every built file
   (including the solver WASM), then serves cache-first.
-- Touch: one finger draws with the active tool until an Apple Pencil is used; after that one finger pans and
-  the Pencil draws (a "Finger: Draw / Pan" on-screen toggle overrides it, remembered per device). Two fingers
+- Touch: one finger never pans; it drives the active tool. An on-screen Select / Draw toggle switches between the
+  Select tool (tap selects, drag moves geometry or box-selects) and the last drawing tool (the Draw half shows its
+  name, e.g. "Line"). Picking a tool sets it too: Line goes to Draw, Add Relation goes to Select. Two fingers
   always pan/pinch-zoom, a quick two-finger tap undoes, a double tap acts as a double-click (ends a line chain),
-  long-press opens the context toolbar (on geometry) or the shortcut bar. Pencil behaves like the mouse. On phones
+  long-press in Select opens the context toolbar (on geometry) or the shortcut bar. Pencil behaves like the mouse. On phones
   the PropertyManager starts collapsed and slides over the canvas when opened. On-screen Esc / Ctrl / Undo /
   Redo / Delete appear on touch devices until a keyboard is used. Touch hit radius 22 px, toolbar buttons
   ≥ 46 px.

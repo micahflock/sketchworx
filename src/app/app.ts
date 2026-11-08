@@ -59,15 +59,6 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-/** True when the user picked finger draw/pan explicitly on this device. */
-function fingerChoiceStored(): boolean {
-  try {
-    return localStorage.getItem("sketchworx.fingerDraws") !== null;
-  } catch {
-    return false;
-  }
-}
-
 /** Commands whose new entities Dynamic Mirror copies. */
 const DRAW_COMMANDS = new Set(["Line", "Centerline", "Arc", "Tangent Arc", "Circle", "Point", "Style Spline", "Rectangle"]);
 
@@ -101,6 +92,8 @@ export class App implements ToolHost {
   private drawingTouch: number | null = null;
   private afterPinch = false;
   private lastTap: { t: number; at: Vec2 } | null = null;
+  /** Last tool other than Select, resumed by the on-screen Draw toggle. */
+  private lastDrawTool = "line";
   /** Status bar cursor readout hook. */
   onCursor: ((p: Vec2) => void) | null = null;
 
@@ -266,6 +259,7 @@ export class App implements ToolHost {
     if (!t) return;
     this.tool.deactivate?.();
     this.tool = t;
+    if (id !== "select") this.lastDrawTool = id;
     t.activate?.();
     this.store.set({ toolId: id, showShortcutBar: null, contextBar: null });
     if (this.canvas) this.canvas.style.cursor = t.cursor ?? "default";
@@ -692,11 +686,6 @@ export class App implements ToolHost {
       this.lastPointer = pe;
       if (pe.pointerType !== "mouse" && !this.store.state.touchUi) this.store.set({ touchUi: true });
       if (this.store.state.viewMode === "split" && pe.screen.x > this.view.width) return;
-      if (pe.pointerType === "pen" && this.store.state.fingerDraws && !fingerChoiceStored()) {
-        // An Apple Pencil is in use: let the finger pan from now on, as in most iPad drawing apps.
-        this.setFingerDraws(false, false);
-        this.flash("Apple Pencil detected: Pencil draws, one finger pans (toggle with the Finger button)");
-      }
       if (pe.pointerType === "touch") return this.touchDown(e, pe);
       if (e.button === 1 || (e.button === 0 && e.altKey && pe.pointerType === "mouse")) {
         this.panning = { last: pe.screen };
@@ -753,9 +742,9 @@ export class App implements ToolHost {
   }
 
   // ---- touch
-  // Finger-draw mode (default until an Apple Pencil is seen): one finger drives the active tool.
-  // Pan mode (after a Pencil is used, or toggled): one finger pans and the Pencil draws.
-  // Always: two fingers pan + pinch-zoom, a quick two-finger tap undoes, long-press opens the menu.
+  // One finger always drives the active tool: Select (tap selects, drag moves or box-selects) or a
+  // drawing tool. It never pans; two fingers pan + pinch-zoom, and a quick two-finger tap undoes.
+  // Long-press (Select only) opens the context toolbar or shortcut bar.
   private touchDown(e: PointerEvent, pe: PEvent) {
     this.touches.set(e.pointerId, { start: pe.screen, last: pe.screen, t0: performance.now() });
     clearTimeout(this.longPress);
@@ -763,13 +752,10 @@ export class App implements ToolHost {
     if (this.touches.size === 1) {
       this.afterPinch = false;
       this.longPressFired = false;
-      const draws = this.store.state.fingerDraws;
-      if (draws) {
-        // Hold the touch back briefly: a second finger turns it into a pinch instead.
-        this.pendingTouch = { id: e.pointerId, pe };
-        this.pendingTimer = window.setTimeout(() => this.flushPendingTouch(), 150);
-      }
-      if (!draws || this.tool.id === "select") {
+      // Hold the touch back briefly: a second finger turns it into a pinch instead.
+      this.pendingTouch = { id: e.pointerId, pe };
+      this.pendingTimer = window.setTimeout(() => this.flushPendingTouch(), 150);
+      if (this.tool.id === "select") {
         this.longPress = window.setTimeout(() => {
           const t = this.touches.get(e.pointerId);
           if (!t || this.touches.size !== 1 || Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) > 10) return;
@@ -812,8 +798,6 @@ export class App implements ToolHost {
   private touchMove(e: PointerEvent, pe: PEvent) {
     const t = this.touches.get(e.pointerId);
     if (!t) return;
-    const dx = pe.screen.x - t.last.x;
-    const dy = pe.screen.y - t.last.y;
     t.last = pe.screen;
     if (this.touches.size === 2 && this.pinch) {
       const [a, b] = [...this.touches.values()];
@@ -828,11 +812,6 @@ export class App implements ToolHost {
       return;
     }
     if (this.touches.size !== 1 || this.afterPinch || this.longPressFired) return;
-    if (!this.store.state.fingerDraws) {
-      this.view.panBy(dx, dy);
-      this.requestRender();
-      return;
-    }
     if (this.pendingTouch?.id === e.pointerId && Math.hypot(pe.screen.x - t.start.x, pe.screen.y - t.start.y) > 8) {
       clearTimeout(this.pendingTimer);
       this.flushPendingTouch();
@@ -881,15 +860,15 @@ export class App implements ToolHost {
     } else this.lastTap = { t: now, at: pe.screen };
   }
 
-  /** Switch what a single finger does; remembered on this device. */
-  setFingerDraws(on: boolean, explicit = true) {
-    this.store.set({ fingerDraws: on });
-    if (explicit)
-      try {
-        localStorage.setItem("sketchworx.fingerDraws", on ? "1" : "0");
-      } catch {
-        /* storage unavailable */
-      }
+  /** On-screen Select/Draw toggle: Select, or back to the last drawing tool. */
+  setFingerMode(mode: "select" | "draw") {
+    if (mode === "select") {
+      if (this.tool.id !== "select") this.setTool("select");
+    } else if (this.tool.id === "select") this.setTool(this.lastDrawTool);
+  }
+  /** Tool the Draw toggle resumes. */
+  drawToolId(): string {
+    return this.tool.id === "select" ? this.lastDrawTool : this.tool.id;
   }
 
   onKeyDown(e: KeyboardEvent) {
@@ -967,6 +946,8 @@ export class App implements ToolHost {
       case "relationsPanel":
         return this.store.set({ panel: this.store.state.panel === "relations" ? "auto" : "relations" });
       case "panel:add":
+        // Relations work on a selection, so pick with the Select tool.
+        if (this.tool.id !== "select") this.setTool("select");
         return this.store.set({ panel: "auto" });
       case "view:sketch":
       case "view:art":

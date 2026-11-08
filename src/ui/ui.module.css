@@ -636,6 +636,21 @@
     box-shadow: 4px 0 18px rgba(20, 30, 50, 0.2);
   }
 }
+/* Select / Draw segmented toggle for what one finger does. */
+.fingerMode {
+  display: flex;
+}
+.fingerMode button:first-child {
+  border-radius: 8px 0 0 8px;
+}
+.fingerMode button:last-child {
+  border-radius: 0 8px 8px 0;
+  border-left: none;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .touchKeys button {
   min-width: 56px;
   min-height: 44px;
