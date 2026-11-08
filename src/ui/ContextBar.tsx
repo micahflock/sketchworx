@@ -22,14 +22,14 @@ export function ContextBar() {
       ))}
       {canConvert && (
         <button title="Convert Entities (copy into this sketch, linked)" onClick={() => app.convertCommand()}>
-          <span class={css.glyph} style={{ background: "#eef", color: "#335", borderColor: "#aac" }}>
+          <span class={css.glyph} style={{ background: "var(--sw-glyph-plain-bg)", color: "var(--sw-glyph-plain-fg)", borderColor: "var(--sw-glyph-plain-border)" }}>
             ⊡
           </span>
         </button>
       )}
       {hasCurves && (
         <button title="Construction Geometry" onClick={() => app.toggleConstruction()}>
-          <span class={css.glyph} style={{ background: "#eef", color: "#335", borderColor: "#aac" }}>
+          <span class={css.glyph} style={{ background: "var(--sw-glyph-plain-bg)", color: "var(--sw-glyph-plain-fg)", borderColor: "var(--sw-glyph-plain-border)" }}>
             ┄
           </span>
         </button>

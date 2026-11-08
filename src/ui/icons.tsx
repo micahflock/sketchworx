@@ -112,8 +112,8 @@ export const icons: Record<string, () => JSX.Element> = {
   relations: () => (
     <S>
       <path d="M5 19L19 5" />
-      <rect x="13" y="13" width="7" height="7" rx="1.5" fill="#d9f5d9" stroke="#127a12" />
-      <path d="M15 16.5h3" stroke="#127a12" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" style={{ fill: "var(--sw-glyph-bg)", stroke: "var(--sw-glyph-fg)" }} />
+      <path d="M15 16.5h3" style={{ stroke: "var(--sw-glyph-fg)" }} />
     </S>
   ),
   addRelation: () => (
@@ -262,6 +262,29 @@ export const icons: Record<string, () => JSX.Element> = {
       {dot(6, 18)}
       {dot(12, 18)}
       {dot(18, 18)}
+    </S>
+  ),
+  search: () => (
+    <S>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5 5" />
+    </S>
+  ),
+  sun: () => (
+    <S>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+    </S>
+  ),
+  moon: () => (
+    <S>
+      <path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z" />
+    </S>
+  ),
+  newSketch: () => (
+    <S>
+      <path d="M4 19l5-12 4 7 3-4 4 9z" />
+      <path d="M18 3v6M15 6h6" />
     </S>
   ),
 };

@@ -1,6 +1,8 @@
-import { useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useApp, useUi } from "./hooks";
 import { Icon } from "./icons";
+import { searchCommands } from "./commandSearch";
+import type { Command } from "./commandSearch";
 import css from "./ui.module.css";
 
 interface Btn {
@@ -8,55 +10,54 @@ interface Btn {
   label: string;
   icon: string;
   action: string;
-  key?: string;
 }
 interface Group {
   title: string;
   items: (Btn | { flyout: string; items: Btn[] })[];
 }
 
-const t = (id: string, label: string, icon = id, key?: string): Btn => ({ id, label, icon, action: `tool:${id}`, key });
-const a = (id: string, label: string, icon: string, action: string, key?: string): Btn => ({ id, label, icon, action, key });
+const t = (id: string, label: string, icon = id): Btn => ({ id, label, icon, action: `tool:${id}` });
+const a = (id: string, label: string, icon: string, action: string): Btn => ({ id, label, icon, action });
 
 export const groups: Group[] = [
   {
     title: "Draw",
     items: [
-      { flyout: "line", items: [t("line", "Line", "line", "L"), t("centerline", "Centerline"), t("midline", "Midpoint Line")] },
+      { flyout: "line", items: [t("line", "Line"), t("centerline", "Centerline"), t("midline", "Midpoint Line")] },
       {
         flyout: "rect",
         items: [t("rect", "Corner Rectangle"), t("rectCenter", "Center Rectangle"), t("rect3", "3 Point Corner Rectangle"), t("rect3Center", "3 Point Center Rectangle"), t("parallelogram", "Parallelogram")],
       },
-      { flyout: "circle", items: [t("circle", "Circle", "circle", "C"), t("circle3", "Perimeter Circle")] },
-      { flyout: "arc", items: [t("arc", "Centerpoint Arc", "arc", "A"), t("tangentArc", "Tangent Arc"), t("arc3", "3 Point Arc")] },
-      t("spline", "Style Spline", "spline", "B"),
-      t("point", "Point", "point", "P"),
+      { flyout: "circle", items: [t("circle", "Circle"), t("circle3", "Perimeter Circle")] },
+      { flyout: "arc", items: [t("arc", "Centerpoint Arc"), t("tangentArc", "Tangent Arc"), t("arc3", "3 Point Arc")] },
+      t("spline", "Style Spline"),
+      t("point", "Point"),
     ],
   },
   {
     title: "Relations",
-    items: [a("addRelation", "Add Relation", "addRelation", "panel:add"), a("relations", "Display/Delete Relations", "relations", "relationsPanel", "R")],
+    items: [a("addRelation", "Add Relation", "addRelation", "panel:add"), a("relations", "Display/Delete Relations", "relations", "relationsPanel")],
   },
   {
     title: "Dimension",
-    items: [t("dimension", "Smart Dimension", "dimension", "D"), a("variables", "Global Variables", "variables", "variablesPanel")],
+    items: [t("dimension", "Smart Dimension"), a("variables", "Global Variables", "variables", "variablesPanel")],
   },
   {
     title: "Tools",
     items: [
-      t("trim", "Trim Entities", "trim", "T"),
+      t("trim", "Trim Entities"),
       t("extend", "Extend Entities"),
       t("fillet", "Sketch Fillet"),
       a("convert", "Convert Entities", "convert", "convertEntities"),
-      t("offset", "Offset Entities", "offset", "O"),
-      { flyout: "mirror", items: [t("mirror", "Mirror Entities", "mirror", "M"), t("dynamicMirror", "Dynamic Mirror")] },
-      a("construction", "Construction Geometry", "construction", "toggleConstruction", "Q"),
+      t("offset", "Offset Entities"),
+      { flyout: "mirror", items: [t("mirror", "Mirror Entities"), t("dynamicMirror", "Dynamic Mirror")] },
+      a("construction", "Construction Geometry", "construction", "toggleConstruction"),
     ],
   },
   {
     title: "View",
     items: [
-      a("fit", "Zoom to Fit", "fit", "zoomFit", "F"),
+      a("fit", "Zoom to Fit", "fit", "zoomFit"),
       a("sketchView", "Sketch View", "sketchView", "view:sketch"),
       a("artView", "Art View", "artView", "view:art"),
       a("splitView", "Split View", "splitView", "view:split"),
@@ -78,23 +79,104 @@ export const groups: Group[] = [
   },
 ];
 
-function ToolButton({ b, active, onPick, caret }: { b: Btn; active: boolean; onPick: () => void; caret?: () => void }) {
+/** Extra words that should find a command. */
+const keywords: Record<string, string[]> = {
+  line: ["segment", "straight"],
+  centerline: ["axis", "symmetry"],
+  rect: ["box", "square"],
+  rectCenter: ["box", "square"],
+  circle: ["round"],
+  circle3: ["round"],
+  arc: ["curve"],
+  tangentArc: ["curve"],
+  arc3: ["curve"],
+  spline: ["curve", "bezier", "freeform"],
+  point: ["vertex"],
+  addRelation: ["constraint", "parallel", "perpendicular", "tangent", "coincident", "horizontal", "vertical", "equal", "symmetric", "fix"],
+  relations: ["constraint", "conflict"],
+  dimension: ["measure", "length", "distance", "angle", "radius", "diameter", "size"],
+  variables: ["parameter", "equation", "expression"],
+  trim: ["cut", "split", "remove"],
+  extend: ["lengthen"],
+  fillet: ["round", "corner", "radius"],
+  convert: ["reference", "copy", "project", "link"],
+  offset: ["outline", "parallel", "inset", "outset"],
+  mirror: ["symmetric", "flip", "reflect"],
+  dynamicMirror: ["symmetric", "flip", "reflect"],
+  construction: ["reference", "helper", "guide"],
+  fit: ["zoom", "frame", "all"],
+  artView: ["preview", "stroke", "fill", "weight"],
+  splitView: ["side by side"],
+  picture: ["image", "trace", "background", "photo"],
+  combs: ["curvature", "smoothness"],
+  grid: ["snap"],
+  open: ["load", "file"],
+  save: ["download", "file"],
+  export: ["svg", "png", "download", "image"],
+  keys: ["shortcuts", "hotkeys", "keymap"],
+  newSketch: ["add", "feature", "layer"],
+  themeDark: ["night", "appearance", "colors"],
+  themeLight: ["day", "appearance", "colors"],
+  themeSystem: ["auto", "appearance", "colors", "os"],
+  delete: ["remove", "erase"],
+  shortcutBar: ["menu", "tools"],
+};
+
+/** Commands that only live in the command box. */
+const extraCommands: Command[] = [
+  { id: "newSketch", label: "New Sketch", action: "newSketch", icon: "newSketch", group: "Sketches" },
+  { id: "delete", label: "Delete Selection", action: "delete", icon: "trim", group: "Edit" },
+  { id: "shortcutBar", label: "Shortcut Bar", action: "shortcutBar", icon: "keys", group: "Edit" },
+  { id: "themeLight", label: "Light Theme", action: "theme:light", icon: "sun", group: "Appearance" },
+  { id: "themeDark", label: "Dark Theme", action: "theme:dark", icon: "moon", group: "Appearance" },
+  { id: "themeSystem", label: "Match System Theme", action: "theme:system", icon: "sun", group: "Appearance" },
+];
+
+export function allCommands(): Command[] {
+  const out: Command[] = [];
+  for (const g of groups)
+    for (const it of g.items)
+      for (const b of "flyout" in it ? it.items : [it]) out.push({ id: b.id, label: b.label, action: b.action, icon: b.icon, group: g.title, keywords: keywords[b.id] });
+  for (const c of extraCommands) out.push({ ...c, keywords: keywords[c.id] });
+  return out;
+}
+
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+const mod = isMac ? "⌘" : "Ctrl+";
+const fixedKeys: Record<string, string> = {
+  undo: `${mod}Z`,
+  redo: isMac ? "⇧⌘Z" : "Ctrl+Y",
+  save: `${mod}S`,
+  open: `${mod}O`,
+  delete: "Del",
+};
+
+/** The key that runs an action: the user's keymap first, then the fixed Ctrl shortcuts. */
+function keyFor(keymap: Record<string, string>, action: string): string | undefined {
+  const k = Object.keys(keymap).find((x) => keymap[x] === action);
+  return k ? k.toUpperCase() : fixedKeys[action];
+}
+
+function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boolean; onPick: () => void; caret?: () => void; keyHint?: string }) {
   const app = useApp();
   const avail = !b.action.startsWith("tool:") || !!app.getTool(b.action.slice(5));
   return (
     <div class={css.btnWrap}>
       <button
         class={`${css.tbtn} ${active ? css.active : ""}`}
-        title={`${b.label}${b.key ? ` (${b.key})` : ""}${avail ? "" : " (coming soon)"}`}
+        title={`${b.label}${keyHint ? ` (${keyHint})` : ""}${avail ? "" : " (coming soon)"}`}
+        aria-label={b.label}
+        aria-pressed={active}
         disabled={!avail}
         onClick={onPick}
       >
         <Icon name={b.icon} />
-        <span class={css.tlabel}>{b.label}</span>
       </button>
       {caret && (
-        <button class={css.caret} title="More" onClick={caret}>
-          ▾
+        <button class={css.caret} title={`More ${b.label.toLowerCase()} tools`} aria-label={`More ${b.label.toLowerCase()} tools`} onClick={caret}>
+          <svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true">
+            <path d="M1 2.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3" />
+          </svg>
         </button>
       )}
     </div>
@@ -117,10 +199,10 @@ export function CommandManager() {
     (b.action === "convertEntities" && ui.toolId === "convert") ||
     (b.action === "exportSvg" && ui.panel === "export");
   return (
-    <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>
-      {groups.map((g) => (
-        <div class={css.group} key={g.title}>
-          <div class={css.groupItems}>
+    <div class={`${css.toolbar} ${ui.touchUi ? css.touchBar : ""}`}>
+      <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>
+        {groups.map((g) => (
+          <div class={css.group} key={g.title} role="group" aria-label={g.title}>
             {g.items.map((it) => {
               if ("flyout" in it) {
                 const lastId = app.flyoutLast[it.flyout] ?? it.items[0].id;
@@ -131,6 +213,7 @@ export function CommandManager() {
                     <ToolButton
                       b={cur}
                       active={anyActive}
+                      keyHint={keyFor(app.keymap, cur.action)}
                       onPick={() => {
                         app.runAction(cur.action);
                         setOpen(null);
@@ -151,6 +234,7 @@ export function CommandManager() {
                             }}
                           >
                             <Icon name={b.icon} /> {b.label}
+                            {keyFor(app.keymap, b.action) && <kbd class={css.kbd}>{keyFor(app.keymap, b.action)}</kbd>}
                           </button>
                         ))}
                       </div>
@@ -158,12 +242,136 @@ export function CommandManager() {
                   </div>
                 );
               }
-              return <ToolButton key={it.id} b={it} active={isActive(it)} onPick={() => app.runAction(it.action)} />;
+              return <ToolButton key={it.id} b={it} active={isActive(it)} keyHint={keyFor(app.keymap, it.action)} onPick={() => app.runAction(it.action)} />;
             })}
           </div>
-          <div class={css.groupTitle}>{g.title}</div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div class={css.toolbarEnd}>
+        <CommandBox />
+        <button
+          class={css.tbtn}
+          title={ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label={ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          onClick={() => app.runAction("toggleTheme")}
+        >
+          <Icon name={ui.theme === "dark" ? "sun" : "moon"} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Type to find and run any command. Ctrl/⌘+K or / focuses it. */
+function CommandBox() {
+  const app = useApp();
+  const ui = useUi();
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const cmds = useMemo(allCommands, []);
+  const results = open ? searchCommands(cmds, q).filter((c) => !c.action.startsWith("tool:") || !!app.getTool(c.action.slice(5))) : [];
+  const sel = Math.min(hi, Math.max(results.length - 1, 0));
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      const k = e.key.toLowerCase();
+      if (((e.ctrlKey || e.metaKey) && k === "k") || (k === "/" && !typing && !e.ctrlKey && !e.metaKey)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        input.current?.focus();
+        input.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+
+  useEffect(() => {
+    list.current?.querySelector(`[data-i="${sel}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [sel, open]);
+
+  const close = () => {
+    setOpen(false);
+    setQ("");
+    setHi(0);
+    input.current?.blur();
+  };
+  const run = (c: Command | undefined) => {
+    if (!c) return;
+    close();
+    app.runAction(c.action);
+  };
+  const current = (c: Command) => c.action === `theme:${ui.themePref}`;
+
+  return (
+    <div class={`${css.cmdBox} ${open ? css.cmdBoxOpen : ""}`}>
+      <span class={css.cmdIcon} aria-hidden="true">
+        <Icon name="search" />
+      </span>
+      <input
+        ref={input}
+        class={css.cmdInput}
+        type="text"
+        value={q}
+        placeholder="Search commands"
+        aria-label="Search commands"
+        aria-expanded={open}
+        aria-controls="sw-cmd-results"
+        aria-activedescendant={results.length ? `sw-cmd-${sel}` : undefined}
+        role="combobox"
+        autocomplete="off"
+        spellcheck={false}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onInput={(e) => {
+          setQ((e.target as HTMLInputElement).value);
+          setHi(0);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") setHi((sel + 1) % Math.max(results.length, 1));
+          else if (e.key === "ArrowUp") setHi((sel - 1 + results.length) % Math.max(results.length, 1));
+          else if (e.key === "Enter") run(results[sel]);
+          else if (e.key === "Escape") close();
+          else return;
+          e.preventDefault();
+        }}
+      />
+      {!open && <kbd class={`${css.kbd} ${css.cmdHint}`}>{isMac ? "⌘K" : "Ctrl K"}</kbd>}
+      {open && (
+        <ul class={css.cmdList} id="sw-cmd-results" role="listbox" ref={list}>
+          {results.length === 0 && <li class={css.cmdEmpty}>No command matches “{q}”</li>}
+          {results.map((c, i) => {
+            const key = keyFor(app.keymap, c.action);
+            return (
+              <li
+                key={c.id}
+                id={`sw-cmd-${i}`}
+                data-i={i}
+                role="option"
+                aria-selected={i === sel}
+                class={`${css.cmdItem} ${i === sel ? css.cmdItemHi : ""}`}
+                onPointerDown={(e) => e.preventDefault()}
+                onPointerMove={() => i !== sel && setHi(i)}
+                onClick={() => run(c)}
+              >
+                <Icon name={c.icon} />
+                <span class={css.cmdLabel}>
+                  {c.label}
+                  {current(c) && <span class={css.cmdCurrent}> · current</span>}
+                </span>
+                <span class={css.cmdGroup}>{c.group}</span>
+                {key && <kbd class={css.kbd}>{key}</kbd>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

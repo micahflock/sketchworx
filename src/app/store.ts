@@ -4,6 +4,8 @@ import type { History } from "../model/history";
 import type { Doc, Id } from "../model/types";
 import type { SketchStatus } from "../solver/types";
 import { emptyStatus } from "../solver/types";
+import type { ThemeName } from "../render/theme";
+import type { ThemePref } from "./themePref";
 
 export type ViewMode = "sketch" | "art" | "split";
 
@@ -41,6 +43,9 @@ export interface UiState {
   /** Art view: selected chains, by a curve in each (the chain's key). */
   artSelection: Id[];
   artHover: Id | null;
+  /** Light/dark choice, and the theme it resolves to. */
+  themePref: ThemePref;
+  theme: ThemeName;
 }
 
 type Listener = () => void;
@@ -79,6 +84,8 @@ export class Store {
       combs: false,
       artSelection: [],
       artHover: null,
+      themePref: "light",
+      theme: "light",
     };
   }
 

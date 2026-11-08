@@ -191,7 +191,7 @@ export class SelectTool implements Tool {
     const crossing = this.box.b.x < this.box.a.x;
     const c = p.ctx;
     c.fillStyle = crossing ? theme.boxCrossing : theme.boxWindow;
-    c.strokeStyle = crossing ? "#1a9a4a" : "#1a6ad8";
+    c.strokeStyle = crossing ? theme.boxCrossingLine : theme.boxWindowLine;
     c.lineWidth = 1;
     c.setLineDash(crossing ? [5, 3] : []);
     c.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));

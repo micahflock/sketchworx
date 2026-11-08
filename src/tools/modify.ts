@@ -199,7 +199,7 @@ export class TrimTool implements Tool {
     return false;
   }
   draw(p: Painter) {
-    if (this.stroke && this.stroke.length > 1) p.polyline(this.stroke, { color: "#d33", width: 1.5, dash: [3, 3] });
+    if (this.stroke && this.stroke.length > 1) p.polyline(this.stroke, { color: theme.trimStroke, width: 1.5, dash: [3, 3] });
   }
 }
 

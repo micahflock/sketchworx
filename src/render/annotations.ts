@@ -79,9 +79,9 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
       const { at, dir } = glyphAnchor(p, s, e);
       const x = at.x + dir.x * k * 18;
       const y = at.y + dir.y * k * 18;
-      const bg = bad ? theme.relGlyphConflict : hot ? "#ffe2b8" : theme.relGlyphBg;
-      const fg = bad ? "#b00" : hot ? "#a35200" : theme.relGlyphFg;
-      const rect = p.badge(relationGlyphs[r.type], x, y, bg, fg, bad ? "#e08080" : hot ? theme.hover : "#9fd19f");
+      const bg = bad ? theme.relGlyphConflict : hot ? theme.relGlyphHotBg : theme.relGlyphBg;
+      const fg = bad ? theme.relGlyphConflictFg : hot ? theme.relGlyphHotFg : theme.relGlyphFg;
+      const rect = p.badge(relationGlyphs[r.type], x, y, bg, fg, bad ? theme.relGlyphConflictBorder : hot ? theme.hover : theme.relGlyphBorder);
       hits.push({ id: r.id, kind: "relation", ...rect });
     }
   }

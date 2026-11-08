@@ -86,7 +86,7 @@ export function ModifyBox() {
           ▼
         </button>
       </div>
-      {err && <span style={{ color: "#c00", fontSize: "11px", maxWidth: "160px" }}>{err}</span>}
+      {err && <span style={{ color: "var(--sw-error)", fontSize: "11px", maxWidth: "160px" }}>{err}</span>}
     </div>
   );
 }
@@ -97,10 +97,10 @@ export function ConfirmDialog() {
   const c = ui.confirm;
   if (!c) return null;
   return (
-    <div style={{ position: "absolute", inset: "0px", background: "rgba(20,30,50,0.18)", zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#fff", borderRadius: "8px", boxShadow: "0 10px 30px rgba(0,0,0,0.25)", padding: "16px", maxWidth: "380px", border: "1px solid #b9c3d2" }}>
+    <div style={{ position: "absolute", inset: "0px", background: "var(--sw-scrim)", zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "var(--sw-surface)", color: "var(--sw-text)", borderRadius: "8px", boxShadow: "0 10px 30px var(--sw-shadow)", padding: "16px", maxWidth: "380px", border: "1px solid var(--sw-border-strong)" }}>
         <div style={{ fontWeight: 600, marginBottom: "8px" }}>{c.title}</div>
-        <div style={{ marginBottom: "14px", color: "#333" }}>{c.message}</div>
+        <div style={{ marginBottom: "14px", color: "var(--sw-text-2)" }}>{c.message}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {c.buttons.map((b) => (
             <button

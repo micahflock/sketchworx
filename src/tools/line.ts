@@ -226,7 +226,7 @@ export class LineTool implements Tool {
       } else p.line(this.start.pos, sn.pos, st);
       const s = p.s(sn.pos);
       const len = this.mode === "midpoint" ? dist(this.start.pos, sn.pos) * 2 : dist(this.start.pos, sn.pos);
-      p.textScreen(fmt(len), s.x + 14, s.y - 14, "#333", "11px system-ui", "left");
+      p.textScreen(fmt(len), s.x + 14, s.y - 14, theme.measure, "11px system-ui", "left");
     }
     drawSnap(p, sn);
   }

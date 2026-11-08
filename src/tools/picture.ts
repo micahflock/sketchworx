@@ -52,7 +52,7 @@ export class PictureScaleTool implements Tool {
     if (this.a && this.cur) {
       p.line(this.a, this.cur, { color: theme.hover, width: 2 });
       const s = p.s(this.cur);
-      p.textScreen(fmt(dist(this.a, this.cur)), s.x + 12, s.y - 12, "#333", "11px system-ui", "left");
+      p.textScreen(fmt(dist(this.a, this.cur)), s.x + 12, s.y - 12, theme.measure, "11px system-ui", "left");
     }
   }
 }

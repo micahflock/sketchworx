@@ -148,7 +148,7 @@ export class CircleTool extends ClickTool {
       p.circle(pts[0], dist(pts[0], cur), st);
       p.line(pts[0], cur, { color: theme.preview, width: 1, dash: [3, 3] });
       const s = p.s(cur);
-      p.textScreen("R " + fmt(dist(pts[0], cur)), s.x + 14, s.y - 14, "#333", "11px system-ui", "left");
+      p.textScreen("R " + fmt(dist(pts[0], cur)), s.x + 14, s.y - 14, theme.measure, "11px system-ui", "left");
     } else if (pts.length === 1) p.line(pts[0], cur, { color: theme.preview, width: 1, dash: [3, 3] });
     else {
       const circ = circleFrom3(pts[0], pts[1], cur);
@@ -235,7 +235,7 @@ export class ArcTool extends ClickTool {
     if (this.mode === "center") {
       if (pts.length === 1) {
         p.line(pts[0], cur, thin);
-        p.circle(pts[0], dist(pts[0], cur), { ...thin, color: "rgba(31,63,224,0.35)" });
+        p.circle(pts[0], dist(pts[0], cur), { ...thin, color: theme.previewFaint });
       } else {
         const g = this.centerArc(pts, cur);
         p.line(g.c, pts[1], thin);
@@ -362,7 +362,7 @@ export class RectTool extends ClickTool {
       p.line(cs[1], cs[3], { color: theme.preview, width: 1, dash: [6, 3] });
     }
     const s = p.s(cur);
-    p.textScreen(`${fmt(dist(cs[0], cs[1]))} × ${fmt(dist(cs[1], cs[2]))}`, s.x + 14, s.y - 14, "#333", "11px system-ui", "left");
+    p.textScreen(`${fmt(dist(cs[0], cs[1]))} × ${fmt(dist(cs[1], cs[2]))}`, s.x + 14, s.y - 14, theme.measure, "11px system-ui", "left");
   }
   options(): ToolOption[] {
     return [...super.options(), { kind: "info", key: "m", label: midLabel(this.mode) }];

@@ -19,7 +19,7 @@ import type { Hit } from "../render/hit";
 import { Painter } from "../render/painter";
 import { drawGrid, drawSketch, gridStep } from "../render/renderer";
 import type { SceneOptions } from "../render/renderer";
-import { theme } from "../render/theme";
+import { setCanvasTheme, theme } from "../render/theme";
 import { View } from "../render/view";
 import type { DragTarget } from "../solver/types";
 import { LineTool } from "../tools/line";
@@ -30,6 +30,8 @@ import { convertEntities, mirrorEntities, recomputeDerived } from "../tools/edit
 import { ConvertTool } from "../tools/convert";
 import { RepairTool } from "../tools/repair";
 import { loadKeymap } from "./keymap";
+import { loadThemePref, resolveTheme, saveThemePref } from "./themePref";
+import type { ThemePref } from "./themePref";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
 import { fmt } from "../tools/line";
@@ -136,6 +138,20 @@ export class App implements ToolHost, ArtHost {
     this.solver.postSolve = (doc, featureId) => applyCommand(doc, recomputeDerived, featureId);
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
+    this.darkQuery?.addEventListener?.("change", () => this.setThemePref(this.store.state.themePref, false));
+    this.setThemePref(loadThemePref(), false);
+  }
+
+  // ------------------------------------------------------------------ theme
+  private darkQuery = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
+
+  /** Apply a light/dark choice to the interface (data-theme on <html>) and the canvas palette. */
+  setThemePref(pref: ThemePref, save = true) {
+    if (save) saveThemePref(pref);
+    const name = resolveTheme(pref, !!this.darkQuery?.matches);
+    setCanvasTheme(name);
+    if (typeof document !== "undefined") document.documentElement.dataset.theme = name;
+    this.store.set({ themePref: pref, theme: name });
   }
 
   registerTool(t: Tool) {
@@ -1067,6 +1083,14 @@ export class App implements ToolHost, ArtHost {
         return this.store.set({ panel: this.store.state.panel === "keyboard" ? "auto" : "keyboard" });
       case "variablesPanel":
         return this.store.set({ panel: this.store.state.panel === "variables" ? "auto" : "variables" });
+      case "theme:light":
+      case "theme:dark":
+      case "theme:system":
+        return this.setThemePref(action.slice(6) as ThemePref);
+      case "newSketch":
+        return this.newSketch();
+      case "toggleTheme":
+        return this.setThemePref(this.store.state.theme === "dark" ? "light" : "dark");
       default:
         if (action.startsWith("tool:")) {
           const id = action.slice(5);
@@ -1139,7 +1163,7 @@ export class App implements ToolHost, ArtHost {
       ctx.clip();
       this.drawArt(ctx, art, v.width);
       ctx.restore();
-      ctx.fillStyle = "#b9c3d2";
+      ctx.fillStyle = theme.splitDivider;
       ctx.fillRect(v.width - 0.5, 0, 1, v.height);
     }
   }
@@ -1188,7 +1212,7 @@ export class App implements ToolHost, ArtHost {
     // Fill preview of every visible sketch, each chained on its own; diagnostics only for the
     // sketch being edited (and skipped while dragging to stay fast).
     const live = this.store.inTransient;
-    fillOutline(p.ctx, p.view, this.docPath(), "rgba(30,40,70,0.10)");
+    fillOutline(p.ctx, p.view, this.docPath(), theme.profileTint);
     const own = doc.features[ai].sketch;
     const o = live ? null : outlineOf(own, true).o;
     // Sketches below the active one: faded, not pickable.

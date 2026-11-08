@@ -46,14 +46,14 @@ export function drawGrid(p: Painter) {
   const o = view.toScreen({ x: 0, y: 0 });
   ctx.setLineDash([]);
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = "#d33";
+  ctx.strokeStyle = theme.origin;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + 22, o.y);
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x, o.y - 22);
   ctx.stroke();
-  ctx.fillStyle = "#d33";
+  ctx.fillStyle = theme.origin;
   ctx.beginPath();
   ctx.moveTo(o.x + 26, o.y);
   ctx.lineTo(o.x + 20, o.y - 3);
@@ -79,7 +79,7 @@ export function strokeFor(e: Entity, opts: SceneOptions, s?: Sketch): StrokeStyl
   const color = entityColor(e.id, opts, s);
   const emph = opts.selection.has(e.id) || opts.hover === e.id;
   if (e.type === "line" && e.owner) return { color, width: emph ? 2 : 0.9, dash: [4, 3] }; // spline control polygon
-  if (e.type === "spline" && e.derived) return { color: emph || opts.muted ? color : "#6b6b8a", width: emph ? 2.5 : 1.6 };
+  if (e.type === "spline" && e.derived) return { color: emph || opts.muted ? color : theme.derived, width: emph ? 2.5 : 1.6 };
   return {
     color,
     width: emph ? 2.5 : 1.6,
@@ -147,7 +147,7 @@ export function drawSketch(p: Painter, s: Sketch, opts: SceneOptions) {
         const P = p.s(e);
         const c = p.ctx;
         const r = emph ? 4.5 : 3.5;
-        c.fillStyle = "#fff";
+        c.fillStyle = theme.handleFill;
         c.strokeStyle = color;
         c.lineWidth = 1.3;
         c.setLineDash([]);

@@ -23,11 +23,11 @@ function Eye({ open }: { open: boolean }) {
 
 /** Small sketch icon tinted by rebuild state, with a warning mark for dangling references. */
 function StateIcon({ state, dangling }: { state?: string; dangling: number }) {
-  const color = state === "over" ? "#e01b1b" : state === "failed" ? "#c99a00" : state === "full" ? "#111" : "#1f3fe0";
+  const color = state === "over" ? "var(--sw-over)" : state === "failed" ? "var(--sw-failed)" : state === "full" ? "var(--sw-full)" : "var(--sw-under)";
   return (
     <span class={css.ftState} title={`${stateLabel[state ?? "empty"] ?? ""}${dangling ? ` · ${dangling} dangling reference${dangling > 1 ? "s" : ""}` : ""}`}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M2.5 12.5L6 4l3.5 5 2-3 2 6.5z" fill="none" stroke={color} stroke-width="1.4" stroke-linejoin="round" />
+        <path d="M2.5 12.5L6 4l3.5 5 2-3 2 6.5z" fill="none" style={{ stroke: color }} stroke-width="1.4" stroke-linejoin="round" />
       </svg>
       {(state === "over" || state === "failed") && <b class={css.ftBad}>!</b>}
       {dangling > 0 && state !== "over" && state !== "failed" && <b class={css.ftWarn}>?</b>}

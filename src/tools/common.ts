@@ -63,7 +63,7 @@ export function drawSnap(p: Painter, sn: SnapResult | undefined, extra: InferGly
   if (sn.midpointOf) p.ring(sn.pos, 6, theme.hover, 2);
   const glyphs = [...sn.glyphs.filter((g) => g !== "grid"), ...extra];
   const s = p.s(sn.pos);
-  glyphs.forEach((g, i) => p.badge(glyphText[g], s.x + 18 + i * 18, s.y + 18, theme.inferGlyphBg, "#5a4500", "#c9a400"));
+  glyphs.forEach((g, i) => p.badge(glyphText[g], s.x + 18 + i * 18, s.y + 18, theme.inferGlyphBg, theme.inferGlyphFg, theme.inferGlyphBorder));
 }
 
 export function screenDist(a: Vec2, b: Vec2) {

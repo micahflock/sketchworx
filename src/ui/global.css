@@ -1,3 +1,114 @@
-html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* Interface colors. Light values here; dark values under [data-theme="dark"], set on <html> by the app.
+   Canvas colors live in src/render/theme.ts. */
+:root {
+  color-scheme: light;
+  --sw-bg: #e9edf2;
+  --sw-chrome: #f7f8fa;
+  --sw-panel: #f7f8fa;
+  --sw-surface: #ffffff;
+  --sw-surface-2: #f0f3f7;
+  --sw-surface-3: #f3f5f8;
+  --sw-float: rgba(255, 255, 255, 0.97);
+  --sw-border: #c8cfd9;
+  --sw-border-soft: #dde2ea;
+  --sw-border-input: #c3cbd7;
+  --sw-border-strong: #b9c3d2;
+  --sw-text: #1d2330;
+  --sw-text-2: #4a5366;
+  --sw-text-3: #6a7385;
+  --sw-icon: #23324d;
+  --sw-hover: #e3ecf9;
+  --sw-hover-border: #b9cbe6;
+  --sw-hover-soft: #eef3fb;
+  --sw-active: #cfe0fa;
+  --sw-active-border: #7aa3e0;
+  --sw-active-soft-border: #9dbbe6;
+  --sw-focus: #2f6bff;
+  --sw-prompt-text: #3a5a8c;
+  --sw-prompt-bg: #eaf1fb;
+  --sw-prompt-border: #cddcf1;
+  --sw-glyph-bg: #d9f5d9;
+  --sw-glyph-fg: #127a12;
+  --sw-glyph-border: #9fd19f;
+  --sw-glyph-bad-bg: #ffd6d6;
+  --sw-glyph-bad-fg: #bb0000;
+  --sw-glyph-bad-border: #e9a0a0;
+  --sw-glyph-plain-bg: #eeeeff;
+  --sw-glyph-plain-fg: #333355;
+  --sw-glyph-plain-border: #aaaacc;
+  --sw-row-hot: #fff3e0;
+  --sw-danger-hover: #fde8e8;
+  --sw-error: #cc0000;
+  --sw-error-bg: #fff4f4;
+  --sw-error-border: #e05050;
+  --sw-badge-bg: #fff3c4;
+  --sw-badge-border: #e0c060;
+  --sw-under: #1f3fe0;
+  --sw-full: #111111;
+  --sw-over: #e01b1b;
+  --sw-failed: #c99a00;
+  --sw-failed-bg: #ffd84a;
+  --sw-failed-fg: #3a2c00;
+  --sw-warn: #c97a00;
+  --sw-on-strong: #ffffff;
+  --sw-shadow: rgba(20, 30, 50, 0.18);
+  --sw-scrim: rgba(20, 30, 50, 0.18);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --sw-bg: #13161c;
+  --sw-chrome: #1e222b;
+  --sw-panel: #1c2029;
+  --sw-surface: #242934;
+  --sw-surface-2: #2a303c;
+  --sw-surface-3: #20242d;
+  --sw-float: rgba(36, 41, 52, 0.97);
+  --sw-border: #343b49;
+  --sw-border-soft: #2e3441;
+  --sw-border-input: #3e4656;
+  --sw-border-strong: #464f61;
+  --sw-text: #e6e9ef;
+  --sw-text-2: #b4bccb;
+  --sw-text-3: #8a93a5;
+  --sw-icon: #d5dbe6;
+  --sw-hover: #2c3547;
+  --sw-hover-border: #3e4c66;
+  --sw-hover-soft: #283040;
+  --sw-active: #2f4170;
+  --sw-active-border: #5677c4;
+  --sw-active-soft-border: #4a5f8c;
+  --sw-focus: #6f9bff;
+  --sw-prompt-text: #a9c1ee;
+  --sw-prompt-bg: #1f2a40;
+  --sw-prompt-border: #2f4064;
+  --sw-glyph-bg: #1d3a23;
+  --sw-glyph-fg: #86dc92;
+  --sw-glyph-border: #3d7a48;
+  --sw-glyph-bad-bg: #4b1f23;
+  --sw-glyph-bad-fg: #ff9c9c;
+  --sw-glyph-bad-border: #a04848;
+  --sw-glyph-plain-bg: #2a2f45;
+  --sw-glyph-plain-fg: #c8ccf0;
+  --sw-glyph-plain-border: #4a5070;
+  --sw-row-hot: #3a2e1d;
+  --sw-danger-hover: #4a2226;
+  --sw-error: #ff6b6b;
+  --sw-error-bg: #3a1f22;
+  --sw-error-border: #d05050;
+  --sw-badge-bg: #4a3d10;
+  --sw-badge-border: #8a7020;
+  --sw-under: #7d97ff;
+  --sw-full: #e8ecf2;
+  --sw-over: #e53935;
+  --sw-failed: #e6b800;
+  --sw-failed-bg: #e6b800;
+  --sw-failed-fg: #2a2000;
+  --sw-warn: #e0a020;
+  --sw-on-strong: #ffffff;
+  --sw-shadow: rgba(0, 0, 0, 0.5);
+  --sw-scrim: rgba(0, 0, 0, 0.45);
+}
+
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--sw-bg); }
 * { box-sizing: border-box; }
 button { touch-action: manipulation; }

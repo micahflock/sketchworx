@@ -49,7 +49,7 @@ function label(p: Painter, text: string, at: Vec2, color: string, hot: boolean):
   c.font = "12px system-ui, sans-serif";
   const w = c.measureText(text).width + 8;
   const h = 17;
-  c.fillStyle = hot ? "#fff3df" : "rgba(244,246,249,0.92)";
+  c.fillStyle = hot ? theme.dimLabelHotBg : theme.dimLabelBg;
   c.fillRect(S.x - w / 2, S.y - h / 2, w, h);
   if (hot) {
     c.strokeStyle = theme.hover;
