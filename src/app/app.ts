@@ -9,7 +9,7 @@ import type { Doc, Id, Sketch } from "../model/types";
 import { addFeature, deleteFeature, moveFeature, renameFeature, setActive, setVisible } from "../model/features";
 import { docOutline } from "../model/outline";
 import { loopsToPathData } from "../io/svg";
-import { artScene, chainsFor, docChains, hitChain, setArtWeight, setChainStyle } from "../model/art";
+import { artScene, chainsFor, docChains, hitChain, setArtDefaults, setChainStyle } from "../model/art";
 import type { Chain, StylePatch } from "../model/art";
 import { paintArt } from "../render/artPaint";
 import { ArtSelectTool } from "../tools/artSelect";
@@ -33,7 +33,7 @@ import { loadKeymap } from "./keymap";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
 import { fmt } from "../tools/line";
-import type { Dimension, Variable } from "../model/types";
+import type { ArtDefaults, Dimension, Variable } from "../model/types";
 import { isExpression } from "../model/expr";
 import { drawDiagnostics, fillOutline, outlineOf } from "../render/art";
 import { exportSvg, exportPng } from "../io/svg";
@@ -818,11 +818,20 @@ export class App implements ToolHost, ArtHost {
   selectAllChains() {
     this.setArtSelection(docChains(this.store.doc).map((c) => c.key));
   }
+  setArtDefaults(patch: Partial<ArtDefaults>) {
+    this.commitDoc(setArtDefaults(this.store.doc, patch), "Art Defaults");
+  }
   setArtWeight(weight: number) {
-    this.commitDoc(setArtWeight(this.store.doc, weight), "Default Line Weight");
+    this.setArtDefaults({ weight });
   }
   setChainStyle(chains: Chain[], patch: StylePatch) {
-    const label = patch.fill !== undefined ? (patch.fill ? "Fill Profile" : "Unfill Profile") : patch.side ? "Line Side" : "Line Weight";
+    const label =
+      patch.fill !== undefined ? (patch.fill ? "Fill Profile" : "Unfill Profile")
+      : patch.side ? "Line Side"
+      : patch.color !== undefined ? "Line Color"
+      : patch.corner !== undefined ? "Corner Radius"
+      : patch.end !== undefined ? "End Radius"
+      : "Line Weight";
     this.commitDoc(setChainStyle(this.store.doc, chains, patch), label);
   }
 

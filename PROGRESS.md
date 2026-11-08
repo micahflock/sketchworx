@@ -2,6 +2,22 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Art view: color and rounded corners and ends ✅
+
+- **Color**: a document default (Defaults → Color) and a per-chain color, used for the chain's stroke and,
+  for a filled profile, its fill. Nested fills keep their own colors: a filled profile inside a filled one is
+  a hole in it, and one inside that hole paints again in its own color.
+- **Corner radius**: rounds the outside of every corner of a stroke (the inside of a turn gets the radius less
+  the weight, so both edges stay concentric). Smooth curves are unaffected unless they bend tighter than the
+  radius.
+- **End radius**: rounds the corners at the ends of an open chain; half the weight makes a fully round end.
+  Ends stay within the line's length (they do not stick out past the endpoint like a canvas round cap).
+- Every chain field (weight, color, corner, end) now shows "default" when it follows the document default,
+  or a ↺ button to go back to it. Defaults are stored on `doc.art` (`color`, `corner`, `end`).
+- A rounded stroke is drawn by filling its outline (`strokeOutline` / `roundPolygon` in `src/model/art.ts`);
+  SVG export writes it as a filled path. Strokes without rounding are still stroked paths.
+- Selection and hover halos are drawn behind the art and follow rounded outlines.
+
 ## Art view: strokes and per-chain styling ✅
 
 Art view now draws every non-construction curve as a black stroke, not just filled closed loops.

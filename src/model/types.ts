@@ -160,16 +160,30 @@ export interface SketchFeature {
 /** Which side of a chain its stroke grows on (left of the chain's direction; for a profile, left is inside). */
 export type ArtSide = "center" | "left" | "right";
 
-/** Art view style of one chain, stored on each of its curves. Unset fields use the defaults. */
+/** Art view style of one chain, stored on each of its curves. Unset fields use the document defaults. */
 export interface ArtStyle {
-  /** Stroke weight in sketch units (unset: the document's default weight). */
+  /** Stroke weight in sketch units. */
   weight?: number;
+  /** Stroke and fill color, "#rrggbb". */
+  color?: string;
+  /** Radius of the stroke's outer corners, in sketch units (0: sharp). */
+  corner?: number;
+  /** Radius of the corners at the ends of an open chain (0: square; half the weight: fully round). */
+  end?: number;
   side?: ArtSide;
   /** Fill a closed profile. */
   fill?: boolean;
 }
 
-export interface ArtSettings {
+/** Document defaults for the overridable style fields. */
+export interface ArtDefaults {
+  weight: number;
+  color: string;
+  corner: number;
+  end: number;
+}
+
+export interface ArtSettings extends Partial<Omit<ArtDefaults, "weight">> {
   /** Default stroke weight in sketch units. */
   weight: number;
   /** Per-curve styles by entity id. */

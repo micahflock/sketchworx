@@ -117,17 +117,22 @@ function viewBoxOf(box: Box, pad = 0.02) {
   return { x: box.minX - m, y: -box.maxY - m, w: box.maxX - box.minX + 2 * m, h: box.maxY - box.minY + 2 * m };
 }
 
-/** Art view as SVG elements: one filled path for the filled profiles, one stroked path per chain. */
+/** Art view as SVG elements: a filled path per filled profile (holes cut out), then one path per chain. */
 function artElements(doc: Doc, arcs: "arc" | "cubic"): { paths: string[]; box: Box } {
   const box0 = artScene(doc, 1).bounds;
   const size = boxValid(box0) ? Math.max(box0.maxX - box0.minX, box0.maxY - box0.minY) : 100;
   const scene = artScene(doc, size * 2e-4);
   const paths: string[] = [];
-  if (scene.fills.length) paths.push(`  <path d="${loopsToPathData(scene.fills, arcs)}" fill="#000" fill-rule="nonzero"/>`);
+  for (const f of scene.fills) paths.push(`  <path d="${loopsToPathData(f.loops, arcs)}" fill="${f.color}" fill-rule="nonzero"/>`);
   for (const s of scene.strokes) {
     if (s.style.weight <= 0) continue;
+    // Rounded corners or ends are written as the stroke's filled outline.
+    if (s.outline) {
+      paths.push(`  <path d="${s.outline.map((r) => polylineData(r, true)).join("")}" fill="${s.style.color}" fill-rule="nonzero"/>`);
+      continue;
+    }
     const d = s.centered ? segsToPathData(s.chain.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
-    paths.push(`  <path d="${d}" fill="none" stroke="#000" stroke-width="${n(s.style.weight)}" stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"/>`);
+    paths.push(`  <path d="${d}" fill="none" stroke="${s.style.color}" stroke-width="${n(s.style.weight)}" stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"/>`);
   }
   return { paths, box: scene.bounds };
 }

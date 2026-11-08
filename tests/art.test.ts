@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { exportSvg } from "../src/io/svg";
 import { parseDoc, serializeDoc } from "../src/io/native";
 import {
+  artDefaults,
   artWeight,
+  roundPolygon,
+  setArtDefaults,
+  strokeOutline,
   buildArtScene,
   chainOf,
   chainStyle,
@@ -108,15 +112,15 @@ describe("art styles", () => {
   it("uses the default weight until a chain gets its own", () => {
     const { doc, open } = mixed();
     const run = chainOf(docChains(doc), open[0])!;
-    expect(chainStyle(doc, run)).toMatchObject({ weight: artWeight(doc), side: "center", fill: false, customWeight: false });
+    expect(chainStyle(doc, run)).toMatchObject({ weight: artWeight(doc), side: "center", fill: false, custom: { weight: false } });
     const d2 = setArtWeight(doc, 5);
     expect(chainStyle(d2, chainOf(docChains(d2), open[0])!).weight).toBe(5);
     const d3 = setChainStyle(d2, [run], { weight: 1.5, side: "left" });
     const s3 = chainStyle(d3, chainOf(docChains(d3), open[1])!);
-    expect(s3).toMatchObject({ weight: 1.5, side: "left", customWeight: true });
+    expect(s3).toMatchObject({ weight: 1.5, side: "left", custom: { weight: true } });
     // Back to the default (which still follows the global weight).
     const d4 = setArtWeight(setChainStyle(d3, [run], { weight: null }), 3);
-    expect(chainStyle(d4, chainOf(docChains(d4), open[0])!)).toMatchObject({ weight: 3, side: "left", customWeight: false });
+    expect(chainStyle(d4, chainOf(docChains(d4), open[0])!)).toMatchObject({ weight: 3, side: "left", custom: { weight: false } });
   });
 
   it("fills profiles only", () => {
@@ -136,12 +140,13 @@ describe("art styles", () => {
     });
     const [outer, inner] = [...docChains(doc)].sort((a, b) => b.area - a.area);
     const both = buildArtScene(setChainStyle(doc, [outer, inner], { fill: true }), 0.01);
-    const areas = both.fills.map((l) => l.area).sort((a, b) => a - b);
-    expect(areas[0]).toBeLessThan(0); // hole
-    expect(areas[1]).toBeGreaterThan(0);
+    // One painted region: the outer profile with the inner one cut out (opposite direction).
+    expect(both.fills).toHaveLength(1);
+    expect(both.fills[0].loops.map((l) => Math.sign(l.area))).toEqual([1, -1]);
     const innerOnly = buildArtScene(setChainStyle(doc, [inner], { fill: true }), 0.01);
     expect(innerOnly.fills).toHaveLength(1);
-    expect(innerOnly.fills[0].area).toBeGreaterThan(0);
+    expect(innerOnly.fills[0].loops).toHaveLength(1);
+    expect(innerOnly.fills[0].loops[0].area).toBeGreaterThan(0);
   });
 
   it("saves and loads styles, dropping styles of deleted curves", () => {
@@ -207,6 +212,86 @@ describe("art geometry", () => {
   });
 });
 
+describe("art color and rounding", () => {
+  it("colors chains from the default until they set their own", () => {
+    const { doc, open } = mixed();
+    const run = chainOf(docChains(doc), open[0])!;
+    expect(chainStyle(doc, run).color).toBe("#000000");
+    const d1 = setArtDefaults(doc, { color: "#FF0000" });
+    expect(artDefaults(d1).color).toBe("#ff0000");
+    expect(chainStyle(d1, run).color).toBe("#ff0000");
+    const d2 = setChainStyle(d1, [run], { color: "#00ff00" });
+    expect(chainStyle(d2, chainOf(docChains(d2), open[1])!)).toMatchObject({ color: "#00ff00", custom: { color: true } });
+    expect(chainStyle(setChainStyle(d2, [run], { color: null }), run).color).toBe("#ff0000");
+    // Not a color: ignored.
+    expect(setArtDefaults(doc, { color: "red" })).toBe(doc);
+  });
+
+  it("paints fills in their profile's color, islands over holes", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      addCircle(ed, { x: 0, y: 0 }, 10);
+      addCircle(ed, { x: 0, y: 0 }, 6);
+      addCircle(ed, { x: 0, y: 0 }, 3);
+    });
+    const [big, mid, small] = [...docChains(doc)].sort((a, b) => b.area - a.area);
+    let d = setChainStyle(doc, [big, mid, small], { fill: true });
+    d = setChainStyle(d, [big], { color: "#ff0000" });
+    d = setChainStyle(d, [small], { color: "#0000ff" });
+    const fills = buildArtScene(d, 0.01).fills;
+    expect(fills.map((f) => [f.color, f.loops.length])).toEqual([
+      ["#ff0000", 2],
+      ["#0000ff", 1],
+    ]);
+  });
+
+  it("rounds a square's corners", () => {
+    const r = roundPolygon(square(0, 0, 10).reverse(), () => 2, 1e-3);
+    // A 10×10 square with 2-radius corners: 100 − (4 − π)·4.
+    expect(Math.abs(polyArea(r))).toBeCloseTo(100 - (4 - Math.PI) * 4, 1);
+    // No rounding: unchanged.
+    expect(roundPolygon(square(0, 0, 10), () => 0, 1e-3)).toHaveLength(4);
+  });
+
+  it("rounds a line's ends fully at half the weight", () => {
+    const line = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+    ];
+    const [ring] = strokeOutline(line, -2, 2, false, 0, 2, 1e-3);
+    // A 20×4 band with semicircular ends inside its length: 20·4 − (4 − π)·4.
+    expect(Math.abs(polyArea(ring))).toBeCloseTo(80 - (4 - Math.PI) * 4, 1);
+    const xs = ring.map((p) => p.x);
+    expect(Math.min(...xs)).toBeCloseTo(0, 9);
+    expect(Math.max(...xs)).toBeCloseTo(20, 9);
+  });
+
+  it("keeps a turn's inside and outside concentric", () => {
+    const corner = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 20 },
+    ];
+    // Weight 2 centered, corner radius 3: the outside edge turns with radius 3, the inside with 1.
+    const [ring] = strokeOutline(corner, -1, 1, false, 3, 0, 1e-4);
+    const near = (x: number, y: number) => ring.some((p) => Math.hypot(p.x - x, p.y - y) < 1e-3);
+    expect(near(21 - 3 + 3 * Math.SQRT1_2, -1 + 3 - 3 * Math.SQRT1_2)).toBe(true); // outside arc midpoint, center (18, 2)
+    expect(near(19 - 1 + Math.SQRT1_2, 1 + 1 - Math.SQRT1_2)).toBe(true); // inside arc midpoint, center (18, 2)
+  });
+
+  it("fills a rounded stroke from its outline and saves the new fields", () => {
+    const { doc, open } = mixed();
+    const d = setChainStyle(setArtDefaults(doc, { corner: 1, color: "#123456" }), [chainOf(docChains(doc), open[0])!], { end: 0.5 });
+    const sc = buildArtScene(d, 0.01);
+    expect(sc.strokes.every((s) => s.outline)).toBe(true);
+    const back = parseDoc(serializeDoc(d));
+    expect(artDefaults(back)).toMatchObject({ corner: 1, color: "#123456", end: 0 });
+    expect(chainStyle(back, chainOf(docChains(back), open[1])!).end).toBe(0.5);
+    const svg = exportSvg(d, { arcs: "arc", construction: false, art: true });
+    expect(svg).toContain('fill="#123456"');
+    expect(svg).not.toContain("stroke-width");
+  });
+});
+
 describe("art export", () => {
   it("writes strokes with their weights and filled profiles", () => {
     const { doc } = mixed();
@@ -214,7 +299,7 @@ describe("art export", () => {
     const d = setChainStyle(setArtWeight(doc, 3), [prof], { fill: true });
     const svg = exportSvg(d, { arcs: "arc", construction: false, art: true });
     expect(svg.match(/stroke-width="3"/g)).toHaveLength(2);
-    expect(svg).toContain('fill="#000" fill-rule="nonzero"');
+    expect(svg).toContain('fill="#000000" fill-rule="nonzero"');
     // Construction stays out.
     expect(svg).not.toContain("M0 -20");
   });

@@ -717,3 +717,36 @@
 .err {
   color: #c00;
 }
+
+/* Art View: a style value with its default/reset marker */
+.ovr {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.field .ovr input {
+  width: 78px;
+}
+.field .ovr input[type="color"] {
+  height: 28px;
+  padding: 1px 2px;
+  cursor: pointer;
+}
+.ovrTag {
+  width: 38px;
+  text-align: center;
+  font-size: 11px;
+  color: #8a93a3;
+}
+.ovrReset {
+  width: 38px;
+  border: 1px solid #c3cbd7;
+  background: #fff;
+  border-radius: 4px;
+  padding: 2px 0;
+  cursor: pointer;
+  font: inherit;
+}
+.ovrReset:hover {
+  background: #e3ecf9;
+}
