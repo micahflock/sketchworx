@@ -35,6 +35,29 @@ but no longer copies the CommandManager's look.
 Tests: `tests/ui.test.ts` (Smart Dimension hover after the first pick, search ranking, initials, keywords, empty and no-match queries; theme resolution and
 palette swap). Checked in the browser at 1180–1920 px and on a phone, light and dark, with the keyboard flows.
 
+## Art view: color and rounded corners and ends ✅
+
+- **Color**: a document default (Defaults → Color) and a per-chain color, used for the chain's stroke and,
+  for a filled profile, its fill. Nested fills keep their own colors: a filled profile inside a filled one is
+  a hole in it, and one inside that hole paints again in its own color.
+- **Corner radius**: radius of the outside of each corner of the stroke. It is drawn the way an SVG stroke
+  can draw it, so Art view and export match: the stroke's own centerline is filleted by the radius less half
+  the weight, with round joins. 0 is sharp (miter); a value between 0 and half the weight draws as half the
+  weight (the panel says so). Only the joints between pieces are corners; smooth curves are not changed.
+- **Line ends**: Square or Round (was an end radius; files with an end radius above 0 open as Round). Round
+  ends are a half circle within the line's length: the path is shortened by half the weight and drawn with
+  round caps.
+- Every chain field (weight, color, corner, ends) shows "default" when it follows the document default, or a
+  ↺ button to go back to it. Defaults are stored on `doc.art` (`color`, `corner`, `roundEnds`).
+- Everything is stroked: SVG export writes each chain as a path with `stroke-width`, `stroke-linejoin` and
+  `stroke-linecap` (exact arcs and curves when the stroke is centered with no corner radius; a polyline
+  otherwise). Filled profiles under an outside stroke get a hairline in their fill color to hide the
+  anti-aliasing seam.
+- Selection and hover halos are drawn behind the art.
+- **Background**: Art View panel → Background → Color (default white), stored as `doc.art.background`. Used by
+  Art view, the split view's art pane and PNG export. SVG export writes it as a rectangle behind the
+  drawing, except white, which stays transparent as before.
+
 ## Art view: strokes and per-chain styling ✅
 
 Art view now draws every non-construction curve as a black stroke, not just filled closed loops.

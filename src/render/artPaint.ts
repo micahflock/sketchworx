@@ -5,7 +5,6 @@ import { MITER_LIMIT } from "../model/art";
 import type { Seg } from "../model/outline";
 import type { Id } from "../model/types";
 
-const INK = "#000000";
 const SELECT = "rgba(31,111,235,0.55)";
 const SELECT_LINE = "#1f6feb";
 const HOVER = "rgba(31,111,235,0.28)";
@@ -50,7 +49,7 @@ function pathsOf(s: ArtStroke) {
   let p = strokePaths.get(s);
   if (!p) {
     const center = segsPath(s.chain.segs, s.chain.closed);
-    p = { center, stroke: s.centered ? center : polyPath(s.path, s.chain.closed) };
+    p = { center, stroke: s.segs ? segsPath(s.segs, s.chain.closed) : polyPath(s.path, s.chain.closed) };
     strokePaths.set(s, p);
   }
   return p;
@@ -88,29 +87,44 @@ export function paintArt(ctx: CanvasRenderingContext2D, scene: ArtScene, t: ArtT
   ctx.save();
   ctx.setTransform(t.k, 0, 0, -t.k, t.ox, t.oy);
   ctx.setLineDash([]);
-  if (scene.fills.length) {
-    const fill = new Path2D();
-    for (const l of scene.fills) segsPath(l.segs, true, fill);
-    ctx.fillStyle = INK;
-    ctx.fill(fill, "nonzero");
-  }
   ctx.lineJoin = "miter";
   ctx.miterLimit = MITER_LIMIT;
   ctx.lineCap = "butt";
-  // Selection and hover: a blue halo behind the ink, so the stroke itself stays visible.
+  // Selection and hover: a blue halo behind everything, so the ink itself stays visible.
   const marked = scene.strokes.filter((s) => hl.selected?.has(s.chain.key) || hl.hover === s.chain.key);
   for (const s of marked) {
     const sel = hl.selected?.has(s.chain.key);
     ctx.strokeStyle = sel ? SELECT : HOVER;
+    ctx.lineJoin = s.join;
+    ctx.lineCap = s.cap;
     ctx.lineWidth = Math.max(0, s.style.weight) + 8 * t.unit;
     ctx.stroke(pathsOf(s).stroke);
   }
-  ctx.strokeStyle = INK;
+  const sideOf = new Map(scene.strokes.map((s) => [s.chain.key, s.style]));
+  for (const f of scene.fills) {
+    const fill = new Path2D();
+    for (const l of f.loops) segsPath(l.segs, true, fill);
+    ctx.fillStyle = f.color;
+    ctx.fill(fill, "nonzero");
+    // An outside stroke meets the fill exactly at the edge, where anti-aliasing leaves a faint seam.
+    // A hairline in the fill color under the stroke closes it.
+    const st = sideOf.get(f.chain.key);
+    if (st && st.side === "right" && st.weight > 0) {
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = t.unit;
+      ctx.stroke(segsPath(f.loops[0].segs, true));
+    }
+  }
   for (const s of scene.strokes) {
     if (s.style.weight <= 0) continue;
+    ctx.strokeStyle = s.style.color;
     ctx.lineWidth = s.style.weight;
+    ctx.lineJoin = s.join;
+    ctx.lineCap = s.cap;
     ctx.stroke(pathsOf(s).stroke);
   }
+  ctx.lineJoin = "round";
+  ctx.lineCap = "butt";
   // The chain itself and its direction on top of selected strokes.
   for (const s of marked) {
     if (!hl.selected?.has(s.chain.key)) continue;

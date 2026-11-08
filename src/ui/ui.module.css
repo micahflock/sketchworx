@@ -903,3 +903,41 @@
 .err {
   color: var(--sw-error);
 }
+
+/* Art View: a style value with its default/reset marker */
+.ovr {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.field .ovr input {
+  width: 78px;
+}
+.field .ovr input[type="color"] {
+  height: 28px;
+  padding: 1px 2px;
+  cursor: pointer;
+}
+.ovrTag {
+  width: 38px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--sw-text-3);
+}
+.ovrReset {
+  width: 38px;
+  border: 1px solid var(--sw-border-input);
+  background: var(--sw-surface);
+  color: var(--sw-text);
+  border-radius: 4px;
+  padding: 2px 0;
+  cursor: pointer;
+  font: inherit;
+}
+.ovrReset:hover {
+  background: var(--sw-hover);
+}
+.ends {
+  display: flex;
+  gap: 4px;
+}

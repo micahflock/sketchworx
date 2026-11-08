@@ -5,7 +5,7 @@ import type { Loop, Outline, Seg } from "../model/outline";
 import { docOutline, segPoints } from "../model/outline";
 import { arcGeom, ptv } from "../model/sketch";
 import type { Doc, Sketch } from "../model/types";
-import { artScene, MITER_LIMIT } from "../model/art";
+import { artBackground, artScene, DEFAULT_ART_BACKGROUND, MITER_LIMIT } from "../model/art";
 import { paintArt } from "../render/artPaint";
 
 export interface SvgOptions {
@@ -117,17 +117,25 @@ function viewBoxOf(box: Box, pad = 0.02) {
   return { x: box.minX - m, y: -box.maxY - m, w: box.maxX - box.minX + 2 * m, h: box.maxY - box.minY + 2 * m };
 }
 
-/** Art view as SVG elements: one filled path for the filled profiles, one stroked path per chain. */
+/** Art view as SVG elements: a filled path per filled profile (holes cut out), then one path per chain. */
 function artElements(doc: Doc, arcs: "arc" | "cubic"): { paths: string[]; box: Box } {
   const box0 = artScene(doc, 1).bounds;
   const size = boxValid(box0) ? Math.max(box0.maxX - box0.minX, box0.maxY - box0.minY) : 100;
   const scene = artScene(doc, size * 2e-4);
   const paths: string[] = [];
-  if (scene.fills.length) paths.push(`  <path d="${loopsToPathData(scene.fills, arcs)}" fill="#000" fill-rule="nonzero"/>`);
+  const styleOf = new Map(scene.strokes.map((s) => [s.chain.key, s.style]));
+  for (const f of scene.fills) {
+    // Under an outside stroke, a hairline in the fill color closes the anti-aliasing seam at the edge.
+    const st = styleOf.get(f.chain.key);
+    const seam = st && st.side === "right" && st.weight > 0 ? ` stroke="${f.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"` : "";
+    paths.push(`  <path d="${loopsToPathData(f.loops, arcs)}" fill="${f.color}" fill-rule="nonzero"${seam}/>`);
+  }
   for (const s of scene.strokes) {
     if (s.style.weight <= 0) continue;
-    const d = s.centered ? segsToPathData(s.chain.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
-    paths.push(`  <path d="${d}" fill="none" stroke="#000" stroke-width="${n(s.style.weight)}" stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"/>`);
+    const d = s.segs ? segsToPathData(s.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
+    const ends = s.cap === "round" ? ' stroke-linecap="round"' : "";
+    const join = s.join === "round" ? ' stroke-linejoin="round"' : ` stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"`;
+    paths.push(`  <path d="${d}" fill="none" stroke="${s.style.color}" stroke-width="${n(s.style.weight)}"${join}${ends}/>`);
   }
   return { paths, box: scene.bounds };
 }
@@ -150,6 +158,9 @@ export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
     if (cd) paths.push(`  <path d="${cd}" fill="none" stroke="#3f6fd8" stroke-width="1" stroke-dasharray="8 3 2 3" vector-effect="non-scaling-stroke"/>`);
   }
   const vb = viewBoxOf(box);
+  // A background other than white is written as a rectangle under the drawing (white stays transparent).
+  const bg = o.art ? artBackground(doc) : DEFAULT_ART_BACKGROUND;
+  if (bg !== DEFAULT_ART_BACKGROUND) paths.unshift(`  <rect x="${n(vb.x)}" y="${n(vb.y)}" width="${n(vb.w)}" height="${n(vb.h)}" fill="${bg}"/>`);
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(vb.x)} ${n(vb.y)} ${n(vb.w)} ${n(vb.h)}" width="${n(vb.w)}" height="${n(vb.h)}">`,
@@ -166,7 +177,7 @@ export async function exportPng(doc: Doc, size: number): Promise<Blob> {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = artBackground(doc);
   ctx.fillRect(0, 0, size, size);
   if (boxValid(b)) {
     const w = b.maxX - b.minX;

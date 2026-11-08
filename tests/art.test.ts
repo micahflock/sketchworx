@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { exportSvg } from "../src/io/svg";
 import { parseDoc, serializeDoc } from "../src/io/native";
 import {
+  artBackground,
+  artDefaults,
+  setArtBackground,
   artWeight,
+  effectiveCorner,
+  filletPolyline,
+  setArtDefaults,
+  trimPolyline,
+  trimSegs,
   buildArtScene,
   chainOf,
   chainStyle,
@@ -108,15 +116,15 @@ describe("art styles", () => {
   it("uses the default weight until a chain gets its own", () => {
     const { doc, open } = mixed();
     const run = chainOf(docChains(doc), open[0])!;
-    expect(chainStyle(doc, run)).toMatchObject({ weight: artWeight(doc), side: "center", fill: false, customWeight: false });
+    expect(chainStyle(doc, run)).toMatchObject({ weight: artWeight(doc), side: "center", fill: false, custom: { weight: false } });
     const d2 = setArtWeight(doc, 5);
     expect(chainStyle(d2, chainOf(docChains(d2), open[0])!).weight).toBe(5);
     const d3 = setChainStyle(d2, [run], { weight: 1.5, side: "left" });
     const s3 = chainStyle(d3, chainOf(docChains(d3), open[1])!);
-    expect(s3).toMatchObject({ weight: 1.5, side: "left", customWeight: true });
+    expect(s3).toMatchObject({ weight: 1.5, side: "left", custom: { weight: true } });
     // Back to the default (which still follows the global weight).
     const d4 = setArtWeight(setChainStyle(d3, [run], { weight: null }), 3);
-    expect(chainStyle(d4, chainOf(docChains(d4), open[0])!)).toMatchObject({ weight: 3, side: "left", customWeight: false });
+    expect(chainStyle(d4, chainOf(docChains(d4), open[0])!)).toMatchObject({ weight: 3, side: "left", custom: { weight: false } });
   });
 
   it("fills profiles only", () => {
@@ -136,12 +144,13 @@ describe("art styles", () => {
     });
     const [outer, inner] = [...docChains(doc)].sort((a, b) => b.area - a.area);
     const both = buildArtScene(setChainStyle(doc, [outer, inner], { fill: true }), 0.01);
-    const areas = both.fills.map((l) => l.area).sort((a, b) => a - b);
-    expect(areas[0]).toBeLessThan(0); // hole
-    expect(areas[1]).toBeGreaterThan(0);
+    // One painted region: the outer profile with the inner one cut out (opposite direction).
+    expect(both.fills).toHaveLength(1);
+    expect(both.fills[0].loops.map((l) => Math.sign(l.area))).toEqual([1, -1]);
     const innerOnly = buildArtScene(setChainStyle(doc, [inner], { fill: true }), 0.01);
     expect(innerOnly.fills).toHaveLength(1);
-    expect(innerOnly.fills[0].area).toBeGreaterThan(0);
+    expect(innerOnly.fills[0].loops).toHaveLength(1);
+    expect(innerOnly.fills[0].loops[0].area).toBeGreaterThan(0);
   });
 
   it("saves and loads styles, dropping styles of deleted curves", () => {
@@ -193,7 +202,7 @@ describe("art geometry", () => {
     const s = buildArtScene(d, 0.01).strokes.find((x) => x.chain.key === prof.key)!;
     // Stroke centerline is 1 unit inside: a 8×8 square.
     expect(Math.abs(polyArea(s.path))).toBeCloseTo(64, 6);
-    expect(s.centered).toBe(false);
+    expect(s.segs).toBeNull();
   });
 
   it("hits strokes near the line and filled profiles inside", () => {
@@ -207,6 +216,148 @@ describe("art geometry", () => {
   });
 });
 
+describe("art color and rounding", () => {
+  it("colors chains from the default until they set their own", () => {
+    const { doc, open } = mixed();
+    const run = chainOf(docChains(doc), open[0])!;
+    expect(chainStyle(doc, run).color).toBe("#000000");
+    const d1 = setArtDefaults(doc, { color: "#FF0000" });
+    expect(artDefaults(d1).color).toBe("#ff0000");
+    expect(chainStyle(d1, run).color).toBe("#ff0000");
+    const d2 = setChainStyle(d1, [run], { color: "#00ff00" });
+    expect(chainStyle(d2, chainOf(docChains(d2), open[1])!)).toMatchObject({ color: "#00ff00", custom: { color: true } });
+    expect(chainStyle(setChainStyle(d2, [run], { color: null }), run).color).toBe("#ff0000");
+    // Not a color: ignored.
+    expect(setArtDefaults(doc, { color: "red" })).toBe(doc);
+  });
+
+  it("paints fills in their profile's color, islands over holes", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      addCircle(ed, { x: 0, y: 0 }, 10);
+      addCircle(ed, { x: 0, y: 0 }, 6);
+      addCircle(ed, { x: 0, y: 0 }, 3);
+    });
+    const [big, mid, small] = [...docChains(doc)].sort((a, b) => b.area - a.area);
+    let d = setChainStyle(doc, [big, mid, small], { fill: true });
+    d = setChainStyle(d, [big], { color: "#ff0000" });
+    d = setChainStyle(d, [small], { color: "#0000ff" });
+    const fills = buildArtScene(d, 0.01).fills;
+    expect(fills.map((f) => [f.color, f.loops.length])).toEqual([
+      ["#ff0000", 2],
+      ["#0000ff", 1],
+    ]);
+  });
+
+  it("rounds a square path's corners", () => {
+    const r = filletPolyline(square(0, 0, 10), true, () => 2, 1e-3);
+    // A 10×10 square with 2-radius corners: 100 − (4 − π)·4.
+    expect(Math.abs(polyArea(r))).toBeCloseTo(100 - (4 - Math.PI) * 4, 1);
+    expect(filletPolyline(square(0, 0, 10), true, () => 0, 1e-3)).toHaveLength(4);
+    // An open path keeps its end points.
+    const open = filletPolyline(square(0, 0, 10), false, () => 2, 1e-3);
+    expect(open[0]).toEqual({ x: 0, y: 0 });
+    expect(open[open.length - 1]).toEqual({ x: 0, y: 10 });
+  });
+
+  it("draws corner radii below half the weight as half the weight", () => {
+    expect(effectiveCorner({ weight: 4, corner: 0 })).toBe(0);
+    expect(effectiveCorner({ weight: 4, corner: 1 })).toBe(2);
+    expect(effectiveCorner({ weight: 4, corner: 5 })).toBe(5);
+  });
+
+  it("shortens lines for round ends so they stay within the line's length", () => {
+    const t = trimPolyline(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      2,
+      3,
+    );
+    expect(t).toEqual([
+      { x: 2, y: 0 },
+      { x: 7, y: 0 },
+    ]);
+    const doc = applyCommand(createDoc(), (ed) => {
+      addLine(ed, { x: 0, y: 0 }, { x: 20, y: 0 });
+    });
+    const [c] = docChains(doc);
+    const segs = trimSegs(c.segs, 2, 2);
+    expect(segs[0].start.x).toBeCloseTo(2, 9);
+    expect(segs[0].end.x).toBeCloseTo(18, 9);
+  });
+
+  it("trims arcs exactly", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      addCircle(ed, { x: 0, y: 0 }, 10);
+    });
+    const half = docChains(doc)[0].segs[0]; // a half circle, length 10π
+    const [a] = trimSegs([half], Math.PI * 10 * 0.25, 0);
+    expect(a.kind).toBe("arc");
+    if (a.kind === "arc") expect(Math.abs(a.sweep)).toBeCloseTo(Math.PI * 0.75, 9);
+  });
+
+  it("strokes a line with round ends and a rounded corner", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      const a = addLine(ed, { x: 0, y: 0 }, { x: 20, y: 0 });
+      const b = addLine(ed, { x: 20, y: 0 }, { x: 20, y: 20 });
+      ed.addRelation({ type: "coincident", refs: [a.p2, b.p1] });
+    });
+    const d = setChainStyle(setArtWeight(doc, 2), docChains(doc), { corner: 3, roundEnds: true });
+    const [s] = buildArtScene(d, 1e-4).strokes;
+    expect(s).toMatchObject({ join: "round", cap: "round", segs: null });
+    // Ends pulled in by half the weight; the stroke's own centerline turns with radius 3 − 1 = 2.
+    expect(s.path[0].x).toBeCloseTo(1, 9);
+    expect(s.path[s.path.length - 1].y).toBeCloseTo(19, 9);
+    const near = (x: number, y: number) => s.path.some((p) => Math.hypot(p.x - x, p.y - y) < 1e-3);
+    expect(near(18 + 2 * Math.SQRT1_2, 2 - 2 * Math.SQRT1_2)).toBe(true);
+    // Centered with no corner radius: exact pieces, shortened.
+    const d2 = setChainStyle(d, docChains(d), { corner: 0 });
+    const [s2] = buildArtScene(d2, 1e-4).strokes;
+    expect(s2.segs?.[0].start.x).toBeCloseTo(1, 9);
+    expect(s2.join).toBe("miter");
+  });
+
+  it("writes rounded strokes as SVG strokes and saves the new fields", () => {
+    const { doc, open } = mixed();
+    const d = setChainStyle(setArtDefaults(doc, { corner: 1, color: "#123456" }), [chainOf(docChains(doc), open[0])!], { roundEnds: true });
+    const back = parseDoc(serializeDoc(d));
+    expect(artDefaults(back)).toMatchObject({ corner: 1, color: "#123456", roundEnds: false });
+    expect(chainStyle(back, chainOf(docChains(back), open[1])!).roundEnds).toBe(true);
+    const svg = exportSvg(d, { arcs: "arc", construction: false, art: true });
+    expect(svg.match(/stroke-width="2"/g)).toHaveLength(2);
+    expect(svg.match(/stroke-linejoin="round"/g)).toHaveLength(2);
+    expect(svg.match(/stroke-linecap="round"/g)).toHaveLength(1);
+    expect(svg).toContain('stroke="#123456"');
+  });
+
+  it("keeps a background color, saves it, and writes it into the SVG", () => {
+    const { doc } = mixed();
+    expect(artBackground(doc)).toBe("#ffffff");
+    expect(exportSvg(doc)).not.toContain("<rect");
+    let d = setArtBackground(doc, "#FFEEDD");
+    expect(artBackground(d)).toBe("#ffeedd");
+    // Other art changes keep it.
+    d = setArtDefaults(setChainStyle(d, docChains(d), { weight: 3 }), { color: "#112233" });
+    expect(artBackground(d)).toBe("#ffeedd");
+    expect(artBackground(parseDoc(serializeDoc(d)))).toBe("#ffeedd");
+    const svg = exportSvg(d);
+    expect(svg).toContain('fill="#ffeedd"');
+    expect(svg.indexOf("<rect")).toBeLessThan(svg.indexOf("<path"));
+    expect(setArtBackground(d, "blue")).toBe(d);
+  });
+
+  it("reads an older end radius as round ends", () => {
+    const { doc, open } = mixed();
+    const raw = JSON.parse(serializeDoc(doc));
+    raw.art = { weight: 2, end: 1, styles: { [open[0]]: { end: 0.5 } } };
+    const back = parseDoc(JSON.stringify(raw));
+    expect(artDefaults(back).roundEnds).toBe(true);
+    expect(chainStyle(back, chainOf(docChains(back), open[0])!).custom.roundEnds).toBe(true);
+  });
+});
+
 describe("art export", () => {
   it("writes strokes with their weights and filled profiles", () => {
     const { doc } = mixed();
@@ -214,7 +365,7 @@ describe("art export", () => {
     const d = setChainStyle(setArtWeight(doc, 3), [prof], { fill: true });
     const svg = exportSvg(d, { arcs: "arc", construction: false, art: true });
     expect(svg.match(/stroke-width="3"/g)).toHaveLength(2);
-    expect(svg).toContain('fill="#000" fill-rule="nonzero"');
+    expect(svg).toContain('fill="#000000" fill-rule="nonzero"');
     // Construction stays out.
     expect(svg).not.toContain("M0 -20");
   });
