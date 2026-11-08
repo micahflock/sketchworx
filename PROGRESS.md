@@ -2,6 +2,35 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Reskin: Test bench, Sequencer and HELL MODE ✅
+
+Interface and canvas restyled; layout, behavior and the solver are unchanged.
+
+- **Light (Test bench):** warm gray instrument panel, hairline rules instead of cards, IBM Plex Sans/Mono,
+  2 px corners, no shadows, Braun orange `#E8600F` as the only interaction color. Canvas `#F4F2ED` with a
+  graticule (minor lines every grid step, major every fifth).
+- **Dark (Sequencer):** `#141414` chrome, Archivo + JetBrains Mono, square corners, bordered toolbar keys,
+  amber `#F2B705` accent and amber parameter values. Canvas `#0C0C0C` with a dot grid; fully defined is bone
+  white.
+- **Color meaning:** blue, ink and red belong to constraint state. Hover, active, selection and focus in the
+  chrome use the accent (also native checkboxes and text selection); the selected entity on the canvas is
+  the accent instead of cyan. Only state indicators (DOF readout, sketch state icon, conflict tags) carry
+  the geometry colors. Input errors use a deep accent, not red. The origin arrows are muted ink.
+- **Toolbar:** group titles as small legends; each button shows its current shortcut in a corner, read from
+  the keymap (`keyFor` in `src/ui/shortcuts.ts`), so rebinding updates it. Ctrl is printed as `^`.
+- **Status bar:** DOF readout, label plus a boxed tabular count (DOF, or conflicts when over defined).
+- **Relation tags:** square monochrome tags on the canvas and in the panels.
+- **HELL MODE (hidden):** set any dimension to **666** (a number or an expression that evaluates to it). The
+  first time unlocks it (saved in `sketchworx.hell`) and switches to it. After that the theme button cycles
+  light → dark → HELL MODE, and the command box lists "666 HELL MODE". Everything is `#000` and `#FF1F1F`,
+  so state is shown by line shape: under defined dashed with hollow points, fully defined solid, over defined
+  zigzag with ✕ points and ✕ marks beside conflicting relations and dimensions; the readout is dashed,
+  filled or blinking (struck through with reduced motion). Bare heavy glyphs, no legends or shortcut keys,
+  bracket bars on the active tool, inverted selected sketch row, Silkscreen labels.
+- Fonts are self-hosted (`@fontsource`, Latin subsets only, `src/ui/fonts.css`) so the offline service
+  worker caches them. Tokens: `src/ui/global.css`; canvas palettes and per-state line shapes
+  (`stateStyle`): `src/render/theme.ts`.
+
 ## Art view: sketches layer in tree order ✅
 
 Art view, PNG and SVG paint sketch by sketch in tree order: the top sketch first, and each sketch below it

@@ -46,7 +46,7 @@ export function dimText(d: Dimension, value: number) {
 function label(p: Painter, text: string, at: Vec2, color: string, hot: boolean): { x: number; y: number; w: number; h: number } {
   const c = p.ctx;
   const S = p.s(at);
-  c.font = "12px system-ui, sans-serif";
+  c.font = theme.dimFont;
   const w = c.measureText(text).width + 8;
   const h = 17;
   c.fillStyle = hot ? theme.dimLabelHotBg : theme.dimLabelBg;
@@ -57,7 +57,7 @@ function label(p: Painter, text: string, at: Vec2, color: string, hot: boolean):
     c.setLineDash([]);
     c.strokeRect(S.x - w / 2, S.y - h / 2, w, h);
   }
-  p.textScreen(text, S.x, S.y + 0.5, color, "12px system-ui, sans-serif");
+  p.textScreen(text, S.x, S.y + 0.5, color, theme.dimFont);
   return { x: S.x - w / 2, y: S.y - h / 2, w, h };
 }
 
@@ -216,6 +216,7 @@ export function drawDimensions(
     const extra = opts.labelOffset?.(d.id);
     const L = extra ? add(add(dimAnchor(s, d), d.label), extra) : undefined;
     const r = drawDimension(p, s, d, color, hot, L);
+    if (r && theme.conflictCross && opts.conflicts.has(d.id)) p.crossScreen(r.x + r.w + 7, r.y - 3, 9, theme.dimConflict);
     if (r) hits.push({ id: d.id, kind: "dimension", ...r });
   }
   return hits;

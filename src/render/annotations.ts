@@ -82,6 +82,7 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
       const bg = bad ? theme.relGlyphConflict : hot ? theme.relGlyphHotBg : theme.relGlyphBg;
       const fg = bad ? theme.relGlyphConflictFg : hot ? theme.relGlyphHotFg : theme.relGlyphFg;
       const rect = p.badge(relationGlyphs[r.type], x, y, bg, fg, bad ? theme.relGlyphConflictBorder : hot ? theme.hover : theme.relGlyphBorder);
+      if (bad && theme.conflictCross) p.crossScreen(rect.x + rect.w + 7, rect.y - 3, 9, theme.relGlyphConflictBorder);
       hits.push({ id: r.id, kind: "relation", ...rect });
     }
   }

@@ -4,6 +4,15 @@ import { Icon } from "./icons";
 import { searchCommands } from "./commandSearch";
 import type { Command } from "./commandSearch";
 import css from "./ui.module.css";
+import { isMac, keyFor, keyLegend } from "./shortcuts";
+import { nextTheme } from "../app/themePref";
+import type { ThemeName } from "../render/theme";
+
+const themeToggleLabel: Record<ThemeName, string> = {
+  light: "Switch to light theme",
+  dark: "Switch to dark theme",
+  hell: "Switch to HELL MODE",
+};
 
 interface Btn {
   id: string;
@@ -114,6 +123,7 @@ const keywords: Record<string, string[]> = {
   themeDark: ["night", "appearance", "colors"],
   themeLight: ["day", "appearance", "colors"],
   themeSystem: ["auto", "appearance", "colors", "os"],
+  themeHell: ["666", "red", "appearance", "colors"],
   delete: ["remove", "erase"],
   shortcutBar: ["menu", "tools"],
 };
@@ -130,6 +140,8 @@ const extraCommands: Command[] = [
   { id: "themeLight", label: "Light Theme", action: "theme:light", icon: "sun", group: "Appearance" },
   { id: "themeDark", label: "Dark Theme", action: "theme:dark", icon: "moon", group: "Appearance" },
   { id: "themeSystem", label: "Match System Theme", action: "theme:system", icon: "sun", group: "Appearance" },
+  // Listed only once unlocked (see App.setDimensionText).
+  { id: "themeHell", label: "666 HELL MODE", action: "theme:hell", icon: "hell", group: "Appearance" },
 ];
 
 export function allCommands(): Command[] {
@@ -139,22 +151,6 @@ export function allCommands(): Command[] {
       for (const b of "flyout" in it ? it.items : [it]) out.push({ id: b.id, label: b.label, action: b.action, icon: b.icon, group: g.title, keywords: keywords[b.id] });
   for (const c of extraCommands) out.push({ ...c, keywords: keywords[c.id] });
   return out;
-}
-
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const mod = isMac ? "⌘" : "Ctrl+";
-const fixedKeys: Record<string, string> = {
-  undo: `${mod}Z`,
-  redo: isMac ? "⇧⌘Z" : "Ctrl+Y",
-  save: `${mod}S`,
-  open: `${mod}O`,
-  delete: "Del",
-};
-
-/** The key that runs an action: the user's keymap first, then the fixed Ctrl shortcuts. */
-function keyFor(keymap: Record<string, string>, action: string): string | undefined {
-  const k = Object.keys(keymap).find((x) => keymap[x] === action);
-  return k ? k.toUpperCase() : fixedKeys[action];
 }
 
 function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boolean; onPick: () => void; caret?: () => void; keyHint?: string }) {
@@ -170,6 +166,11 @@ function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boo
         disabled={!avail}
         onClick={onPick}
       >
+        {keyHint && (
+          <span class={css.keyHint} aria-hidden="true">
+            {keyLegend(keyHint)}
+          </span>
+        )}
         <Icon name={b.icon} />
       </button>
       {caret && (
@@ -198,11 +199,16 @@ export function CommandManager() {
     (b.action === "combs" && ui.combs) ||
     (b.action === "convertEntities" && ui.toolId === "convert") ||
     (b.action === "exportSvg" && ui.panel === "export");
+  const next = nextTheme(ui.theme, ui.hellUnlocked);
   return (
     <div class={`${css.toolbar} ${ui.touchUi ? css.touchBar : ""}`}>
       <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>
         {groups.map((g) => (
           <div class={css.group} key={g.title} role="group" aria-label={g.title}>
+            <span class={css.groupLegend} aria-hidden="true">
+              {g.title}
+            </span>
+            <div class={css.groupKeys}>
             {g.items.map((it) => {
               if ("flyout" in it) {
                 const lastId = app.flyoutLast[it.flyout] ?? it.items[0].id;
@@ -244,18 +250,14 @@ export function CommandManager() {
               }
               return <ToolButton key={it.id} b={it} active={isActive(it)} keyHint={keyFor(app.keymap, it.action)} onPick={() => app.runAction(it.action)} />;
             })}
+            </div>
           </div>
         ))}
       </div>
       <div class={css.toolbarEnd}>
         <CommandBox />
-        <button
-          class={css.tbtn}
-          title={ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          aria-label={ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          onClick={() => app.runAction("toggleTheme")}
-        >
-          <Icon name={ui.theme === "dark" ? "sun" : "moon"} />
+        <button class={css.tbtn} title={themeToggleLabel[next]} aria-label={themeToggleLabel[next]} onClick={() => app.runAction("toggleTheme")}>
+          <Icon name={next === "light" ? "sun" : next === "dark" ? "moon" : "hell"} />
         </button>
       </div>
     </div>
@@ -272,7 +274,9 @@ function CommandBox() {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const cmds = useMemo(allCommands, []);
-  const results = open ? searchCommands(cmds, q).filter((c) => !c.action.startsWith("tool:") || !!app.getTool(c.action.slice(5))) : [];
+  const results = open
+    ? searchCommands(cmds, q).filter((c) => (!c.action.startsWith("tool:") || !!app.getTool(c.action.slice(5))) && (c.action !== "theme:hell" || ui.hellUnlocked))
+    : [];
   const sel = Math.min(hi, Math.max(results.length - 1, 0));
 
   useEffect(() => {

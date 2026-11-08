@@ -1,114 +1,271 @@
-/* Interface colors. Light values here; dark values under [data-theme="dark"], set on <html> by the app.
-   Canvas colors live in src/render/theme.ts. */
+/* Interface tokens. Light (Test bench) on :root; dark (Sequencer) and the hidden HELL MODE under
+   [data-theme], set on <html> by the app. Canvas colors live in src/render/theme.ts.
+
+   Color meaning: on the canvas blue = under defined, ink = fully defined, red = over defined. The chrome
+   never uses those hues for anything else. Interaction states (hover, active, selected, focus) use the
+   theme accent. Only indicators of constraint state (DOF readout, sketch state icons, conflict tags)
+   carry the geometry colors. */
 :root {
   color-scheme: light;
-  --sw-bg: #e9edf2;
-  --sw-chrome: #f7f8fa;
-  --sw-panel: #f7f8fa;
-  --sw-surface: #ffffff;
-  --sw-surface-2: #f0f3f7;
-  --sw-surface-3: #f3f5f8;
-  --sw-float: rgba(255, 255, 255, 0.97);
-  --sw-border: #c8cfd9;
-  --sw-border-soft: #dde2ea;
-  --sw-border-input: #c3cbd7;
-  --sw-border-strong: #b9c3d2;
-  --sw-text: #1d2330;
-  --sw-text-2: #4a5366;
-  --sw-text-3: #6a7385;
-  --sw-icon: #23324d;
-  --sw-hover: #e3ecf9;
-  --sw-hover-border: #b9cbe6;
-  --sw-hover-soft: #eef3fb;
-  --sw-active: #cfe0fa;
-  --sw-active-border: #7aa3e0;
-  --sw-active-soft-border: #9dbbe6;
-  --sw-focus: #2f6bff;
-  --sw-prompt-text: #3a5a8c;
-  --sw-prompt-bg: #eaf1fb;
-  --sw-prompt-border: #cddcf1;
-  --sw-glyph-bg: #d9f5d9;
-  --sw-glyph-fg: #127a12;
-  --sw-glyph-border: #9fd19f;
-  --sw-glyph-bad-bg: #ffd6d6;
-  --sw-glyph-bad-fg: #bb0000;
-  --sw-glyph-bad-border: #e9a0a0;
-  --sw-glyph-plain-bg: #eeeeff;
-  --sw-glyph-plain-fg: #333355;
-  --sw-glyph-plain-border: #aaaacc;
-  --sw-row-hot: #fff3e0;
-  --sw-danger-hover: #fde8e8;
-  --sw-error: #cc0000;
-  --sw-error-bg: #fff4f4;
-  --sw-error-border: #e05050;
-  --sw-badge-bg: #fff3c4;
-  --sw-badge-border: #e0c060;
-  --sw-under: #1f3fe0;
-  --sw-full: #111111;
-  --sw-over: #e01b1b;
-  --sw-failed: #c99a00;
-  --sw-failed-bg: #ffd84a;
-  --sw-failed-fg: #3a2c00;
-  --sw-warn: #c97a00;
+
+  /* Type */
+  --sw-font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sw-font-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sw-font-label: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sw-stretch: normal;
+  --sw-label-stretch: normal;
+  --sw-label-size: 10.5px;
+  --sw-label-track: 0.09em;
+  --sw-label-weight: 500;
+  --sw-radius: 2px;
+
+  /* Surfaces */
+  --sw-bg: #eeebe4;
+  --sw-chrome: #eeebe4;
+  --sw-panel: #e9e5dd;
+  --sw-well: #f6f4ef;
+  --sw-surface: #f6f4ef;
+  --sw-surface-2: #e3dfd6;
+  --sw-surface-3: #eeebe4;
+  --sw-float: rgba(246, 244, 239, 0.97);
+  --sw-border: #cbc5b8;
+  --sw-border-soft: #d9d4c9;
+  --sw-border-input: #cbc5b8;
+  --sw-border-strong: #b3ac9e;
+
+  /* Ink */
+  --sw-text: #1d1c1a;
+  --sw-text-2: #45423d;
+  --sw-text-3: #6b675f;
+  --sw-icon: #1d1c1a;
+  /* Numeric field values. */
+  --sw-value: #1d1c1a;
+
+  /* Accent (Braun orange): the only interaction color. */
+  --sw-accent: #e8600f;
+  --sw-accent-ink: #ffffff;
+  --sw-accent-soft: rgba(232, 96, 15, 0.1);
+
+  /* Toolbar keys */
+  --sw-key-bg: transparent;
+  --sw-key-border: transparent;
+  --sw-key-hint: #8c867a;
+
+  /* Interaction states */
+  --sw-hover: rgba(40, 35, 25, 0.07);
+  --sw-hover-border: #cbc5b8;
+  --sw-hover-soft: rgba(40, 35, 25, 0.045);
+  --sw-active: var(--sw-accent);
+  --sw-active-ink: var(--sw-accent-ink);
+  --sw-active-border: var(--sw-accent);
+  --sw-active-soft-border: var(--sw-accent);
+  --sw-focus: var(--sw-accent);
+
+  /* Status prompt box in the PropertyManager */
+  --sw-prompt-text: #45423d;
+  --sw-prompt-bg: #f6f4ef;
+  --sw-prompt-border: #cbc5b8;
+
+  /* Relation tags: monochrome, ink on well */
+  --sw-glyph-bg: #f6f4ef;
+  --sw-glyph-fg: #1d1c1a;
+  --sw-glyph-border: #8c867a;
+  --sw-glyph-bad-bg: #f6f4ef;
+  --sw-glyph-bad-fg: #d21f1f;
+  --sw-glyph-bad-border: #d21f1f;
+  --sw-glyph-plain-bg: #f6f4ef;
+  --sw-glyph-plain-fg: #1d1c1a;
+  --sw-glyph-plain-border: #8c867a;
+
+  --sw-row-hot: var(--sw-accent-soft);
+  --sw-danger-hover: rgba(232, 96, 15, 0.14);
+  /* Input errors use a deep accent, not red (red means over defined). */
+  --sw-error: #a8430a;
+  --sw-error-bg: #fbeadf;
+  --sw-error-border: #e8600f;
+  --sw-badge-bg: #f6f4ef;
+  --sw-badge-border: #e8600f;
+
+  /* Geometry state (same values as the canvas) */
+  --sw-under: #1f4fe0;
+  --sw-full: #141414;
+  --sw-over: #d21f1f;
+  --sw-failed: #a87f00;
+  --sw-failed-bg: #f2c94c;
+  --sw-failed-fg: #2e2400;
+  --sw-warn: #b86a00;
+
   --sw-on-strong: #ffffff;
-  --sw-shadow: rgba(20, 30, 50, 0.18);
-  --sw-scrim: rgba(20, 30, 50, 0.18);
+  /* No shadows: floating panels are separated by hairlines. */
+  --sw-shadow: transparent;
+  --sw-scrim: rgba(29, 28, 26, 0.2);
 }
+
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --sw-bg: #13161c;
-  --sw-chrome: #1e222b;
-  --sw-panel: #1c2029;
-  --sw-surface: #242934;
-  --sw-surface-2: #2a303c;
-  --sw-surface-3: #20242d;
-  --sw-float: rgba(36, 41, 52, 0.97);
-  --sw-border: #343b49;
-  --sw-border-soft: #2e3441;
-  --sw-border-input: #3e4656;
-  --sw-border-strong: #464f61;
-  --sw-text: #e6e9ef;
-  --sw-text-2: #b4bccb;
-  --sw-text-3: #8a93a5;
-  --sw-icon: #d5dbe6;
-  --sw-hover: #2c3547;
-  --sw-hover-border: #3e4c66;
-  --sw-hover-soft: #283040;
-  --sw-active: #2f4170;
-  --sw-active-border: #5677c4;
-  --sw-active-soft-border: #4a5f8c;
-  --sw-focus: #6f9bff;
-  --sw-prompt-text: #a9c1ee;
-  --sw-prompt-bg: #1f2a40;
-  --sw-prompt-border: #2f4064;
-  --sw-glyph-bg: #1d3a23;
-  --sw-glyph-fg: #86dc92;
-  --sw-glyph-border: #3d7a48;
-  --sw-glyph-bad-bg: #4b1f23;
-  --sw-glyph-bad-fg: #ff9c9c;
-  --sw-glyph-bad-border: #a04848;
-  --sw-glyph-plain-bg: #2a2f45;
-  --sw-glyph-plain-fg: #c8ccf0;
-  --sw-glyph-plain-border: #4a5070;
-  --sw-row-hot: #3a2e1d;
-  --sw-danger-hover: #4a2226;
-  --sw-error: #ff6b6b;
-  --sw-error-bg: #3a1f22;
-  --sw-error-border: #d05050;
-  --sw-badge-bg: #4a3d10;
-  --sw-badge-border: #8a7020;
-  --sw-under: #7d97ff;
-  --sw-full: #e8ecf2;
-  --sw-over: #e53935;
+
+  --sw-font-ui: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --sw-font-num: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sw-font-label: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --sw-stretch: 116%;
+  --sw-label-stretch: 100%;
+  --sw-label-size: 10px;
+  --sw-label-track: 0.1em;
+  --sw-label-weight: 600;
+  --sw-radius: 0px;
+
+  --sw-bg: #141414;
+  --sw-chrome: #141414;
+  --sw-panel: #171717;
+  --sw-well: #0f0f0f;
+  --sw-surface: #0f0f0f;
+  --sw-surface-2: #1c1c1c;
+  --sw-surface-3: #141414;
+  --sw-float: rgba(23, 23, 23, 0.97);
+  --sw-border: #2b2b2b;
+  --sw-border-soft: #232323;
+  --sw-border-input: #2b2b2b;
+  --sw-border-strong: #3a3a3a;
+
+  --sw-text: #ece9e2;
+  --sw-text-2: #b5b1a9;
+  --sw-text-3: #85817a;
+  --sw-icon: #ece9e2;
+  --sw-value: #f2b705;
+
+  /* Accent (amber) */
+  --sw-accent: #f2b705;
+  --sw-accent-ink: #111111;
+  --sw-accent-soft: #1e1c12;
+
+  --sw-key-bg: #1c1c1c;
+  --sw-key-border: #2b2b2b;
+  --sw-key-hint: #85817a;
+
+  --sw-hover: rgba(255, 255, 255, 0.06);
+  --sw-hover-border: #3a3a3a;
+  --sw-hover-soft: rgba(255, 255, 255, 0.04);
+
+  --sw-prompt-text: #b5b1a9;
+  --sw-prompt-bg: #0f0f0f;
+  --sw-prompt-border: #2b2b2b;
+
+  --sw-glyph-bg: #ece9e2;
+  --sw-glyph-fg: #111111;
+  --sw-glyph-border: #ece9e2;
+  --sw-glyph-bad-bg: #0f0f0f;
+  --sw-glyph-bad-fg: #ff4a4a;
+  --sw-glyph-bad-border: #ff4a4a;
+  --sw-glyph-plain-bg: #ece9e2;
+  --sw-glyph-plain-fg: #111111;
+  --sw-glyph-plain-border: #ece9e2;
+
+  --sw-danger-hover: rgba(242, 183, 5, 0.14);
+  --sw-error: #f2b705;
+  --sw-error-bg: #1e1c12;
+  --sw-error-border: #f2b705;
+  --sw-badge-bg: #1e1c12;
+  --sw-badge-border: #f2b705;
+
+  --sw-under: #6e95ff;
+  --sw-full: #f2f0ea;
+  --sw-over: #ff4a4a;
   --sw-failed: #e6b800;
   --sw-failed-bg: #e6b800;
   --sw-failed-fg: #2a2000;
   --sw-warn: #e0a020;
-  --sw-on-strong: #ffffff;
-  --sw-shadow: rgba(0, 0, 0, 0.5);
-  --sw-scrim: rgba(0, 0, 0, 0.45);
+
+  --sw-on-strong: #111111;
+  --sw-scrim: rgba(0, 0, 0, 0.55);
+}
+
+/* HELL MODE: black and one red. Constraint state is carried by line shape on the canvas. */
+:root[data-theme="hell"] {
+  color-scheme: dark;
+
+  --sw-font-ui: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sw-font-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sw-font-label: "Silkscreen", "IBM Plex Mono", ui-monospace, monospace;
+  --sw-stretch: normal;
+  --sw-label-stretch: normal;
+  --sw-label-size: 10px;
+  --sw-label-track: 0.06em;
+  --sw-label-weight: 400;
+  --sw-radius: 0px;
+
+  --sw-bg: #000;
+  --sw-chrome: #000;
+  --sw-panel: #000;
+  --sw-well: #000;
+  --sw-surface: #000;
+  --sw-surface-2: #000;
+  --sw-surface-3: #000;
+  --sw-float: #000;
+  --sw-border: #4a0000;
+  --sw-border-soft: #3a0000;
+  --sw-border-input: #ff1f1f;
+  --sw-border-strong: #ff1f1f;
+
+  --sw-text: #ff1f1f;
+  --sw-text-2: #ff1f1f;
+  --sw-text-3: #a31212;
+  --sw-icon: #ff1f1f;
+  --sw-value: #ff1f1f;
+
+  --sw-accent: #ff1f1f;
+  --sw-accent-ink: #000;
+  --sw-accent-soft: #200000;
+
+  --sw-key-bg: transparent;
+  --sw-key-border: transparent;
+  --sw-key-hint: #a31212;
+
+  --sw-hover: #200000;
+  --sw-hover-border: #4a0000;
+  --sw-hover-soft: #140000;
+  /* The active tool is marked by bracket bars, not a fill. */
+  --sw-active: transparent;
+  --sw-active-ink: #ff1f1f;
+  --sw-active-border: #ff1f1f;
+
+  --sw-prompt-text: #ff1f1f;
+  --sw-prompt-bg: #000;
+  --sw-prompt-border: #4a0000;
+
+  --sw-glyph-bg: #000;
+  --sw-glyph-fg: #ff1f1f;
+  --sw-glyph-border: #ff1f1f;
+  --sw-glyph-bad-bg: #ff1f1f;
+  --sw-glyph-bad-fg: #000;
+  --sw-glyph-bad-border: #ff1f1f;
+  --sw-glyph-plain-bg: #000;
+  --sw-glyph-plain-fg: #ff1f1f;
+  --sw-glyph-plain-border: #ff1f1f;
+
+  --sw-row-hot: #200000;
+  --sw-danger-hover: #200000;
+  --sw-error: #ff1f1f;
+  --sw-error-bg: #200000;
+  --sw-error-border: #ff1f1f;
+  --sw-badge-bg: #000;
+  --sw-badge-border: #ff1f1f;
+
+  --sw-under: #ff1f1f;
+  --sw-full: #ff1f1f;
+  --sw-over: #ff1f1f;
+  --sw-failed: #ff1f1f;
+  --sw-failed-bg: #ff1f1f;
+  --sw-failed-fg: #000;
+  --sw-warn: #ff1f1f;
+
+  --sw-on-strong: #000;
+  --sw-scrim: rgba(0, 0, 0, 0.7);
 }
 
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--sw-bg); }
 * { box-sizing: border-box; }
 button { touch-action: manipulation; }
+
+/* Browser defaults that would bring blue into the chrome. */
+::selection { background: var(--sw-accent); color: var(--sw-accent-ink); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--sw-focus); outline-offset: -1px; }

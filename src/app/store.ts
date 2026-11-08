@@ -46,6 +46,8 @@ export interface UiState {
   /** Light/dark choice, and the theme it resolves to. */
   themePref: ThemePref;
   theme: ThemeName;
+  /** HELL MODE has been unlocked (a dimension was set to 666), so the theme toggle and command box offer it. */
+  hellUnlocked: boolean;
 }
 
 type Listener = () => void;
@@ -86,6 +88,7 @@ export class Store {
       artHover: null,
       themePref: "system",
       theme: "light",
+      hellUnlocked: false,
     };
   }
 

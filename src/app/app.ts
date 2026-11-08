@@ -20,6 +20,7 @@ import { Painter } from "../render/painter";
 import { drawGrid, drawSketch, gridStep } from "../render/renderer";
 import type { SceneOptions } from "../render/renderer";
 import { setCanvasTheme, theme } from "../render/theme";
+import type { ThemeName } from "../render/theme";
 import { View } from "../render/view";
 import type { DragTarget } from "../solver/types";
 import { LineTool } from "../tools/line";
@@ -30,7 +31,7 @@ import { convertEntities, mirrorEntities, recomputeDerived } from "../tools/edit
 import { ConvertTool } from "../tools/convert";
 import { RepairTool } from "../tools/repair";
 import { loadKeymap } from "./keymap";
-import { loadThemePref, resolveTheme, saveThemePref } from "./themePref";
+import { isHellNumber, isHellUnlocked, loadThemePref, nextTheme, resolveTheme, saveThemePref, unlockHell } from "./themePref";
 import type { ThemePref } from "./themePref";
 import { drawDimensions } from "../render/dimensions";
 import { evaluateDimText, labelPos, measure, refreshExpressions } from "../model/dimensions";
@@ -65,6 +66,9 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     img.src = url;
   });
 }
+
+/** Browser chrome color (meta theme-color) per theme: the toolbar color. */
+const chromeColor: Record<ThemeName, string> = { light: "#eeebe4", dark: "#141414", hell: "#000000" };
 
 /** Commands whose new entities Dynamic Mirror copies. */
 const DRAW_COMMANDS = new Set(["Line", "Centerline", "Arc", "Tangent Arc", "Circle", "Point", "Style Spline", "Rectangle"]);
@@ -139,7 +143,10 @@ export class App implements ToolHost, ArtHost {
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
     this.darkQuery?.addEventListener?.("change", () => this.setThemePref(this.store.state.themePref, false));
+    this.store.set({ hellUnlocked: isHellUnlocked() });
     this.setThemePref(loadThemePref(), false);
+    // Canvas text uses the theme fonts; draw again once they arrive.
+    if (typeof document !== "undefined") document.fonts?.addEventListener?.("loadingdone", () => this.requestRender());
   }
 
   // ------------------------------------------------------------------ theme
@@ -150,8 +157,20 @@ export class App implements ToolHost, ArtHost {
     if (save) saveThemePref(pref);
     const name = resolveTheme(pref, !!this.darkQuery?.matches);
     setCanvasTheme(name);
-    if (typeof document !== "undefined") document.documentElement.dataset.theme = name;
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = name;
+      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chromeColor[name]);
+    }
     this.store.set({ themePref: pref, theme: name });
+  }
+
+  /** Setting a dimension to 666 the first time unlocks HELL MODE and switches to it. */
+  private maybeUnlockHell(value: number) {
+    if (!isHellNumber(value) || this.store.state.hellUnlocked) return;
+    unlockHell();
+    this.store.set({ hellUnlocked: true });
+    this.setThemePref("hell");
+    this.flash("HELL MODE. Leave it with the theme button or the command box");
   }
 
   registerTool(t: Tool) {
@@ -342,6 +361,7 @@ export class App implements ToolHost, ArtHost {
       if (d.type !== "angle" && value <= 0 && d.type !== "distanceX" && d.type !== "distanceY") return "Value must be positive";
       if (d.expr === expr && d.value === value) return null;
       this.commit("Edit Dimension", (ed) => ed.updateDimension(id, { expr, value }));
+      this.maybeUnlockHell(value);
       return null;
     } catch (e) {
       return (e as Error).message;
@@ -1101,10 +1121,12 @@ export class App implements ToolHost, ArtHost {
       case "theme:dark":
       case "theme:system":
         return this.setThemePref(action.slice(6) as ThemePref);
+      case "theme:hell":
+        return this.store.state.hellUnlocked ? this.setThemePref("hell") : undefined;
       case "newSketch":
         return this.newSketch();
       case "toggleTheme":
-        return this.setThemePref(this.store.state.theme === "dark" ? "light" : "dark");
+        return this.setThemePref(nextTheme(this.store.state.theme, this.store.state.hellUnlocked));
       default:
         if (action.startsWith("tool:")) {
           const id = action.slice(5);

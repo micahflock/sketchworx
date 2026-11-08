@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { matchScore, searchCommands } from "../src/ui/commandSearch";
 import type { Command } from "../src/ui/commandSearch";
-import { loadThemePref, resolveTheme } from "../src/app/themePref";
-import { darkTheme, lightTheme, setCanvasTheme, theme } from "../src/render/theme";
+import { isHellNumber, isHellUnlocked, loadThemePref, nextTheme, resolveTheme, saveThemePref, unlockHell } from "../src/app/themePref";
+import { darkTheme, hellTheme, lightTheme, setCanvasTheme, theme } from "../src/render/theme";
+import { keyFor, keyLegend } from "../src/ui/shortcuts";
 import { applyCommand } from "../src/model/editor";
 import { activeSketch, createDoc } from "../src/model/sketch";
 import { addLine } from "../src/tools/common";
@@ -72,8 +73,87 @@ describe("themes", () => {
     expect(theme.state).not.toBe(lightTheme.state); // a copy, so edits never leak into the palette
   });
 
-  it("defines every canvas color in both palettes", () => {
+  it("defines every canvas color in every palette", () => {
     expect(Object.keys(darkTheme).sort()).toEqual(Object.keys(lightTheme).sort());
+    expect(Object.keys(hellTheme).sort()).toEqual(Object.keys(lightTheme).sort());
+  });
+
+  it("selects in the theme accent, never in a constraint-state color", () => {
+    for (const t of [lightTheme, darkTheme]) {
+      expect(Object.values(t.state)).not.toContain(t.selected);
+      expect(t.state.under).not.toBe(t.state.full);
+      expect(t.state.full).not.toBe(t.state.over);
+    }
+    expect(lightTheme.selected).toBe("#e8600f");
+    expect(darkTheme.selected).toBe("#f2b705");
+  });
+
+  it("draws HELL MODE in one red and tells states apart by line shape", () => {
+    expect(new Set(Object.values(hellTheme.state)).size).toBe(1);
+    expect(hellTheme.stateStyle.under.dash).toBeTruthy();
+    expect(hellTheme.stateStyle.under.hollow).toBe(true);
+    expect(hellTheme.stateStyle.full.dash).toBeUndefined();
+    expect(hellTheme.stateStyle.over.jagged).toBe(true);
+    expect(hellTheme.conflictCross).toBe(true);
+    setCanvasTheme("hell");
+    expect(theme.bg).toBe("#000000");
+    setCanvasTheme("light");
+    expect(theme.stateStyle.under).toEqual({});
+  });
+});
+
+describe("HELL MODE unlock", () => {
+  const withStorage = (fn: () => void) => {
+    const data = new Map<string, string>();
+    const g = globalThis as { localStorage?: unknown };
+    const prev = g.localStorage;
+    g.localStorage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+    try {
+      fn();
+    } finally {
+      g.localStorage = prev;
+    }
+  };
+
+  it("only counts exactly 666", () => {
+    expect(isHellNumber(666)).toBe(true);
+    expect(isHellNumber(600 + 66)).toBe(true);
+    expect(isHellNumber(666.5)).toBe(false);
+    expect(isHellNumber(66)).toBe(false);
+  });
+
+  it("ignores a saved HELL MODE preference until it is unlocked", () =>
+    withStorage(() => {
+      saveThemePref("hell");
+      expect(isHellUnlocked()).toBe(false);
+      expect(loadThemePref()).toBe("system");
+      unlockHell();
+      expect(isHellUnlocked()).toBe(true);
+      expect(loadThemePref()).toBe("hell");
+      expect(resolveTheme("hell", false)).toBe("hell");
+    }));
+
+  it("keeps the theme toggle to light and dark until unlocked", () => {
+    expect(nextTheme("light", false)).toBe("dark");
+    expect(nextTheme("dark", false)).toBe("light");
+    expect(nextTheme("light", true)).toBe("dark");
+    expect(nextTheme("dark", true)).toBe("hell");
+    expect(nextTheme("hell", true)).toBe("light");
+  });
+});
+
+describe("toolbar shortcut legends", () => {
+  it("follow the user's keymap, so rebinding changes them", () => {
+    expect(keyFor({ l: "tool:line" }, "tool:line")).toBe("L");
+    expect(keyFor({ k: "tool:line" }, "tool:line")).toBe("K");
+    expect(keyFor({}, "tool:line")).toBeUndefined();
+  });
+
+  it("abbreviate Ctrl to a caret to fit on a key", () => {
+    expect(keyLegend("Ctrl+O")).toBe("^O");
+    expect(keyLegend("L")).toBe("L");
+    expect(keyLegend("⇧⌘Z")).toBe("⇧⌘Z");
+    expect(keyLegend(undefined)).toBeUndefined();
   });
 });
 
