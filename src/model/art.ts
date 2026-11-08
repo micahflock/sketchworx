@@ -167,7 +167,19 @@ export function setArtDefaults(doc: Doc, patch: Partial<ArtDefaults>): Doc {
   if (typeof patch.roundEnds === "boolean") next.roundEnds = patch.roundEnds;
   if (isArtColor(patch.color)) next.color = patch.color.toLowerCase();
   if (OVERRIDABLE.every((k) => next[k] === cur[k])) return doc;
-  return { ...doc, art: { ...next, styles: doc.art?.styles ?? {} } };
+  return { ...doc, art: { ...doc.art, ...next, styles: doc.art?.styles ?? {} } };
+}
+
+export const DEFAULT_ART_BACKGROUND = "#ffffff";
+
+export function artBackground(doc: Doc): string {
+  return doc.art?.background ?? DEFAULT_ART_BACKGROUND;
+}
+
+/** Change the Art view background color. */
+export function setArtBackground(doc: Doc, color: string): Doc {
+  if (!isArtColor(color) || color.toLowerCase() === artBackground(doc)) return doc;
+  return { ...doc, art: { ...(doc.art ?? { weight: DEFAULT_ART_WEIGHT, styles: {} }), background: color.toLowerCase() } };
 }
 
 /** Change the default stroke weight (chains with their own weight keep it). */
@@ -204,6 +216,7 @@ export function readArtSettings(raw: any): ArtSettings | undefined {
   const out: ArtSettings = { weight: isLength(raw.weight) ? raw.weight : DEFAULT_ART_WEIGHT, styles };
   if (isArtColor(raw.color)) out.color = raw.color.toLowerCase();
   if (isLength(raw.corner)) out.corner = raw.corner;
+  if (isArtColor(raw.background)) out.background = raw.background.toLowerCase();
   if (typeof raw.roundEnds === "boolean") out.roundEnds = raw.roundEnds;
   else if (isLength(raw.end) && raw.end > 0) out.roundEnds = true;
   return out;

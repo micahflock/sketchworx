@@ -187,6 +187,8 @@ export interface ArtDefaults {
 }
 
 export interface ArtSettings extends Partial<Omit<ArtDefaults, "weight">> {
+  /** Art view background, "#rrggbb" (unset: white). */
+  background?: string;
   /** Default stroke weight in sketch units. */
   weight: number;
   /** Per-curve styles by entity id. */

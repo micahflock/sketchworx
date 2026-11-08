@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { exportSvg } from "../src/io/svg";
 import { parseDoc, serializeDoc } from "../src/io/native";
 import {
+  artBackground,
   artDefaults,
+  setArtBackground,
   artWeight,
   effectiveCorner,
   filletPolyline,
@@ -328,6 +330,22 @@ describe("art color and rounding", () => {
     expect(svg.match(/stroke-linejoin="round"/g)).toHaveLength(2);
     expect(svg.match(/stroke-linecap="round"/g)).toHaveLength(1);
     expect(svg).toContain('stroke="#123456"');
+  });
+
+  it("keeps a background color, saves it, and writes it into the SVG", () => {
+    const { doc } = mixed();
+    expect(artBackground(doc)).toBe("#ffffff");
+    expect(exportSvg(doc)).not.toContain("<rect");
+    let d = setArtBackground(doc, "#FFEEDD");
+    expect(artBackground(d)).toBe("#ffeedd");
+    // Other art changes keep it.
+    d = setArtDefaults(setChainStyle(d, docChains(d), { weight: 3 }), { color: "#112233" });
+    expect(artBackground(d)).toBe("#ffeedd");
+    expect(artBackground(parseDoc(serializeDoc(d)))).toBe("#ffeedd");
+    const svg = exportSvg(d);
+    expect(svg).toContain('fill="#ffeedd"');
+    expect(svg.indexOf("<rect")).toBeLessThan(svg.indexOf("<path"));
+    expect(setArtBackground(d, "blue")).toBe(d);
   });
 
   it("reads an older end radius as round ends", () => {

@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { artDefaults, chainStyle, docChains, effectiveCorner } from "../model/art";
+import { artBackground, artDefaults, chainStyle, docChains, effectiveCorner } from "../model/art";
 import type { Chain, Overridable, ResolvedStyle } from "../model/art";
 import type { ArtSide } from "../model/types";
 import { fmt } from "../tools/line";
@@ -97,6 +97,11 @@ export function ArtPanel() {
   return (
     <div class={css.pm}>
       <div class={css.pmTitle}>Art View</div>
+      <Section title="Background">
+        <Row label="Color">
+          <ColorInput value={artBackground(doc)} onCommit={(v) => app.setArtBackground(v)} />
+        </Row>
+      </Section>
       <Section title="Defaults">
         <Row label="Line weight">
           <NumInput value={d.weight} onCommit={(v) => app.setArtDefaults({ weight: v })} />

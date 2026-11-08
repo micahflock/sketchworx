@@ -9,7 +9,7 @@ import type { Doc, Id, Sketch } from "../model/types";
 import { addFeature, deleteFeature, moveFeature, renameFeature, setActive, setVisible } from "../model/features";
 import { docOutline } from "../model/outline";
 import { loopsToPathData } from "../io/svg";
-import { artScene, chainsFor, docChains, hitChain, setArtDefaults, setChainStyle } from "../model/art";
+import { artBackground, artScene, chainsFor, docChains, hitChain, setArtBackground, setArtDefaults, setChainStyle } from "../model/art";
 import type { Chain, StylePatch } from "../model/art";
 import { paintArt } from "../render/artPaint";
 import { ArtSelectTool } from "../tools/artSelect";
@@ -821,6 +821,9 @@ export class App implements ToolHost, ArtHost {
   setArtDefaults(patch: Partial<ArtDefaults>) {
     this.commitDoc(setArtDefaults(this.store.doc, patch), "Art Defaults");
   }
+  setArtBackground(color: string) {
+    this.commitDoc(setArtBackground(this.store.doc, color), "Art Background");
+  }
   setArtWeight(weight: number) {
     this.setArtDefaults({ weight });
   }
@@ -1155,7 +1158,7 @@ export class App implements ToolHost, ArtHost {
 
   /** Art view: every non-construction chain stroked in black on white, filled profiles, no sketch chrome. */
   private drawArt(ctx: CanvasRenderingContext2D, v: View, offsetX = 0) {
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = artBackground(this.store.doc);
     ctx.fillRect(0, 0, v.width, v.height);
     const st = this.store.state;
     const k = v.dpr;

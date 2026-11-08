@@ -23,7 +23,7 @@ export function ExportPanel() {
           <input type="checkbox" checked={!!o.art} onChange={(e) => set({ art: (e.target as HTMLInputElement).checked })} /> As in Art view (line weights, filled profiles)
         </label>
         <div class={css.info}>
-          {o.art ? "Each chain is a stroked path; filled profiles are one nonzero path." : "Every closed loop filled (construction excluded), nonzero fill, one path."}
+          {o.art ? "Each chain is a stroked path, filled profiles are filled paths, and a background other than white is a rectangle behind them." : "Every closed loop filled (construction excluded), nonzero fill, one path."}
         </div>
         <label class={css.field}>
           <span>Arcs as</span>

@@ -5,7 +5,7 @@ import type { Loop, Outline, Seg } from "../model/outline";
 import { docOutline, segPoints } from "../model/outline";
 import { arcGeom, ptv } from "../model/sketch";
 import type { Doc, Sketch } from "../model/types";
-import { artScene, MITER_LIMIT } from "../model/art";
+import { artBackground, artScene, DEFAULT_ART_BACKGROUND, MITER_LIMIT } from "../model/art";
 import { paintArt } from "../render/artPaint";
 
 export interface SvgOptions {
@@ -158,6 +158,9 @@ export function exportSvg(doc: Doc, o: SvgOptions = defaultSvgOptions): string {
     if (cd) paths.push(`  <path d="${cd}" fill="none" stroke="#3f6fd8" stroke-width="1" stroke-dasharray="8 3 2 3" vector-effect="non-scaling-stroke"/>`);
   }
   const vb = viewBoxOf(box);
+  // A background other than white is written as a rectangle under the drawing (white stays transparent).
+  const bg = o.art ? artBackground(doc) : DEFAULT_ART_BACKGROUND;
+  if (bg !== DEFAULT_ART_BACKGROUND) paths.unshift(`  <rect x="${n(vb.x)}" y="${n(vb.y)}" width="${n(vb.w)}" height="${n(vb.h)}" fill="${bg}"/>`);
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(vb.x)} ${n(vb.y)} ${n(vb.w)} ${n(vb.h)}" width="${n(vb.w)}" height="${n(vb.h)}">`,
@@ -174,7 +177,7 @@ export async function exportPng(doc: Doc, size: number): Promise<Blob> {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = artBackground(doc);
   ctx.fillRect(0, 0, size, size);
   if (boxValid(b)) {
     const w = b.maxX - b.minX;

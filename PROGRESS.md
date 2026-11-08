@@ -21,6 +21,9 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
   otherwise). Filled profiles under an outside stroke get a hairline in their fill color to hide the
   anti-aliasing seam.
 - Selection and hover halos are drawn behind the art.
+- **Background**: Art View panel → Background → Color (default white), stored as `doc.art.background`. Used by
+  Art view, the split view's art pane and PNG export. SVG export writes it as a rectangle behind the
+  drawing, except white, which stays transparent as before.
 
 ## Art view: strokes and per-chain styling ✅
 
