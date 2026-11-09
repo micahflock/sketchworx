@@ -9,6 +9,7 @@ import { boxAdd, emptyBox } from "../geom/vec";
 import type { Loop, Seg } from "./outline";
 import { buildChains, loopPolygon, pointInPolygon, reverseChain, segPoints } from "./outline";
 import type { ArtDefaults, ArtSettings, ArtSide, ArtStyle, Doc, Id, Sketch } from "./types";
+import { chainFilament, filamentById, snapWeight } from "./print";
 
 export const DEFAULT_ART_WEIGHT = 2;
 /** Sharper corners than this are beveled (offset strokes) or clipped (canvas/SVG strokes). */
@@ -104,9 +105,11 @@ function storedStyle(doc: Doc, c: Chain): ArtStyle | undefined {
 export function chainStyle(doc: Doc, c: Chain): ResolvedStyle {
   const s = storedStyle(doc, c);
   const d = artDefaults(doc);
+  // In Print mode a chain's color is its filament's.
+  const filament = chainFilament(doc, s);
   return {
     weight: s?.weight ?? d.weight,
-    color: s?.color ?? d.color,
+    color: filament?.color ?? s?.color ?? d.color,
     corner: s?.corner ?? d.corner,
     roundEnds: s?.roundEnds ?? d.roundEnds,
     side: s?.side ?? "center",
@@ -117,6 +120,8 @@ export function chainStyle(doc: Doc, c: Chain): ResolvedStyle {
 
 /** Changes to a chain's style. `null` for an overridable field goes back to the document default. */
 export interface StylePatch {
+  /** Print mode: filament id, or null for the document's ink filament. */
+  filament?: string | null;
   weight?: number | null;
   color?: string | null;
   corner?: number | null;
@@ -138,8 +143,10 @@ export function setChainStyle(doc: Doc, chains: Chain[], patch: StylePatch): Doc
     for (const k of ["weight", "corner"] as const) {
       const v = patch[k];
       if (v === null) delete next[k];
-      else if (v !== undefined) next[k] = Math.max(0, v);
+      else if (v !== undefined) next[k] = k === "weight" ? snapWeight(doc, Math.max(0, v)) : Math.max(0, v);
     }
+    if (patch.filament === null) delete next.filament;
+    else if (patch.filament !== undefined && filamentById(doc, patch.filament)) next.filament = patch.filament;
     if (patch.roundEnds === null) delete next.roundEnds;
     else if (patch.roundEnds !== undefined) next.roundEnds = patch.roundEnds;
     if (patch.color === null) delete next.color;
@@ -164,6 +171,7 @@ export function setArtDefaults(doc: Doc, patch: Partial<ArtDefaults>): Doc {
   const cur = artDefaults(doc);
   const next: ArtDefaults = { ...cur };
   for (const k of ["weight", "corner"] as const) if (isLength(patch[k])) next[k] = patch[k] as number;
+  next.weight = snapWeight(doc, next.weight);
   if (typeof patch.roundEnds === "boolean") next.roundEnds = patch.roundEnds;
   if (isArtColor(patch.color)) next.color = patch.color.toLowerCase();
   if (OVERRIDABLE.every((k) => next[k] === cur[k])) return doc;
@@ -173,7 +181,8 @@ export function setArtDefaults(doc: Doc, patch: Partial<ArtDefaults>): Doc {
 export const DEFAULT_ART_BACKGROUND = "#ffffff";
 
 export function artBackground(doc: Doc): string {
-  return doc.art?.background ?? DEFAULT_ART_BACKGROUND;
+  // In Print mode the background is the base filament.
+  return filamentById(doc, doc.print?.base)?.color ?? doc.art?.background ?? DEFAULT_ART_BACKGROUND;
 }
 
 /** Change the Art view background color. */
@@ -211,6 +220,7 @@ export function readArtSettings(raw: any): ArtSettings | undefined {
       if (isArtColor(st.color)) out.color = st.color.toLowerCase();
       if (st.side === "left" || st.side === "right") out.side = st.side;
       if (st.fill === true) out.fill = true;
+      if (typeof st.filament === "string" && st.filament) out.filament = st.filament;
       if (Object.keys(out).length) styles[id] = out;
     }
   const out: ArtSettings = { weight: isLength(raw.weight) ? raw.weight : DEFAULT_ART_WEIGHT, styles };
@@ -552,8 +562,11 @@ export interface ArtScene {
 /**
  * Filled profiles nest: one inside a filled profile is a hole in it, one inside that hole paints again,
  * and so on. Unfilled profiles do not take part.
+ *
+ * With `inlays` (Print mode) only profiles of the same color nest that way; a profile of another color
+ * inside a fill is an inlay painted over it, and starts its own nesting.
  */
-function nestFills(filled: ArtStroke[]): ArtFill[] {
+function nestFills(filled: ArtStroke[], inlays = false): ArtFill[] {
   const loops = filled.map((s) => ({ segs: s.chain.segs.slice(), area: s.chain.area }));
   const polys = loops.map((l) => loopPolygon(l));
   const parent: number[] = [];
@@ -569,10 +582,20 @@ function nestFills(filled: ArtStroke[]): ArtFill[] {
     parent.push(par);
     depth.push(d);
   });
+  const color = (i: number) => filled[i].style.color;
+  // Hole/paint alternation: counts containers up to the first one of another color (inlays only).
+  const parity: number[] = [];
+  const parityOf = (i: number): number => {
+    if (parity[i] !== undefined) return parity[i];
+    const p = parent[i];
+    return (parity[i] = p < 0 ? 0 : inlays && color(p) !== color(i) ? 0 : 1 - parityOf(p));
+  };
   const out: { f: ArtFill; d: number }[] = [];
   loops.forEach((l, i) => {
-    if (depth[i] % 2) return;
-    const holes = loops.filter((_, j) => parent[j] === i).map((h) => ({ segs: reverseChain(h.segs), area: -h.area }));
+    if (inlays ? parityOf(i) : depth[i] % 2) return;
+    const holes = loops
+      .filter((_, j) => parent[j] === i && (!inlays || color(j) === color(i)))
+      .map((h) => ({ segs: reverseChain(h.segs), area: -h.area }));
     out.push({ f: { chain: filled[i].chain, color: filled[i].style.color, loops: [l, ...holes] }, d: depth[i] });
   });
   return out.sort((x, y) => x.d - y.d).map((x) => x.f);
@@ -615,7 +638,7 @@ export function buildArtScene(doc: Doc, tol: number): ArtScene {
     if (!l || l.feature !== s.chain.feature) layers.push((l = { feature: s.chain.feature, fills: [], strokes: [] }));
     l.strokes.push(s);
   }
-  for (const l of layers) l.fills = nestFills(l.strokes.filter((s) => s.style.fill));
+  for (const l of layers) l.fills = nestFills(l.strokes.filter((s) => s.style.fill), !!doc.print);
   return { strokes, fills: layers.flatMap((l) => l.fills), layers, bounds };
 }
 

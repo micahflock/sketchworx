@@ -2,6 +2,7 @@ import { DOC_VERSION } from "../model/types";
 import type { Doc, Entity, Sketch, SketchFeature } from "../model/types";
 import { FIRST_FEATURE, ORIGIN, originPoint } from "../model/sketch";
 import { prunedArt, readArtSettings } from "../model/art";
+import { readPrintSettings } from "../model/print";
 
 export const FILE_EXT = ".sketch.json";
 
@@ -23,6 +24,7 @@ export function serializeDoc(doc: Doc): string {
     })),
     ...(doc.picture ? { picture: doc.picture } : {}),
     ...(doc.art ? { art: prunedArt(doc) } : {}),
+    ...(doc.print ? { print: doc.print } : {}),
   };
   return JSON.stringify(out, null, 1);
 }
@@ -102,6 +104,7 @@ export function parseDoc(text: string): Doc {
     for (const rec of [f.sketch.entities, f.sketch.relations, f.sketch.dimensions]) for (const id of Object.keys(rec)) bump(id);
   }
   const art = readArtSettings(raw.art);
+  const print = readPrintSettings(raw.print);
   const active = features.some((f) => f.id === raw.active) ? raw.active : features[features.length - 1].id;
   return {
     version: DOC_VERSION,
@@ -111,5 +114,6 @@ export function parseDoc(text: string): Doc {
     active,
     ...(picture ? { picture } : {}),
     ...(art ? { art } : {}),
+    ...(print ? { print } : {}),
   };
 }

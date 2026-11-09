@@ -118,6 +118,8 @@ export interface Variable {
   name: string;
   expr: string;
   value: number;
+  /** Set by the app (Print mode's `w` and `nozzle`): shown read-only, follows the printer profile. */
+  locked?: boolean;
 }
 
 export interface Picture {
@@ -176,6 +178,8 @@ export interface ArtStyle {
   side?: ArtSide;
   /** Fill a closed profile. */
   fill?: boolean;
+  /** Print mode: the filament (by id) the chain prints in. Unset: the document's ink filament. */
+  filament?: string;
 }
 
 /** Document defaults for the overridable style fields. */
@@ -206,6 +210,53 @@ export interface Doc {
   picture?: Picture;
   /** Art view styling (unset: defaults everywhere). */
   art?: ArtSettings;
+  /** Print mode (unset: off). */
+  print?: PrintSettings;
+}
+
+/** How colors are changed within a layer. */
+export type ColorSetup = "mmu3" | "manual";
+
+/** The printer as Print mode needs it. Lengths in mm. */
+export interface PrinterProfile {
+  /** Preset the values came from ("mk4s-0.4"), or "custom" once edited. */
+  preset: string;
+  nozzle: number;
+  /** Perimeter line width `w`: stroke widths and rules are whole multiples of it. */
+  lineWidth: number;
+  /** First-layer line width, for the As printed preview. */
+  firstLayerWidth: number;
+  /** How far a first-layer bead spreads past its path, per side (As printed preview). */
+  squish: number;
+  /** Narrowest feature, in lines. */
+  minFeatureLines: number;
+  layerHeight: number;
+  colorSetup: ColorSetup;
+  /** Bare bed in the As printed preview, "#rrggbb". */
+  sheetColor: string;
+}
+
+export interface Filament {
+  /** Stable id ("f1"); the slot number is the position in the list. */
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface PrintSettings {
+  printer: PrinterProfile;
+  /** In slot and print order. */
+  filaments: Filament[];
+  /** Filament of everything inside the part outline that nothing else covers. */
+  base: string;
+  /** Filament of chains that do not pick one. */
+  ink: string;
+  /** Chain key of the part outline (unset: the largest filled profile). */
+  outline?: Id;
+  /** Print view: the regions as drawn, or the first layer as printed. */
+  preview?: "drawn" | "printed";
+  /** As printed preview side (unset: bed side, mirrored). */
+  side?: "bed" | "top";
 }
 
 export const DOC_VERSION = 3;
