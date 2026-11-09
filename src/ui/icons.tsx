@@ -189,7 +189,7 @@ export const icons: Record<string, () => JSX.Element> = {
   construction: () => (
     <S>
       <path d="M7 4v16" />
-      <path d="M17 4.5v15" stroke-dasharray="2.4 2.8" />
+      <path d="M17 4v16" stroke-dasharray="3 3.5" stroke-linecap="butt" />
     </S>
   ),
   fit: () => (
