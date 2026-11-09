@@ -290,9 +290,15 @@ export class App implements ToolHost, ArtHost {
     const px = pointerType === "touch" ? 22 : pointerType === "pen" ? 12 : 8;
     return this.view.px(px);
   }
+  /** Snap distance to existing points: bigger than tol for a finger or pen, so end points are easy to hit. */
+  pointTol(pointerType?: string): number {
+    const px = pointerType === "touch" ? 36 : pointerType === "pen" ? 16 : 8;
+    return this.view.px(px);
+  }
   snap(raw: Vec2, opts?: Partial<SnapOptions>): SnapResult {
     return snap(this.sketch(), raw, {
       tol: this.tol(this.lastPointer?.pointerType),
+      pointTol: this.pointTol(this.lastPointer?.pointerType),
       gridStep: this.store.state.gridSnap ? gridStep(this.view) : undefined,
       ...opts,
     });

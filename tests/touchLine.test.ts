@@ -294,3 +294,26 @@ describe("Snap: a segment under the finger beats direction inference", () => {
     expect(sn.curve).toBeTruthy();
   });
 });
+
+describe("Snap: end points are a bigger target", () => {
+  it("snaps to a point within pointTol even beyond tol", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      addLine(ed, { x: 0, y: 0 }, { x: 200, y: 100 });
+    });
+    const s = activeSketch(doc);
+    const raw = { x: 225, y: 110 }; // ~27 from the end point
+    expect(snap(s, raw, { tol: 22 }).point).toBeUndefined();
+    expect(snap(s, raw, { tol: 22, pointTol: 36 }).point).toBeTruthy();
+  });
+
+  it("does not snap a line's end back onto its own start point", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(0, 0, "mouse"), ev(200, 0, "mouse"));
+    // Pen-style wide point target: start on the end point, end 30 px away.
+    const wide = (raw: { x: number; y: number }, o: object = {}) => snap(activeSketch(host.doc()), raw, { tol: 8, pointTol: 40, ...o });
+    host.snap = wide as typeof host.snap;
+    drag(tool, ev(200, 0, "touch"), ev(200, 30, "touch"));
+    expect(count("line")).toBe(2);
+  });
+});

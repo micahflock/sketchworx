@@ -30,6 +30,8 @@ export interface SnapOptions {
   suppress?: boolean;
   /** Snap tolerance in sketch units. */
   tol: number;
+  /** Larger tolerance for existing points (end points are the usual target for a finger). Defaults to tol. */
+  pointTol?: number;
   gridStep?: number;
   noCurves?: boolean;
   /** Candidate directions from `from` that imply a relation when the cursor follows them. */
@@ -51,7 +53,7 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
       if (own?.type === "spline" && own.derived) continue;
     }
     const d = dist(raw, e);
-    if (d <= tol && (!best || d < best.d)) best = { id: e.id, d };
+    if (d <= (o.pointTol ?? tol) && (!best || d < best.d)) best = { id: e.id, d };
   }
   if (best) {
     const p = ptv(s, best.id);
