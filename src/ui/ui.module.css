@@ -159,6 +159,7 @@
 .flyout {
   position: fixed;
   z-index: 50;
+  /* Gap below the button. Safe to cross: only a press elsewhere closes the flyout. */
   margin-top: 40px;
   background: var(--sw-surface);
   color: var(--sw-text);

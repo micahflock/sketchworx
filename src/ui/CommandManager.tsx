@@ -154,7 +154,7 @@ export function allCommands(): Command[] {
   return out;
 }
 
-function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boolean; onPick: () => void; caret?: () => void; keyHint?: string }) {
+function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boolean; onPick: () => void; caret?: (e: MouseEvent) => void; keyHint?: string }) {
   const app = useApp();
   const avail = !b.action.startsWith("tool:") || !!app.getTool(b.action.slice(5));
   return (
@@ -188,7 +188,36 @@ function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boo
 export function CommandManager() {
   const app = useApp();
   const ui = useUi();
-  const [open, setOpen] = useState<string | null>(null);
+  // The open flyout and where it sits (it is position: fixed so the scrolling toolbar can't clip it).
+  const [open, setOpen] = useState<{ id: string; top: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(null);
+    // A press anywhere but this flyout (or its button) closes it. Leaving it with the pointer does not.
+    const down = (e: PointerEvent) => {
+      const host = (e.target as Element | null)?.closest?.("[data-flyout]");
+      if (host?.getAttribute("data-flyout") !== open.id) close();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open?.id]);
+  const toggleFlyout = (id: string, e: MouseEvent) => {
+    if (open?.id === id) return setOpen(null);
+    // Below the button pair (the CSS margin adds the gap).
+    const r = ((e.currentTarget as HTMLElement).parentElement ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
+    setOpen({ id, top: r.bottom, left: r.left });
+  };
   const isActive = (b: Btn) =>
     (b.action.startsWith("tool:") && ui.toolId === b.action.slice(5)) ||
     (b.action === "view:" + ui.viewMode) ||
@@ -203,7 +232,7 @@ export function CommandManager() {
   const next = nextTheme(ui.theme, ui.hellUnlocked);
   return (
     <div class={`${css.toolbar} ${ui.touchUi ? css.touchBar : ""}`}>
-      <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>
+      <div class={css.cmdmgr}>
         {groups.map((g) => (
           <div class={css.group} key={g.title} role="group" aria-label={g.title}>
             <span class={css.groupLegend} aria-hidden="true">
@@ -216,7 +245,7 @@ export function CommandManager() {
                 const cur = it.items.find((x) => x.id === lastId) ?? it.items[0];
                 const anyActive = it.items.some(isActive);
                 return (
-                  <div class={css.flyoutHost} key={it.flyout}>
+                  <div class={css.flyoutHost} key={it.flyout} data-flyout={it.flyout}>
                     <ToolButton
                       b={cur}
                       active={anyActive}
@@ -225,10 +254,10 @@ export function CommandManager() {
                         app.runAction(cur.action);
                         setOpen(null);
                       }}
-                      caret={() => setOpen(open === it.flyout ? null : it.flyout)}
+                      caret={(e) => toggleFlyout(it.flyout, e)}
                     />
-                    {open === it.flyout && (
-                      <div class={css.flyout}>
+                    {open?.id === it.flyout && (
+                      <div class={css.flyout} style={{ top: open.top, left: open.left }}>
                         {it.items.map((b) => (
                           <button
                             key={b.id}

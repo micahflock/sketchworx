@@ -163,3 +163,60 @@ describe("relations added while drawing", () => {
     expect(types(relations())).toEqual(["horizontal"]);
   });
 });
+
+describe("Snap: horizontal/vertical onto a curve", () => {
+  it("lands on the crossing and infers both H and coincident", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    // A vertical edge at x = 200 whose ends and midpoint are far from y = 50.
+    drag(tool, ev(200, -300, "mouse"), ev(200, 300, "mouse"));
+    const before = relations().length;
+    // A horizontal line ending just short of the edge, slightly off level.
+    const sn = host.snap(host.view.toWorld({ x: 196, y: 53 }), { from: host.view.toWorld({ x: 0, y: 50 }) });
+    expect(sn.hv).toBe("horizontal");
+    expect(sn.curve).toBeTruthy();
+    expect(sn.glyphs).toEqual(["H", "on"]);
+    expect(sn.pos.x).toBeCloseTo(host.view.toWorld({ x: 200, y: 0 }).x);
+    drag(tool, ev(0, 50, "mouse"), ev(196, 53, "mouse"));
+    const added = relations().slice(before).map((r) => r.type).sort();
+    expect(added).toEqual(["coincident", "horizontal"]);
+  });
+});
+
+describe("Line tool by mouse: wobbly clicks", () => {
+  const click = (tool: LineTool, down: object, up: object = down) => {
+    type E = Parameters<LineTool["onDown"]>[0];
+    tool.onDown(down as E);
+    tool.onMove(up as E);
+    tool.onUp(up as E);
+  };
+
+  it("treats a small wobble on the first click as a click, not a tiny drag-line", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"), ev(7, 2, "mouse"));
+    expect(count("line")).toBe(0);
+    click(tool, ev(150, 0, "mouse"));
+    click(tool, ev(150, 120, "mouse"));
+    expect(count("line")).toBe(2);
+  });
+
+  it("still places a single line from a real click-drag", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"), ev(80, 30, "mouse"));
+    expect(count("line")).toBe(1);
+  });
+
+  it("ignores a click just off the last end point, even with snapping off", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"));
+    click(tool, ev(150, 40, "mouse"));
+    const nudge = { ...ev(156, 44, "mouse"), ctrl: true };
+    click(tool, nudge);
+    expect(count("line")).toBe(1);
+    click(tool, ev(150, 200, "mouse"));
+    expect(count("line")).toBe(2);
+  });
+});

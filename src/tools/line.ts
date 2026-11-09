@@ -5,7 +5,7 @@ import type { SnapResult } from "../inference/snap";
 import type { Id } from "../model/types";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
-import { addArc, addLine, applyHV, applySnap, drawSnap, DRAG_THRESHOLD_PX, screenDist } from "./common";
+import { addArc, addLine, applyHV, applySnap, drawSnap, DRAG_THRESHOLD_PX, dragThreshold, MOUSE_SLOP_PX, screenDist } from "./common";
 import type { PEvent, Tool, ToolHost, ToolOption } from "./tool";
 import { tangentArcFrom } from "./arcmath";
 
@@ -159,7 +159,7 @@ export class LineTool implements Tool {
       return;
     }
     this.pressedFirst = false;
-    this.place(sn);
+    this.place(sn, MOUSE_SLOP_PX);
   }
 
   onMove(e: PEvent) {
@@ -195,10 +195,10 @@ export class LineTool implements Tool {
     if (this.touchPress) return this.touchUp(e);
     if (!this.start || !this.pressedFirst || !this.downScreen) return;
     this.pressedFirst = false;
-    // Click-drag-release: place a single line and end.
-    if (screenDist(e.screen, this.downScreen) > DRAG_THRESHOLD_PX) {
+    // Click-drag-release: place a single line and end. A smaller wobble is still a click.
+    if (screenDist(e.screen, this.downScreen) > dragThreshold(e.pointerType)) {
       const sn = this.snapAt(e);
-      this.place(sn);
+      this.place(sn, MOUSE_SLOP_PX);
       this.endChain();
     }
   }
@@ -240,10 +240,15 @@ export class LineTool implements Tool {
     this.host.requestRender();
   }
 
-  /** Commit a segment from start to sn. */
-  private place(sn: SnapResult) {
+  /**
+   * Commit a segment from start to sn. Segments shorter than `minPx` on screen are ignored (a wobbly
+   * click), unless they end on an existing point.
+   */
+  private place(sn: SnapResult, minPx = 2) {
     const st = this.start!;
-    if (dist(st.pos, sn.pos) < this.host.view.px(2)) return;
+    const d = dist(st.pos, sn.pos);
+    if (d < this.host.view.px(2)) return;
+    if (d < this.host.view.px(minPx) && !sn.point) return;
     if (this.arcMode && st.prevDir) {
       const arc = tangentArcFrom(st.pos, st.prevDir, sn.pos);
       if (!arc) return;
