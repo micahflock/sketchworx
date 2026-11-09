@@ -1,4 +1,4 @@
-import { bezierClosest } from "../geom/bezier";
+import { bezierClosest, bezierPolyline } from "../geom/bezier";
 import type { Vec2 } from "../geom/vec";
 import { angleInSweep, closestOnSegment, dist, mid, polar, sub } from "../geom/vec";
 import { arcGeom, ptv, splinePts } from "../model/sketch";
@@ -92,6 +92,17 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
       res.glyphs.push("V");
     }
   }
+  // H/V onto a curve: stop where the horizontal/vertical crosses it, keeping both relations.
+  if (o.from && res.hv && !o.noCurves) {
+    const hit = axisCurveHit(s, o.from, res.hv, raw, tol, o.skip);
+    if (hit) {
+      res.pos = hit.pt;
+      res.curve = hit.id;
+      res.glyphs.push("on");
+      res.guides = [{ a: o.from, b: { ...hit.pt } }];
+      return res;
+    }
+  }
   // Tangent / perpendicular to the entity the segment starts from.
   if (o.from && !res.hv && o.dirRefs?.length) {
     const d = sub(raw, o.from);
@@ -172,6 +183,57 @@ export function closestCurve(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>): {
     if (!pt) continue;
     const d = dist(p, pt);
     if (d <= tol && (!best || d < best.d)) best = { id: e.id, pt, d };
+  }
+  return best;
+}
+
+/**
+ * Where the horizontal (or vertical) through `from` crosses a curve, nearest `raw` and within `tol` of it.
+ * Works in axis coordinates: u runs along the axis, v across it (v is fixed at the anchor's).
+ */
+function axisCurveHit(
+  s: Sketch,
+  from: Vec2,
+  hv: "horizontal" | "vertical",
+  raw: Vec2,
+  tol: number,
+  skip?: Set<Id>,
+): { id: Id; pt: Vec2 } | null {
+  const H = hv === "horizontal";
+  const u = (p: Vec2) => (H ? p.x : p.y);
+  const v = (p: Vec2) => (H ? p.y : p.x);
+  const at = (uu: number): Vec2 => (H ? { x: uu, y: from.y } : { x: from.x, y: uu });
+  const v0 = v(from);
+  let best: { id: Id; pt: Vec2; d: number } | null = null;
+  const consider = (id: Id, uu: number) => {
+    const pt = at(uu);
+    const d = dist(pt, raw);
+    if (d <= tol && (!best || d < best.d)) best = { id, pt, d };
+  };
+  const segments = (id: Id, pts: Vec2[]) => {
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const dv = v(b) - v(a);
+      if (Math.abs(dv) < 1e-12) continue; // parallel to the axis
+      const t = (v0 - v(a)) / dv;
+      if (t >= 0 && t <= 1) consider(id, u(a) + t * (u(b) - u(a)));
+    }
+  };
+  const circle = (id: Id, c: Vec2, r: number, keep: (p: Vec2) => boolean) => {
+    const dv = v0 - v(c);
+    if (Math.abs(dv) > r) return;
+    const h = Math.sqrt(r * r - dv * dv);
+    for (const uu of [u(c) - h, u(c) + h]) if (keep(at(uu))) consider(id, uu);
+  };
+  for (const e of Object.values(s.entities)) {
+    if (e.type === "point" || skip?.has(e.id) || s.ext?.[e.id]?.hidden) continue;
+    if (e.type === "line") segments(e.id, [ptv(s, e.p1), ptv(s, e.p2)]);
+    else if (e.type === "circle") circle(e.id, ptv(s, e.c), e.r, () => true);
+    else if (e.type === "arc") {
+      const g = arcGeom(s, e);
+      circle(e.id, g.c, g.r, (p) => angleInSweep(Math.atan2(p.y - g.c.y, p.x - g.c.x), g.a0, g.a1));
+    } else if (e.type === "spline") segments(e.id, bezierPolyline(splinePts(s, e), 96));
   }
   return best;
 }

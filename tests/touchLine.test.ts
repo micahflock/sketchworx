@@ -163,3 +163,22 @@ describe("relations added while drawing", () => {
     expect(types(relations())).toEqual(["horizontal"]);
   });
 });
+
+describe("Snap: horizontal/vertical onto a curve", () => {
+  it("lands on the crossing and infers both H and coincident", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    // A vertical edge at x = 200 whose ends and midpoint are far from y = 50.
+    drag(tool, ev(200, -300, "mouse"), ev(200, 300, "mouse"));
+    const before = relations().length;
+    // A horizontal line ending just short of the edge, slightly off level.
+    const sn = host.snap(host.view.toWorld({ x: 196, y: 53 }), { from: host.view.toWorld({ x: 0, y: 50 }) });
+    expect(sn.hv).toBe("horizontal");
+    expect(sn.curve).toBeTruthy();
+    expect(sn.glyphs).toEqual(["H", "on"]);
+    expect(sn.pos.x).toBeCloseTo(host.view.toWorld({ x: 200, y: 0 }).x);
+    drag(tool, ev(0, 50, "mouse"), ev(196, 53, "mouse"));
+    const added = relations().slice(before).map((r) => r.type).sort();
+    expect(added).toEqual(["coincident", "horizontal"]);
+  });
+});
