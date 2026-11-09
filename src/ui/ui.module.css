@@ -159,6 +159,8 @@
 .flyout {
   position: fixed;
   z-index: 50;
+  /* Gap below the button. Safe to cross: only a press elsewhere closes the flyout. */
+  margin-top: 40px;
   background: var(--sw-surface);
   color: var(--sw-text);
   border: 1px solid var(--sw-border-strong);
@@ -168,6 +170,9 @@
   display: flex;
   flex-direction: column;
   min-width: 230px;
+}
+.touchBar .flyout {
+  margin-top: 48px;
 }
 .flyItem {
   display: flex;

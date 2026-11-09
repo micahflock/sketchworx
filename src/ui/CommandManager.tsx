@@ -214,9 +214,9 @@ export function CommandManager() {
   }, [open?.id]);
   const toggleFlyout = (id: string, e: MouseEvent) => {
     if (open?.id === id) return setOpen(null);
-    // Just under the button pair, with no gap to cross.
+    // Below the button pair (the CSS margin adds the gap).
     const r = ((e.currentTarget as HTMLElement).parentElement ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
-    setOpen({ id, top: r.bottom + 2, left: r.left });
+    setOpen({ id, top: r.bottom, left: r.left });
   };
   const isActive = (b: Btn) =>
     (b.action.startsWith("tool:") && ui.toolId === b.action.slice(5)) ||
