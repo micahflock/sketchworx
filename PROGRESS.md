@@ -2,6 +2,18 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Relation tags: line icons for every relation ✅
+
+- 11 of the 15 tag glyphs (◉ ∥ ⊥ ≡ ◠ ◎ ⊚ ⫼ κ ⊡ and the old ⚓) weren't in the bundled IBM Plex Mono subset, so
+  each system drew them with its own fallback font. Every relation tag now draws a monochrome line icon from
+  `relationIcons` in `src/model/relations.ts`: a stroked path plus an optional filled path (dots), in a 10×10
+  box, on the canvas (`Painter.badge`) and in the panels (`Glyph`). The text glyphs are gone.
+- Shapes follow a survey of SolidWorks, Fusion, Creo, NX, Onshape and Shapr3D: coincident is a line ending on a
+  line at a dot, collinear two segments on one diagonal, parallel two strokes slanted up-right, perpendicular ⊥
+  with a right-angle box, tangent a line touching a circle, concentric two rings, coradial one dashed ring,
+  midpoint dashes either side of a dot, symmetric brackets around a dashed centerline, equal curvature two curves
+  joining at a dot. Horizontal, vertical, equal, the Fix anchor and the On Edge square keep their shapes.
+- The yellow inference previews while sketching use the icon of the relation they will create.
 ## Context bar docked on phones ✅
 
 - On a phone-width screen (≤ 600 px) with the touch keys showing, the relations context bar always opens in

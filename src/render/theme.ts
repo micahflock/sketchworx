@@ -82,7 +82,6 @@ export interface CanvasTheme {
   /** Draw ✕ marks beside conflicting relations and dimensions. */
   conflictCross: boolean;
   /** Relation/inference tags. */
-  glyphFont: string;
   glyphRadius: number;
   dimFont: string;
 }
@@ -143,7 +142,6 @@ export const lightTheme: CanvasTheme = {
   emphWidth: 2.5,
   stateStyle: plainStates,
   conflictCross: false,
-  glyphFont: "600 10px 'IBM Plex Mono', ui-monospace, monospace",
   glyphRadius: 1,
   dimFont: "12px 'IBM Plex Mono', ui-monospace, monospace",
 };
@@ -202,7 +200,6 @@ export const darkTheme: CanvasTheme = {
   emphWidth: 2.5,
   stateStyle: plainStates,
   conflictCross: false,
-  glyphFont: "700 10px 'JetBrains Mono', ui-monospace, monospace",
   glyphRadius: 0,
   dimFont: "12px 'JetBrains Mono', ui-monospace, monospace",
 };
@@ -297,7 +294,6 @@ export function hellPalette(accent: HellAccent = "red"): CanvasTheme {
       failed: { jagged: true, solidHandles: true, crossPoints: true },
     },
     conflictCross: true,
-    glyphFont: "600 10px 'IBM Plex Mono', ui-monospace, monospace",
     glyphRadius: 0,
     dimFont: "12px 'IBM Plex Mono', ui-monospace, monospace",
   };

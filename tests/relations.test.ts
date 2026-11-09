@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyCommand } from "../src/model/editor";
-import { addRelationCmd, validRelations } from "../src/model/relations";
+import { addRelationCmd, relationIcons, relationNames, validRelations } from "../src/model/relations";
 import { activeSketch, createDoc } from "../src/model/sketch";
 import { addArc, addCircle, addLine } from "../src/tools/common";
 
@@ -54,5 +54,16 @@ describe("addRelationCmd", () => {
     const d2 = applyCommand(doc, (ed) => addRelationCmd(ed, "fix", [ids.c]));
     const r = Object.values(activeSketch(d2).relations)[0];
     expect(r.values).toEqual([20, 0, 3]);
+  });
+});
+
+describe("relationIcons", () => {
+  it("has an icon for every relation, drawn inside the 10×10 tag box", () => {
+    for (const type of Object.keys(relationNames) as (keyof typeof relationNames)[]) {
+      const icon = relationIcons[type];
+      expect(icon?.stroke, type).toBeTruthy();
+      const nums = `${icon.stroke} ${icon.fill ?? ""}`.match(/-?\d*\.?\d+/g)!.map(Number);
+      for (const n of nums) expect(n >= 0 && n <= 10, `${type}: ${n}`).toBe(true);
+    }
   });
 });

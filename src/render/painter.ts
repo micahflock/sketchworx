@@ -1,4 +1,5 @@
 import type { Vec2 } from "../geom/vec";
+import type { RelationIcon } from "../model/relations";
 import { theme } from "./theme";
 import type { View } from "./view";
 
@@ -158,12 +159,10 @@ export class Painter {
     c.fillText(text, x, y);
   }
 
-  /** Square glyph tag at a screen position (theme font and corner radius); returns its rect. */
-  /** A small tag centered at (x, y) with glyph text, or a line icon (SVG path data in a 10×10 box). */
-  badge(text: string, x: number, y: number, bg: string, fg: string, border?: string, icon?: string) {
+  /** A square tag centered at (x, y) with a relation icon (10×10 box, see RelationIcon); returns its rect. */
+  badge(icon: RelationIcon, x: number, y: number, bg: string, fg: string, border?: string) {
     const c = this.ctx;
-    c.font = theme.glyphFont;
-    const w = icon ? 14 : Math.max(14, c.measureText(text).width + 6);
+    const w = 14;
     const h = 14;
     c.beginPath();
     c.roundRect(x - w / 2, y - h / 2, w, h, theme.glyphRadius);
@@ -175,22 +174,19 @@ export class Painter {
       c.setLineDash([]);
       c.stroke();
     }
-    if (icon) {
-      c.save();
-      c.translate(x - 5, y - 5);
-      c.strokeStyle = fg;
-      c.lineWidth = 1.1;
-      c.lineCap = "round";
-      c.lineJoin = "round";
-      c.setLineDash([]);
-      c.stroke(new Path2D(icon));
-      c.restore();
-    } else {
+    c.save();
+    c.translate(x - 5, y - 5);
+    c.strokeStyle = fg;
+    c.lineWidth = 1.1;
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    c.setLineDash([]);
+    c.stroke(new Path2D(icon.stroke));
+    if (icon.fill) {
       c.fillStyle = fg;
-      c.textAlign = "center";
-      c.textBaseline = "middle";
-      c.fillText(text, x, y + 0.5);
+      c.fill(new Path2D(icon.fill));
     }
+    c.restore();
     return { x: x - w / 2, y: y - h / 2, w, h };
   }
 }
