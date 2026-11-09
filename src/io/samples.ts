@@ -2,7 +2,10 @@ import { refreshExpressions } from "../model/dimensions";
 import { applyCommand } from "../model/editor";
 import { createDoc } from "../model/sketch";
 import type { Doc } from "../model/types";
-import { addArc, addLine } from "../tools/common";
+import { addArc, addCircle, addLine } from "../tools/common";
+import { buildLoop } from "../tools/shapes";
+import { chainOf, docChains, setChainStyle } from "../model/art";
+import type { StylePatch } from "../model/art";
 import { addSpline, mirrorEntities } from "../tools/edits";
 
 /** Fully dimensioned straight slot driven by the `width` and `len` variables. */
@@ -63,4 +66,32 @@ export function ovalSample(): Doc {
     ed.addRelation({ type: "tangent", refs: [tr.spline, tl] });
     ed.addRelation({ type: "tangent", refs: [br.spline, bl] });
   });
+}
+
+/**
+ * A 40 × 24 mm badge for Print mode: a white plate, a black border 2 mm in, a red disc and two black
+ * bars (Art colors; turning Print mode on makes them filaments).
+ */
+export function badgeSample(): Doc {
+  const ids: Record<string, string> = {};
+  const rect = (x: number, y: number, w: number, h: number) => [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+  ];
+  let doc = applyCommand(createDoc(), (ed) => {
+    ids.plate = buildLoop(ed, rect(0, 0, 40, 24), false)[0].line;
+    ids.border = buildLoop(ed, rect(2, 2, 36, 20), false)[0].line;
+    ids.disc = addCircle(ed, { x: 12, y: 12 }, 6).circle;
+    ids.bar1 = addLine(ed, { x: 21, y: 14.5 }, { x: 34, y: 14.5 }).line;
+    ids.bar2 = addLine(ed, { x: 21, y: 9.5 }, { x: 30, y: 9.5 }).line;
+  });
+  const style = (key: string, patch: StylePatch) => (doc = setChainStyle(doc, [chainOf(docChains(doc), ids[key])!], patch));
+  style("plate", { fill: true, weight: 0, color: "#ffffff" });
+  style("border", { weight: 1.35, color: "#000000", side: "left" });
+  style("disc", { fill: true, weight: 0, color: "#dc2828" });
+  style("bar1", { weight: 1.8, color: "#000000", roundEnds: true });
+  style("bar2", { weight: 1.8, color: "#000000", roundEnds: true });
+  return { ...doc, art: { ...doc.art!, background: "#ffffff" } };
 }

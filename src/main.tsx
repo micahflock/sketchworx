@@ -4,11 +4,11 @@ import { AppContext } from "./ui/hooks";
 import { Shell } from "./ui/Shell";
 import "./ui/fonts.css";
 import "./ui/global.css";
-import { ovalSample, slotSample } from "./io/samples";
+import { badgeSample, ovalSample, slotSample } from "./io/samples";
 
 const app = new App();
 (window as any).sketchworx = app; // handy for debugging and Playwright tests
-(window as any).sketchworxSamples = { slot: slotSample, oval: ovalSample };
+(window as any).sketchworxSamples = { slot: slotSample, oval: ovalSample, badge: badgeSample };
 
 render(
   <AppContext.Provider value={app}>

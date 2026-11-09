@@ -1586,5 +1586,27 @@ export class App implements ToolHost, ArtHost {
     const sel = this.tools.get("select") as SelectTool;
     const dims = drawDimensions(p, s, { conflicts, hover: this.store.state.hover, selection: opts.selection, labelOffset: (id) => sel.dimOffset(id) });
     this.annotationHits = [...glyphs, ...dims];
+    this.drawPrintMarker(p);
+  }
+
+  /** Print mode: the spot a refused edit or a held drag would have made too thin, in red. */
+  private drawPrintMarker(p: Painter) {
+    const marker = this.store.state.printMarker;
+    if (!marker?.length) return;
+    const ctx = p.ctx;
+    const v = p.view;
+    const k = v.dpr;
+    ctx.save();
+    ctx.setTransform(k * v.scale, 0, 0, k * v.scale, k * (v.width / 2 - v.cx * v.scale), k * (v.height / 2 + v.cy * v.scale));
+    const path = new Path2D(pathData(marker));
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = theme.printBreak;
+    ctx.fill(path, "nonzero");
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = theme.printBreak;
+    ctx.lineWidth = v.px(2);
+    ctx.setLineDash([v.px(4), v.px(3)]);
+    ctx.stroke(path);
+    ctx.restore();
   }
 }
