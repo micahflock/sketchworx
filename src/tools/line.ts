@@ -65,7 +65,10 @@ export class LineTool implements Tool {
   }
 
   private snapAt(e: PEvent): SnapResult {
+    // The end never snaps back onto the point the segment starts from.
     const skip = new Set<Id>();
+    const from = this.start?.prevEnd ?? this.start?.snap?.point;
+    if (from) skip.add(from);
     return this.host.snap(e.world, { from: this.start?.pos, skip, suppress: e.ctrl || this.host.suppress(), dirRefs: this.dirRefs() });
   }
 

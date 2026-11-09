@@ -5,8 +5,10 @@ import { activeSketch, createDoc } from "../src/model/sketch";
 import type { Doc } from "../src/model/types";
 import { View } from "../src/render/view";
 import { snap } from "../src/inference/snap";
+import { buildOutline } from "../src/model/outline";
 import { CHAIN_TARGET_PX, LineTool } from "../src/tools/line";
 import { CircleTool } from "../src/tools/shapes";
+import { addLine } from "../src/tools/common";
 import { HELL_ACCENTS, hellPalette, lightTheme } from "../src/render/theme";
 
 /** A host with a real document and snapping, viewed at 1 px per unit with the origin at the screen's center. */
@@ -217,6 +219,101 @@ describe("Line tool by mouse: wobbly clicks", () => {
     click(tool, nudge);
     expect(count("line")).toBe(1);
     click(tool, ev(150, 200, "mouse"));
+    expect(count("line")).toBe(2);
+  });
+});
+
+describe("T-junctions and path vertices", () => {
+  const click = (tool: LineTool, at: object) => {
+    type E = Parameters<LineTool["onDown"]>[0];
+    tool.onDown(at as E);
+    tool.onMove(at as E);
+    tool.onUp(at as E);
+  };
+
+  it("does not flag an end made coincident with another line as open", () => {
+    const { host, ev } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(-200, 0, "mouse"), ev(200, 0, "mouse"));
+    // From below, ending on the middle stretch of that line (away from its midpoint).
+    drag(tool, ev(80, 150, "mouse"), ev(83, 3, "mouse"));
+    const o = buildOutline(host.sketch());
+    const key = (p: { x: number; y: number }) => `${Math.round(p.x)},${Math.round(p.y)}`;
+    const ends = o.openEnds.map(key).sort();
+    const w = (sx: number, sy: number) => key(host.view.toWorld({ x: sx, y: sy }));
+    expect(ends).toEqual([w(-200, 0), w(200, 0), w(80, 150)].sort());
+  });
+
+  it("snaps a new line's end coincident with a path vertex", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"));
+    click(tool, ev(150, 40, "mouse"));
+    click(tool, ev(260, -60, "mouse"));
+    tool.onDoubleClick();
+    const before = relations().length;
+    drag(tool, ev(150, 200, "mouse"), ev(153, 44, "mouse"));
+    const s = host.sketch();
+    const added = relations().slice(before).filter((r) => r.type === "coincident");
+    expect(added).toHaveLength(1);
+    expect(added[0].refs.every((id) => s.entities[id]?.type === "point")).toBe(true);
+  });
+});
+
+describe("Snap: a segment under the finger beats direction inference", () => {
+  const sketchWith = (...lines: [number, number, number, number][]) => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      for (const [ax, ay, bx, by] of lines) addLine(ed, { x: ax, y: ay }, { x: bx, y: by });
+    });
+    return activeSketch(doc);
+  };
+
+  it("drops a perpendicular inference that doesn't cross the segment near the finger", () => {
+    const s = sketchWith([-300, 300, 300, 300]);
+    const from = { x: 200, y: 100 };
+    const u = { x: -1, y: 2 }; // perpendicular to a previous segment along (2, 1)
+    const sn = snap(s, { x: 125, y: 295 }, { tol: 22, from, dirRefs: [{ dir: u, type: "perpendicular", ref: "prev" }] });
+    expect(sn.curve).toBeTruthy();
+    expect(sn.dirRel).toBeUndefined();
+    expect(sn.pos.y).toBeCloseTo(300);
+  });
+
+  it("keeps a perpendicular inference that crosses the segment near the finger", () => {
+    const s = sketchWith([-300, 300, 300, 300]);
+    const sn = snap(s, { x: 108, y: 296 }, { tol: 22, from: { x: 200, y: 100 }, dirRefs: [{ dir: { x: -1, y: 2 }, type: "perpendicular", ref: "prev" }] });
+    expect(sn.curve).toBeTruthy();
+    expect(sn.dirRel?.type).toBe("perpendicular");
+    expect(sn.pos.x).toBeCloseTo(100);
+    expect(sn.pos.y).toBeCloseTo(300);
+  });
+
+  it("drops H/V when the horizontal can't reach a shallow segment near the finger", () => {
+    const s = sketchWith([0, 0, 400, 40]); // shallow diagonal
+    const sn = snap(s, { x: 160, y: 18 }, { tol: 22, from: { x: -200, y: 10 } });
+    expect(sn.hv).toBeUndefined();
+    expect(sn.curve).toBeTruthy();
+  });
+});
+
+describe("Snap: end points are a bigger target", () => {
+  it("snaps to a point within pointTol even beyond tol", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      addLine(ed, { x: 0, y: 0 }, { x: 200, y: 100 });
+    });
+    const s = activeSketch(doc);
+    const raw = { x: 225, y: 110 }; // ~27 from the end point
+    expect(snap(s, raw, { tol: 22 }).point).toBeUndefined();
+    expect(snap(s, raw, { tol: 22, pointTol: 36 }).point).toBeTruthy();
+  });
+
+  it("does not snap a line's end back onto its own start point", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(0, 0, "mouse"), ev(200, 0, "mouse"));
+    // Pen-style wide point target: start on the end point, end 30 px away.
+    const wide = (raw: { x: number; y: number }, o: object = {}) => snap(activeSketch(host.doc()), raw, { tol: 8, pointTol: 40, ...o });
+    host.snap = wide as typeof host.snap;
+    drag(tool, ev(200, 0, "touch"), ev(200, 30, "touch"));
     expect(count("line")).toBe(2);
   });
 });

@@ -30,6 +30,8 @@ export interface SnapOptions {
   suppress?: boolean;
   /** Snap tolerance in sketch units. */
   tol: number;
+  /** Larger tolerance for existing points (end points are the usual target for a finger). Defaults to tol. */
+  pointTol?: number;
   gridStep?: number;
   noCurves?: boolean;
   /** Candidate directions from `from` that imply a relation when the cursor follows them. */
@@ -51,7 +53,7 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
       if (own?.type === "spline" && own.derived) continue;
     }
     const d = dist(raw, e);
-    if (d <= tol && (!best || d < best.d)) best = { id: e.id, d };
+    if (d <= (o.pointTol ?? tol) && (!best || d < best.d)) best = { id: e.id, d };
   }
   if (best) {
     const p = ptv(s, best.id);
@@ -92,9 +94,11 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
       res.glyphs.push("V");
     }
   }
-  // H/V onto a curve: stop where the horizontal/vertical crosses it, keeping both relations.
-  if (o.from && res.hv && !o.noCurves) {
-    const hit = axisCurveHit(s, o.from, res.hv, raw, tol, o.skip);
+  // On a curve, an inferred direction (H/V, tangent, perpendicular) keeps only where it crosses that
+  // curve near the cursor: the end lands on the crossing with both relations. Otherwise the curve wins.
+  const onCurve = o.noCurves ? null : closestCurve(s, raw, tol, o.skip);
+  if (o.from && res.hv && onCurve) {
+    const hit = dirCurveHit(s, o.from, res.hv === "horizontal" ? { x: 1, y: 0 } : { x: 0, y: 1 }, raw, tol, o.skip);
     if (hit) {
       res.pos = hit.pt;
       res.curve = hit.id;
@@ -102,6 +106,9 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
       res.guides = [{ a: o.from, b: { ...hit.pt } }];
       return res;
     }
+    res.hv = undefined;
+    res.glyphs = [];
+    pos = { ...raw };
   }
   // Tangent / perpendicular to the entity the segment starts from.
   if (o.from && !res.hv && o.dirRefs?.length) {
@@ -114,6 +121,16 @@ export function snap(s: Sketch, raw: Vec2, o: SnapOptions): SnapResult {
         const t = (d.x * u.x + d.y * u.y) / ul;
         const off = Math.abs(d.x * u.y - d.y * u.x) / ul;
         if (t > 0 && off < tol) {
+          if (onCurve) {
+            const hit = dirCurveHit(s, o.from, u, raw, tol, o.skip);
+            if (!hit) continue;
+            res.pos = hit.pt;
+            res.curve = hit.id;
+            res.dirRel = { type: ref.type, ref: ref.ref };
+            res.glyphs.push(ref.type === "tangent" ? "tangent" : "perpendicular", "on");
+            res.guides.push({ a: o.from, b: { ...hit.pt } });
+            return res;
+          }
           pos = { x: o.from.x + (u.x / ul) * t, y: o.from.y + (u.y / ul) * t };
           res.dirRel = { type: ref.type, ref: ref.ref };
           res.glyphs.push(ref.type === "tangent" ? "tangent" : "perpendicular");
@@ -188,22 +205,16 @@ export function closestCurve(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>): {
 }
 
 /**
- * Where the horizontal (or vertical) through `from` crosses a curve, nearest `raw` and within `tol` of it.
- * Works in axis coordinates: u runs along the axis, v across it (v is fixed at the anchor's).
+ * Where the line through `origin` along `dir` crosses a curve, nearest `raw` and within `tol` of it.
+ * Works in line coordinates: u runs along the line, v across it (v = 0 on the line).
  */
-function axisCurveHit(
-  s: Sketch,
-  from: Vec2,
-  hv: "horizontal" | "vertical",
-  raw: Vec2,
-  tol: number,
-  skip?: Set<Id>,
-): { id: Id; pt: Vec2 } | null {
-  const H = hv === "horizontal";
-  const u = (p: Vec2) => (H ? p.x : p.y);
-  const v = (p: Vec2) => (H ? p.y : p.x);
-  const at = (uu: number): Vec2 => (H ? { x: uu, y: from.y } : { x: from.x, y: uu });
-  const v0 = v(from);
+function dirCurveHit(s: Sketch, origin: Vec2, dir: Vec2, raw: Vec2, tol: number, skip?: Set<Id>): { id: Id; pt: Vec2 } | null {
+  const l = Math.hypot(dir.x, dir.y) || 1;
+  const ux = dir.x / l;
+  const uy = dir.y / l;
+  const u = (p: Vec2) => (p.x - origin.x) * ux + (p.y - origin.y) * uy;
+  const v = (p: Vec2) => (p.y - origin.y) * ux - (p.x - origin.x) * uy;
+  const at = (uu: number): Vec2 => ({ x: origin.x + ux * uu, y: origin.y + uy * uu });
   let best: { id: Id; pt: Vec2; d: number } | null = null;
   const consider = (id: Id, uu: number) => {
     const pt = at(uu);
@@ -215,13 +226,13 @@ function axisCurveHit(
       const a = pts[i];
       const b = pts[i + 1];
       const dv = v(b) - v(a);
-      if (Math.abs(dv) < 1e-12) continue; // parallel to the axis
-      const t = (v0 - v(a)) / dv;
+      if (Math.abs(dv) < 1e-12) continue; // parallel to the line
+      const t = -v(a) / dv;
       if (t >= 0 && t <= 1) consider(id, u(a) + t * (u(b) - u(a)));
     }
   };
   const circle = (id: Id, c: Vec2, r: number, keep: (p: Vec2) => boolean) => {
-    const dv = v0 - v(c);
+    const dv = v(c);
     if (Math.abs(dv) > r) return;
     const h = Math.sqrt(r * r - dv * dv);
     for (const uu of [u(c) - h, u(c) + h]) if (keep(at(uu))) consider(id, uu);
