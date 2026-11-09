@@ -1173,10 +1173,64 @@
 .field .ovr input {
   width: 78px;
 }
-.field .ovr input[type="color"] {
+/* Art View: color swatch and its Apply / Cancel picker */
+.colorSwatch {
+  width: 78px;
   height: 28px;
+  border: 1px solid var(--sw-border-input);
+  border-radius: var(--sw-radius);
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 2px var(--sw-surface);
+}
+.colorSwatch:focus-visible {
+  outline: 2px solid var(--sw-focus);
+  outline-offset: 1px;
+}
+.colorPop {
+  position: fixed;
+  z-index: 60;
+  width: 196px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--sw-surface);
+  color: var(--sw-text);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: var(--sw-radius);
+  box-shadow: 0 6px 18px var(--sw-shadow);
+}
+.colorPopRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.colorPopRow input[type="color"] {
+  width: 64px;
+  height: 32px;
   padding: 1px 2px;
   cursor: pointer;
+}
+.colorPopRow code {
+  font: 12px var(--sw-font-num);
+}
+.colorPopBtn {
+  flex: 1;
+  min-height: 30px;
+  border: 1px solid var(--sw-border-input);
+  border-radius: var(--sw-radius);
+  background: var(--sw-surface);
+  color: var(--sw-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.colorPopApply {
+  background: var(--sw-accent);
+  border-color: var(--sw-accent);
+  color: var(--sw-accent-ink);
+  font-weight: 600;
 }
 .ovrTag {
   width: 38px;
