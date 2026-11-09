@@ -2,6 +2,20 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Toolbar icons: redrawn from a CAD survey ✅
+
+- 19 icons in `src/ui/icons.tsx` redrawn after comparing each command with SolidWorks, Fusion, Creo, NX and
+  Onshape. They keep the house style (24 grid, 1.6 stroke, round caps, monochrome) and borrow the structure:
+  - Draw tools mark the clicked points with filled dots, as Line already did: Corner, Center, 3 Point and
+    3 Point Center rectangles, Circle (center and rim), Centerpoint Arc (center and ends), 3 Point Arc and
+    Tangent Arc (a line with an arc leaving it).
+  - Centerline is a vertical dash-dot line; Construction is a solid line beside its dashed twin.
+  - Trim is scissors, Fillet is an arc between two lines, Global Variables is Σ, New Sketch is a dashed frame
+    with a plus, Add Relation is an equal sign with a plus, and Extend's dashes are spaced to read as dashes.
+  - Convert and Offset show the source dashed and the result solid (a projected square, an offset corner).
+  - The check (OK / Finish) is a little heavier.
+- HELL MODE draws dashed toolbar strokes with flat caps, so its square caps no longer close the gaps.
+
 ## Relation tags: line icons for every relation ✅
 
 - 11 of the 15 tag glyphs (◉ ∥ ⊥ ≡ ◠ ◎ ⊚ ⫼ κ ⊡ and the old ⚓) weren't in the bundled IBM Plex Mono subset, so

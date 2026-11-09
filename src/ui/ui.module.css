@@ -1205,6 +1205,10 @@
   stroke-linecap: square;
   stroke-linejoin: miter;
 }
+/* Flat caps on dashed strokes, so square caps don't close the gaps. */
+:root[data-theme="hell"] .tbtn svg [stroke-dasharray] {
+  stroke-linecap: butt;
+}
 /* Active tool: bracket bars above and below instead of a fill. */
 :root[data-theme="hell"] .tbtn.active {
   outline: 1px solid var(--sw-text);
