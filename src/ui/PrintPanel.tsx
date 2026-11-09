@@ -36,6 +36,7 @@ export function PrintPanel() {
       <PreviewSection doc={doc} />
       {sel.length ? <SelectionSection doc={doc} sel={sel} /> : <div class={css.info}>Click an area to choose its filament and width.</div>}
       <IssuesSection doc={doc} />
+      <ExportSection doc={doc} />
       <FilamentsSection doc={doc} />
       <PrinterSection doc={doc} />
       <Section title="Print mode" open={false}>
@@ -206,6 +207,25 @@ function IssuesSection({ doc }: { doc: Doc }) {
           ))}
         </>
       )}
+    </Section>
+  );
+}
+
+function ExportSection({ doc }: { doc: Doc }) {
+  const app = useApp();
+  const ui = useUi();
+  const blocked = (ui.printReport?.breaks.length ?? 0) > 0;
+  const noPart = !buildRegions(doc).part.length;
+  return (
+    <Section title="Export">
+      <div class={css.info}>
+        One DXF and SVG per filament (mm, sketch origin at 0,0), the part outline and a README with the print order. Insert each DXF at the origin in
+        Fusion 360 and extrude every color as its own body.
+      </div>
+      {blocked && <div class={css.conflict}>Blocked: fix the issues above first.</div>}
+      <button class={css.small} disabled={blocked || noPart} onClick={() => void app.exportPrint()}>
+        Export print files
+      </button>
     </Section>
   );
 }

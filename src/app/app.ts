@@ -29,6 +29,7 @@ import type { PrintChange } from "../model/print";
 import type { Filament, PrinterProfile, PrintSettings } from "../model/types";
 import { buildRegions, checkRules, components, boundsOf, firstLayer, pathData } from "../model/regions";
 import { PrintGuard } from "./printGuard";
+import { printFiles, zip } from "../io/printExport";
 import type { Chain, StylePatch } from "../model/art";
 import { paintArt } from "../render/artPaint";
 import { ArtSelectTool } from "../tools/artSelect";
@@ -1041,6 +1042,33 @@ export class App implements ToolHost, ArtHost {
   setPrintView(patch: Pick<Partial<PrintSettings>, "preview" | "side">) {
     this.store.amendDoc(setPrintView(this.store.doc, patch));
     this.scheduleAutosave();
+  }
+  /**
+   * Export one DXF and SVG per filament, the outline and a README: into a folder you pick where the
+   * browser allows it, otherwise as one zip download.
+   */
+  async exportPrint() {
+    const base = this.baseName();
+    const r = printFiles(this.store.doc, base);
+    if ("error" in r) return this.flash(r.error, "error");
+    const picker = (window as any).showDirectoryPicker as undefined | ((o?: object) => Promise<any>);
+    if (picker) {
+      try {
+        const dir = await picker({ mode: "readwrite", id: "sketchworx-print" });
+        for (const f of r.files) {
+          const h = await dir.getFileHandle(f.name, { create: true });
+          const w = await h.createWritable();
+          await w.write(f.text);
+          await w.close();
+        }
+        return this.flash(`Saved ${r.files.length} files to ${dir.name}`);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        // Folder access refused: fall back to the zip.
+      }
+    }
+    downloadBlob(new Blob([zip(r.files)], { type: "application/zip" }), `${base}-print.zip`);
+    this.flash(`Downloaded ${base}-print.zip (${r.files.length} files)`);
   }
   /** Zoom to a notice's spot. */
   showSpot(at: Vec2) {

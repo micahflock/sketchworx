@@ -1,7 +1,8 @@
-# Print Mode — design spec (draft for review)
+# Print Mode — design spec
 
-Status: **draft, not built**. Answers from the first review are in "Decisions" at the end. Sections marked
-**[Q]** are still open.
+Status: **first build done** (see `PROGRESS.md`): steps 1–6 of the build order; step 7 (beads, real size,
+nozzle cursor) is still to do. Answers from review are in "Decisions" at the end. Sections marked **[Q]** are
+still open.
 
 ## 1. Goal
 

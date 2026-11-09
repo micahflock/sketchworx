@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { dist } from "../geom/vec";
 import { measure } from "../model/dimensions";
 import { entityLabel, ptv } from "../model/sketch";
@@ -31,9 +31,12 @@ export function Section({ title, children, open = true }: { title: string; child
 /** Number field that commits on Enter/blur. */
 export function NumField({ value, onCommit, label, readOnly }: { value: number; onCommit?: (v: number) => void; label: string; readOnly?: boolean }) {
   const [text, setText] = useState<string | null>(null);
+  // Enter commits and then blurs, which would commit the same text again.
+  const done = useRef<string | null>(null);
   const shown = text ?? fmt(value);
   const commit = () => {
-    if (text === null) return;
+    if (text === null || done.current === text) return;
+    done.current = text;
     const v = Number(text);
     setText(null);
     if (Number.isFinite(v) && onCommit) onCommit(v);
@@ -45,7 +48,10 @@ export function NumField({ value, onCommit, label, readOnly }: { value: number; 
         value={shown}
         readOnly={readOnly || !onCommit}
         inputMode="decimal"
-        onInput={(e) => setText((e.target as HTMLInputElement).value)}
+        onInput={(e) => {
+          done.current = null;
+          setText((e.target as HTMLInputElement).value);
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") {

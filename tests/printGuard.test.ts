@@ -108,6 +108,22 @@ describe("print guard", () => {
     expect(store.doc.features[0].sketch.dimensions[ids.dim].value).toBe(3);
   });
 
+  it("checks an edit that arrives while a value search is running", async () => {
+    const { doc, ids } = twoBars(3);
+    const { store, svc, guard } = await setup(doc);
+    const before = store.doc;
+    const b = chainOf(docChains(before), ids.b)!;
+    guard.expectValue({ from: 1.35, to: 3.15, step: 0.45, apply: (v) => setChainStyle(before, [b], { weight: v }), show: (v) => `${v}`, noSolve: true });
+    store.commitDoc(setChainStyle(before, [b], { weight: 3.15 }), "Line Weight");
+    svc.requestSolve();
+    // The same width committed again before the search ends (a field committing on Enter and on blur).
+    store.commitDoc(setChainStyle(store.doc, [chainOf(docChains(store.doc), ids.b)!], { weight: 3.15 }), "Line Weight");
+    await settle(svc, guard);
+    await settle(svc, guard);
+    expect(checkRules(store.doc).breaks).toEqual([]);
+    expect(guard.accepted).toBe(store.doc);
+  });
+
   it("refuses an edit that adds a break, with a notice and the spot marked", async () => {
     const { doc, ids } = twoBars(3);
     const { store, svc, guard } = await setup(doc);

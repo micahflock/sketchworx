@@ -56,6 +56,8 @@ export class PrintGuard {
   private intent: ValueIntent | null = null;
   private trustNext = false;
   private busy = false;
+  /** A document that settled while a value search was running: checked once the search ends. */
+  private pending: Doc | null = null;
   /** Resolves when a value search finishes (tests). */
   private searching: Promise<void> = Promise.resolve();
 
@@ -95,7 +97,11 @@ export class PrintGuard {
 
   /** A solved document: accept it, pull a typed value back, or refuse the edit. */
   onSettled(doc: Doc) {
-    if (this.busy || doc === this.accepted) return;
+    if (this.busy) {
+      this.pending = doc;
+      return;
+    }
+    if (doc === this.accepted) return;
     const intent = this.intent;
     const trusted = this.trustNext || this.store.lastChange !== "commit" || !this.accepted?.print || !doc.print;
     this.intent = null;
@@ -173,8 +179,13 @@ export class PrintGuard {
       this.busy = false;
       this.store.set({ printBusy: false });
     }
-    // The user moved on meanwhile: leave it to the next check.
-    if (this.store.doc !== bad) return;
+    const pending = this.pending;
+    this.pending = null;
+    // The user moved on meanwhile: check where they are now, as an ordinary edit.
+    if (this.store.doc !== bad) {
+      if (pending && pending === this.store.doc) this.onSettled(pending);
+      return;
+    }
     const b = newBreak(base, badRep);
     const why = b ? `${intent.show(intent.to)} would leave ${describeBreak(bad, b)}; ${limitText(bad)}` : `${intent.show(intent.to)} would not print`;
     if (!best) {

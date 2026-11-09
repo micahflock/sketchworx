@@ -2,6 +2,62 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Print mode (draw within the printer's limits) — first build ✅
+
+Spec: `docs/print-mode-spec.md`. Built: printer profile, filaments, whole-line widths, regions, rules,
+blocking with notices, the first-layer preview and the per-filament export. Not yet: bead view, real-size
+zoom, nozzle cursor, Split view's print pane, a layered DXF, 3MF.
+
+- **Turn on** in Print View (View group, last button) → Turn on Print mode. Each Art color becomes a filament
+  (background first, as the base); `w` (line width) and `nozzle` become locked variables (read-only in Global
+  Variables, follow the printer); stroke widths snap to whole lines. 1 sketch unit = 1 mm. Turning it off
+  keeps `w` and `nozzle` as plain variables. Stored as `doc.print` (file format still version 3).
+- **Printer**: presets for the MK4S with 0.25 / 0.4 / 0.6 / 0.8 mm nozzles (line widths close to
+  PrusaSlicer's profiles, editable), color changes MMU3 (5 filaments) or Manual swap (8), min feature in lines
+  (default 2), first-layer width, squish (0.05 mm, an estimate), layer height, sheet color.
+- **Filaments**: name, color, base (fills the part where nothing else is), print order (↑ ↓), add/remove
+  (areas move to another filament). In Art view, colors come from the filaments while Print mode is on.
+- **Regions** (`src/model/regions.ts`, Clipper2 via `@countertype/clipper2-ts`): every fill and stroke as an
+  area, later paint covering earlier (Art view order), clipped to the part outline (the largest filled profile
+  plus its own stroke, or one set with "Set as part outline"). In Print mode a profile of *another* color
+  inside a fill is an inlay painted over it; one of the same color is still a hole (letters keep working).
+- **Rules**: a piece a round tool of the minimum width cannot enter (thin strip, tiny island), a neck it
+  cannot pass, or a narrow stub off a wide part. Corners are not breaks (the nozzle rounds them; the preview
+  shows it). Gaps between two areas of one color are caught as the thin strip of whatever fills the gap.
+- **Blocking** (`src/app/printGuard.ts`): every solved edit is compared with the last accepted document. An
+  edit is worse if it adds a break or makes one narrower.
+  - Typed values (Modify box, single variable edits, stroke widths) are pulled back to the closest value that
+    prints: bisection to 1 µm between the old and typed value (re-solving each try), shown rounded toward the
+    old value; widths step back in whole lines. Notice: "Set to 2.25 mm: 2 mm would leave a 0.65 mm white
+    strip; min feature is 2 lines (0.90 mm)".
+  - Other edits (tools, drawing, filament changes, PropertyManager point fields) are refused: the history
+    goes back to the accepted document (no redo entry) and a notice names the rule, the width and the limit.
+  - Drags: frames that would break a rule are not shown, so the geometry stops at the last frame that prints.
+  - The would-be problem is outlined in red (Sketch and Print view) until the next edit. Notices show at the
+    top of the canvas for 6 s with Show (zoom to the spot); the last 20 are listed under Issues.
+  - Undo, redo, opening a file, turning Print mode on and printer changes are trusted: their breaks are listed
+    under Issues and block export; edits may fix or keep them, not add more.
+- **Print view**: Drawn (regions in filament colors; art outside the part faded) or As printed (default):
+  colors laid in print order, each opened by half the first-layer width, then spread by the squish into empty
+  space only; uncovered spots inside the part are pinholes (sheet color, ringed, counted). Bed side (mirrored,
+  default) or Top. Breaks hatched red. Click an area to pick its chain: filament, width in lines, fill, part
+  outline.
+- **Export** (Print panel → Export print files; blocked while there are issues): one DXF (R12, `$INSUNITS` mm,
+  closed polylines with arc bulges, circles as CIRCLE) and one SVG (mm) per filament, `-outline.dxf`, and a
+  README with the slot or print order and PrusaSlicer steps. Saved into a folder where the browser allows it,
+  otherwise one zip. Lines and arcs are refitted to the regions (5 µm); vertices shared by two colors are
+  welded and each boundary run is fitted once, so neighbouring colors get identical edges.
+- Fixed on the way: number fields in the PropertyManager and Art panel committed twice (Enter, then blur).
+
+Tests: `tests/print.test.ts` (settings, snapping, variables follow the nozzle, filament limits, save/load,
+tiling, inlays and holes, thin strip / island / neck, first-layer pinholes and squish order),
+`tests/printGuard.test.ts` (dimension pulled back to 2.25 mm, refusal with marker, widths stepped back,
+trusted breaks may not narrow, drag frames held, edits during a search), `tests/printExport.test.ts`
+(file set, DXFs read back tile the part with no overlap or gap, the disc is one CIRCLE, export blocked,
+zip). Checked in the browser with `sketchworxSamples.badge()`: Print view both ways, a drag held at 5.17 mm
+(limit 5.15), a 24-line width pulled back to 23 with the notice and marker, the zip download. The DXFs read
+cleanly in ezdxf (no errors, all profiles closed). **Not yet imported into Fusion 360**: please try one.
+
 ## Toolbar icons: redrawn from a CAD survey ✅
 
 - 19 icons in `src/ui/icons.tsx` redrawn after comparing each command with SolidWorks, Fusion, Creo, NX and

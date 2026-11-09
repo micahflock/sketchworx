@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { artBackground, artDefaults, chainStyle, docChains, effectiveCorner } from "../model/art";
 import type { Chain, Overridable, ResolvedStyle } from "../model/art";
 import type { ArtSide } from "../model/types";
@@ -11,8 +11,11 @@ import css from "./ui.module.css";
 /** Number input that commits on Enter/blur (negative values are refused). */
 function NumInput({ value, onCommit, title }: { value: number; onCommit: (v: number) => void; title?: string }) {
   const [text, setText] = useState<string | null>(null);
+  // Enter commits and then blurs, which would commit the same text again.
+  const done = useRef<string | null>(null);
   const commit = () => {
-    if (text === null) return;
+    if (text === null || done.current === text) return;
+    done.current = text;
     const v = Number(text);
     setText(null);
     if (Number.isFinite(v) && v >= 0) onCommit(v);
@@ -22,7 +25,10 @@ function NumInput({ value, onCommit, title }: { value: number; onCommit: (v: num
       value={text ?? fmt(value)}
       title={title}
       inputMode="decimal"
-      onInput={(e) => setText((e.target as HTMLInputElement).value)}
+      onInput={(e) => {
+        done.current = null;
+        setText((e.target as HTMLInputElement).value);
+      }}
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
