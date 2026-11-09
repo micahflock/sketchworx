@@ -33,7 +33,7 @@ export function StatusBar() {
   const count = readoutCount(st);
   return (
     <div class={css.status}>
-      <span class={css.statusPrompt}>{ui.message ? <b class={ui.message.kind === "error" ? css.err : ""}>{ui.message.text}</b> : ui.viewMode === "art" ? "Click a line or profile to style it (Shift adds). Drag or wheel to pan and zoom" : ui.prompt}</span>
+      <span class={css.statusPrompt}>{ui.message ? <b class={ui.message.kind === "error" ? css.err : ""}>{ui.message.text}</b> : ui.viewMode === "art" ? "Click a line or profile to style it (Shift adds). Drag or wheel to pan and zoom" : ui.viewMode === "print" ? (ui.printBusy ? "Finding the closest value that prints…" : "Click an area to choose its filament (Shift adds). Drag or wheel to pan and zoom") : ui.prompt}</span>
       <span class={css.coord} ref={coordRef} />
       {ui.ctrl || ui.touchCtrl ? <span class={css.badge}>Ctrl: no auto relations</span> : null}
       {ui.dynamicMirror ? <span class={css.badge}>Dynamic Mirror</span> : null}

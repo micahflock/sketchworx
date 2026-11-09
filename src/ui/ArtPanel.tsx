@@ -97,18 +97,24 @@ export function ArtPanel() {
   return (
     <div class={css.pm}>
       <div class={css.pmTitle}>Art View</div>
-      <Section title="Background">
-        <Row label="Color">
-          <ColorInput value={artBackground(doc)} onCommit={(v) => app.setArtBackground(v)} />
-        </Row>
-      </Section>
+      {doc.print ? (
+        <div class={css.info}>Print mode is on: colors come from the filaments (Print view), widths are whole lines.</div>
+      ) : (
+        <Section title="Background">
+          <Row label="Color">
+            <ColorInput value={artBackground(doc)} onCommit={(v) => app.setArtBackground(v)} />
+          </Row>
+        </Section>
+      )}
       <Section title="Defaults">
         <Row label="Line weight">
           <NumInput value={d.weight} onCommit={(v) => app.setArtDefaults({ weight: v })} />
         </Row>
-        <Row label="Color">
-          <ColorInput value={d.color} onCommit={(v) => app.setArtDefaults({ color: v })} />
-        </Row>
+        {!doc.print && (
+          <Row label="Color">
+            <ColorInput value={d.color} onCommit={(v) => app.setArtDefaults({ color: v })} />
+          </Row>
+        )}
         <Row label="Corner radius">
           <NumInput value={d.corner} title={CORNER_TIP} onCommit={(v) => app.setArtDefaults({ corner: v })} />
         </Row>
@@ -155,9 +161,11 @@ function ChainSection({ sel }: { sel: Chain[] }) {
       <Row label="Weight" custom={custom("weight")} onReset={reset("weight")}>
         <NumInput value={s0.weight} onCommit={(v) => app.setChainStyle(sel, { weight: v })} />
       </Row>
-      <Row label="Color" custom={custom("color")} onReset={reset("color")}>
-        <ColorInput value={s0.color} onCommit={(v) => app.setChainStyle(sel, { color: v })} />
-      </Row>
+      {!doc.print && (
+        <Row label="Color" custom={custom("color")} onReset={reset("color")}>
+          <ColorInput value={s0.color} onCommit={(v) => app.setChainStyle(sel, { color: v })} />
+        </Row>
+      )}
       <Row label="Corner radius" custom={custom("corner")} onReset={reset("corner")}>
         <NumInput value={s0.corner} title={CORNER_TIP} onCommit={(v) => app.setChainStyle(sel, { corner: v })} />
       </Row>

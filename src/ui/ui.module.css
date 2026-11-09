@@ -1289,3 +1289,72 @@
     text-decoration: line-through;
   }
 }
+
+/* Print mode */
+.toast {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--sw-surface);
+  color: var(--sw-text);
+  border: 1px solid var(--sw-border);
+  border-radius: var(--sw-radius);
+  font-size: 13px;
+  z-index: 5;
+}
+.toastRefused {
+  background: var(--sw-error-bg);
+  border-color: var(--sw-error-border);
+  color: var(--sw-error);
+}
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--sw-border-input);
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.issueRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 3px 0;
+}
+.filRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 0;
+}
+.filRow input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--sw-border-input);
+  background: none;
+}
+.filSlot {
+  width: 14px;
+  color: var(--sw-text-3);
+  font-size: 12px;
+  text-align: right;
+}
+.filName {
+  flex: 1;
+  min-width: 0;
+  color: var(--sw-text);
+  background: var(--sw-well);
+  border: 1px solid var(--sw-border-input);
+  border-radius: var(--sw-radius);
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 12px;
+}

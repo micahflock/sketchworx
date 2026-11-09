@@ -6,8 +6,21 @@ import type { SketchStatus } from "../solver/types";
 import { emptyStatus } from "../solver/types";
 import type { HellAccent, ThemeName } from "../render/theme";
 import type { ThemePref } from "./themePref";
+import type { Paths64 } from "@countertype/clipper2-ts";
+import type { Vec2 } from "../geom/vec";
+import type { RuleReport } from "../model/regions";
 
-export type ViewMode = "sketch" | "art" | "split";
+/** A refused or adjusted edit in Print mode, or other news about the print. */
+export interface Notice {
+  text: string;
+  kind: "refused" | "adjusted" | "info";
+  /** Where the problem is (mm, sketch coordinates). */
+  area?: Paths64;
+  at?: Vec2;
+  time: number;
+}
+
+export type ViewMode = "sketch" | "art" | "split" | "print";
 
 export interface UiState {
   history: History;
@@ -54,7 +67,19 @@ export interface UiState {
   penSeen: boolean;
   /** Only the pen draws and selects; fingers pan and zoom (palm rejection). On once a pen is seen. */
   pencilOnly: boolean;
+  /** Print mode: rule breaks of the current document (null when Print mode is off). */
+  printReport: RuleReport | null;
+  /** The notice on screen, and the recent ones (newest first). */
+  notice: Notice | null;
+  notices: Notice[];
+  /** Spot marked in red until the next edit (a refused edit's problem, or a drag held at the limit). */
+  printMarker: Paths64 | null;
+  /** Print mode is searching for the closest value that prints. */
+  printBusy: boolean;
 }
+
+/** How the present document was reached. */
+export type ChangeKind = "commit" | "undo" | "redo" | "reset";
 
 type Listener = () => void;
 
@@ -65,6 +90,8 @@ export class Store {
   /** Bumped on every change, so subscribers can cheaply detect updates. */
   version = 0;
   private transientBase: History | null = null;
+  /** How the present document was reached (Print mode trusts undo, redo and opening files). */
+  lastChange: ChangeKind = "reset";
 
   constructor(doc: Doc = createDoc()) {
     this.state = {
@@ -98,6 +125,11 @@ export class Store {
       hellAccent: "red",
       penSeen: false,
       pencilOnly: false,
+      printReport: null,
+      notice: null,
+      notices: [],
+      printMarker: null,
+      printBusy: false,
     };
   }
 
@@ -119,21 +151,36 @@ export class Store {
   // ---- history
   commitDoc(doc: Doc, label: string) {
     if (this.transientBase) this.endTransient(label);
+    this.lastChange = "commit";
     this.set({ history: commit(this.state.history, doc, label) });
+  }
+  /**
+   * Go back to `doc`, an earlier present of this history, dropping the steps after it (and redo):
+   * the edit is refused rather than undone.
+   */
+  rollbackTo(doc: Doc) {
+    const h = this.state.history;
+    if (h.present === doc) return;
+    const i = h.past.map((e) => e.doc).lastIndexOf(doc);
+    if (i < 0) return this.set({ history: { ...h, present: doc, future: [] } });
+    this.set({ history: { past: h.past.slice(0, i), present: doc, presentLabel: h.past[i].label, future: [] } });
   }
   amendDoc(doc: Doc) {
     this.set({ history: amend(this.state.history, doc) });
   }
   undo() {
     if (this.transientBase) return;
+    this.lastChange = "undo";
     this.set({ history: undo(this.state.history) });
   }
   redo() {
     if (this.transientBase) return;
+    this.lastChange = "redo";
     this.set({ history: redo(this.state.history) });
   }
   resetHistory(doc: Doc) {
     this.transientBase = null;
+    this.lastChange = "reset";
     this.set({ history: createHistory(doc), selection: [], hover: null });
   }
 
@@ -153,6 +200,7 @@ export class Store {
     if (!base) return;
     this.transientBase = null;
     const final = this.state.history.present;
+    this.lastChange = "commit";
     this.set({ history: final === base.present ? base : commit(base, final, label) });
   }
   cancelTransient() {

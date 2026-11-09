@@ -199,8 +199,6 @@ export interface Break {
 
 export interface RuleReport {
   breaks: Break[];
-  /** Material lost in total (mm²), to tell whether an edit made things worse. */
-  lost: number;
 }
 
 /** Largest d (to 1 µm) for which `ok(d)` still holds, searched in [0, hi]. */
@@ -270,15 +268,28 @@ export function checkRules(doc: Doc): RuleReport {
   const pr = doc.print!;
   const minW = minFeature(pr.printer);
   const breaks = buildRegions(doc).regions.flatMap((reg) => regionBreaks(reg.area, reg.filament, minW));
-  const rep = { breaks, lost: breaks.reduce((t, b) => t + areaOf(b.area), 0) };
+  const rep = { breaks };
   ruleCache.set(doc, rep);
   return rep;
 }
 
-/** An edit may fix or keep breaks, never add one or lose more material. */
+/** The break of `list` in the same filament whose area overlaps `b`'s (within 1 mm), if any. */
+export function matchBreak(b: Break, list: Break[]): Break | undefined {
+  const bb = boundsOf(b.area);
+  const near = (o: Break) => {
+    const ob = boundsOf(o.area);
+    return ob.minX - 1 <= bb.maxX && bb.minX - 1 <= ob.maxX && ob.minY - 1 <= bb.maxY && bb.minY - 1 <= ob.maxY;
+  };
+  return list.filter((o) => o.filament === b.filament && near(o)).sort((x, y) => y.width - x.width)[0];
+}
+
+/** An edit may fix breaks, or keep them as narrow or wider; it may not add one or make one narrower. */
 export function isWorse(before: RuleReport, after: RuleReport): boolean {
   if (after.breaks.length > before.breaks.length) return true;
-  return after.lost > before.lost * 1.01 + 0.001;
+  return after.breaks.some((b) => {
+    const m = matchBreak(b, before.breaks);
+    return !m || b.width < m.width - 0.002;
+  });
 }
 
 // ------------------------------------------------------------------ first layer as printed

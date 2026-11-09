@@ -35,10 +35,33 @@ export function Shell() {
         <div class={css.canvasWrap}>
           <canvas ref={canvasRef} class={css.canvas} style={{ touchAction: "none" }} />
           <Overlays />
+          <PrintNotice />
           {ui.touchUi && <TouchKeys />}
         </div>
       </div>
       <StatusBar />
+    </div>
+  );
+}
+
+/** Print mode: why an edit was refused or changed, with a link to the spot. */
+function PrintNotice() {
+  const app = useApp();
+  const ui = useUi();
+  const n = ui.notice;
+  if (ui.printBusy) return <div class={css.toast}>Finding the closest value that prints…</div>;
+  if (!n) return null;
+  return (
+    <div class={`${css.toast} ${n.kind === "refused" ? css.toastRefused : ""}`} role="status">
+      <span>{n.text}</span>
+      {n.at && (
+        <button class={css.small} onClick={() => app.showSpot(n.at!)}>
+          Show
+        </button>
+      )}
+      <button class={css.small} title="Dismiss" onClick={() => app.store.set({ notice: null })}>
+        ✕
+      </button>
     </div>
   );
 }

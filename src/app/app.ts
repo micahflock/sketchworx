@@ -9,7 +9,26 @@ import type { Doc, Id, Sketch } from "../model/types";
 import { addFeature, deleteFeature, moveFeature, renameFeature, setActive, setVisible } from "../model/features";
 import { docOutline } from "../model/outline";
 import { loopsToPathData } from "../io/svg";
-import { artBackground, artScene, chainsFor, docChains, hitChain, setArtBackground, setArtDefaults, setChainStyle } from "../model/art";
+import { artBackground, artDefaults, artScene, chainsFor, chainStyle, docChains, hitChain, samplePolyline, setArtBackground, setArtDefaults, setChainStyle } from "../model/art";
+import {
+  addFilament,
+  disablePrint,
+  enablePrint,
+  linesFor,
+  moveFilament,
+  removeFilament,
+  setBaseFilament,
+  setInkFilament,
+  setPartOutline,
+  setPrinter,
+  setPrintView,
+  snapWeight,
+  updateFilament,
+} from "../model/print";
+import type { PrintChange } from "../model/print";
+import type { Filament, PrinterProfile, PrintSettings } from "../model/types";
+import { buildRegions, checkRules, components, boundsOf, firstLayer, pathData } from "../model/regions";
+import { PrintGuard } from "./printGuard";
 import type { Chain, StylePatch } from "../model/art";
 import { paintArt } from "../render/artPaint";
 import { ArtSelectTool } from "../tools/artSelect";
@@ -85,6 +104,8 @@ export class App implements ToolHost, ArtHost {
   private panning: { last: Vec2 } | null = null;
   private lastPointer: PEvent | null = null;
   readonly solver: SolverService;
+  /** Print mode: keeps every edit printable. */
+  readonly guard: PrintGuard;
   /** Hit rectangles of glyphs/dimensions from the last frame (screen space). */
   annotationHits: AnnotationHit[] = [];
   keymap: Record<string, string> = loadKeymap();
@@ -146,6 +167,9 @@ export class App implements ToolHost, ArtHost {
     reg(new ConvertTool(this));
     reg(new RepairTool(this));
     this.solver.postSolve = (doc, featureId) => applyCommand(doc, recomputeDerived, featureId);
+    this.guard = new PrintGuard(this.store, this.solver);
+    this.solver.onSettled = (doc) => this.guard.onSettled(doc);
+    this.solver.dragFilter = (doc) => this.guard.filterDrag(doc);
     this.tool = this.tools.get("select")!;
     this.store.subscribe(() => this.requestRender());
     this.darkQuery?.addEventListener?.("change", () => this.setThemePref(this.store.state.themePref, false));
@@ -390,6 +414,16 @@ export class App implements ToolHost, ArtHost {
       if (!d) return null;
       if (d.type !== "angle" && value <= 0 && d.type !== "distanceX" && d.type !== "distanceY") return "Value must be positive";
       if (d.expr === expr && d.value === value) return null;
+      const before = this.store.doc;
+      if (before.print && Math.abs(d.value - value) > 1e-12) {
+        const unit = d.type === "angle" ? "°" : " mm";
+        this.guard.expectValue({
+          from: d.value,
+          to: value,
+          apply: (v) => applyCommand(before, (ed) => ed.updateDimension(id, { expr: fmt(v), value: v })),
+          show: (v) => `${fmt(v)}${unit}`,
+        });
+      }
       this.commit("Edit Dimension", (ed) => ed.updateDimension(id, { expr, value }));
       this.maybeUnlockHell(value);
       return null;
@@ -412,6 +446,7 @@ export class App implements ToolHost, ArtHost {
 
   /** Rename a variable and every reference to it (dimensions and other variables). */
   renameVariable(from: string, to: string) {
+    if (this.store.doc.variables.some((v) => v.locked && v.name === from)) return this.flash(`${from} follows the printer profile and cannot be renamed`, "error");
     const re = new RegExp(`\\b${from}\\b`, "g");
     const doc = this.store.doc;
     const features = doc.features.map((f) => {
@@ -437,6 +472,24 @@ export class App implements ToolHost, ArtHost {
 
   /** Replace the global variables and re-evaluate every expression that uses them. */
   setVariables(vars: Variable[]) {
+    const before = this.store.doc;
+    // Print mode's own variables follow the printer; they cannot be edited or deleted here.
+    const locked = before.variables.filter((v) => v.locked);
+    vars = [...locked, ...vars.filter((v) => !locked.some((l) => l.name === v.name))];
+    if (before.print) {
+      const changed = vars.filter((v) => before.variables.some((o) => o.name === v.name && o.expr !== v.expr));
+      const old = changed.length === 1 && vars.length === before.variables.length ? before.variables.find((o) => o.name === changed[0].name)! : null;
+      const to = old && !isExpression(changed[0].expr) ? Number(changed[0].expr) : NaN;
+      if (old && Number.isFinite(to) && Math.abs(to - old.value) > 1e-12) {
+        const name = old.name;
+        this.guard.expectValue({
+          from: old.value,
+          to,
+          apply: (v) => refreshExpressions({ ...before, variables: before.variables.map((x) => (x.name === name ? { ...x, expr: fmt(v), value: v } : x)) }),
+          show: (v) => `${name} = ${fmt(v)}`,
+        });
+      }
+    }
     this.commit("Edit Variables", (ed) => ed.setVariables(vars));
     const refreshed = refreshExpressions(this.store.doc);
     if (refreshed !== this.store.doc) {
@@ -840,7 +893,7 @@ export class App implements ToolHost, ArtHost {
   /** The pointer is over Art view (the whole canvas, or the right pane of split view). */
   private overArt(pe: PEvent): boolean {
     const mode = this.store.state.viewMode;
-    return mode === "art" || (mode === "split" && pe.screen.x > this.view.width);
+    return mode === "art" || mode === "print" || (mode === "split" && pe.screen.x > this.view.width);
   }
   private pressDown(pe: PEvent) {
     const art = this.overArt(pe);
@@ -872,8 +925,12 @@ export class App implements ToolHost, ArtHost {
   }
   artPick(pe: PEvent): Id | null {
     const { v, screen } = this.artViewAt(pe);
-    const scene = artScene(this.store.doc, v.px(0.3));
-    return hitChain(scene, v.toWorld(screen), this.tol(pe.pointerType) * (this.view.scale / v.scale))?.key ?? null;
+    const doc = this.store.doc;
+    const scene = artScene(doc, v.px(0.3));
+    const world = v.toWorld(screen);
+    const m = this.store.state.viewMode === "print" ? this.printMirror(doc) : undefined;
+    if (m !== undefined) world.x = 2 * m - world.x;
+    return hitChain(scene, world, this.tol(pe.pointerType) * (this.view.scale / v.scale))?.key ?? null;
   }
   artSelection(): Id[] {
     return this.store.state.artSelection;
@@ -885,7 +942,7 @@ export class App implements ToolHost, ArtHost {
     if (this.store.state.artHover !== id) this.store.set({ artHover: id });
   }
   artPan(_pe: PEvent, dx: number, dy: number) {
-    if (this.store.state.viewMode !== "art") return; // the split pane is fitted automatically
+    if (this.store.state.viewMode !== "art" && this.store.state.viewMode !== "print") return; // the split pane is fitted automatically
     this.view.panBy(dx, dy);
     this.requestRender();
   }
@@ -897,7 +954,18 @@ export class App implements ToolHost, ArtHost {
     this.setArtSelection(docChains(this.store.doc).map((c) => c.key));
   }
   setArtDefaults(patch: Partial<ArtDefaults>) {
-    this.commitDoc(setArtDefaults(this.store.doc, patch), "Art Defaults");
+    const doc = this.store.doc;
+    if (doc.print && typeof patch.weight === "number") this.expectWeight(artDefaults(doc).weight, patch.weight, (v) => setArtDefaults(doc, { ...patch, weight: v }));
+    this.commitDoc(setArtDefaults(doc, patch), "Art Defaults");
+  }
+  /** Print mode: a typed stroke width is rounded to whole lines and may be pulled back to one that prints. */
+  private expectWeight(from: number, typed: number, apply: (v: number) => Doc) {
+    const doc = this.store.doc;
+    const p = doc.print!.printer;
+    const to = snapWeight(doc, typed);
+    const show = (v: number) => `${linesFor(p, v)} lines (${fmt(v)} mm)`;
+    if (Math.abs(to - typed) > 1e-9) this.guard.notify({ kind: "adjusted", text: `Width set to ${show(to)}: widths are whole ${p.lineWidth} mm lines, at least ${p.minFeatureLines}` });
+    if (Math.abs(to - from) > 1e-9) this.guard.expectValue({ from, to, step: p.lineWidth, apply, show, noSolve: true });
   }
   setArtBackground(color: string) {
     this.commitDoc(setArtBackground(this.store.doc, color), "Art Background");
@@ -906,14 +974,90 @@ export class App implements ToolHost, ArtHost {
     this.setArtDefaults({ weight });
   }
   setChainStyle(chains: Chain[], patch: StylePatch) {
+    const doc = this.store.doc;
+    if (doc.print && typeof patch.weight === "number" && chains.length)
+      this.expectWeight(chainStyle(doc, chains[0]).weight, patch.weight, (v) => setChainStyle(doc, chains, { ...patch, weight: v }));
     const label =
-      patch.fill !== undefined ? (patch.fill ? "Fill Profile" : "Unfill Profile")
+      patch.filament !== undefined ? "Filament"
+      : patch.fill !== undefined ? (patch.fill ? "Fill Profile" : "Unfill Profile")
       : patch.side ? "Line Side"
       : patch.color !== undefined ? "Line Color"
       : patch.corner !== undefined ? "Corner Radius"
       : patch.roundEnds !== undefined ? "Line Ends"
       : "Line Weight";
-    this.commitDoc(setChainStyle(this.store.doc, chains, patch), label);
+    this.commitDoc(setChainStyle(doc, chains, patch), label);
+  }
+
+  // ------------------------------------------------------------------ Print mode
+  private printNotes(r: PrintChange) {
+    if (r.notes.length) this.guard.notify({ kind: "info", text: r.notes.join(". ") });
+  }
+  enablePrint() {
+    const doc = this.store.doc;
+    const colors = docChains(doc).map((c) => chainStyle(doc, c).color);
+    const r = enablePrint(doc, { background: artBackground(doc), colors });
+    if ("error" in r) return this.flash(r.error, "error");
+    this.guard.trust();
+    this.commitDoc(r.doc, "Print Mode On");
+    this.printNotes(r);
+    if (this.store.state.viewMode !== "print") this.runAction("view:print");
+  }
+  disablePrint() {
+    this.guard.trust();
+    this.commitDoc(disablePrint(this.store.doc), "Print Mode Off");
+  }
+  setPrinter(patch: Partial<PrinterProfile>) {
+    const r = setPrinter(this.store.doc, patch);
+    this.guard.trust();
+    this.commitDoc(r.doc, "Printer");
+    this.printNotes(r);
+  }
+  addFilament(color?: string) {
+    const r = addFilament(this.store.doc, color);
+    if (r.error) return this.flash(r.error, "error");
+    this.commitDoc(r.doc!, "Add Filament");
+  }
+  updateFilament(id: string, patch: Partial<Pick<Filament, "name" | "color">>) {
+    this.commitDoc(updateFilament(this.store.doc, id, patch), "Filament");
+  }
+  moveFilament(id: string, by: -1 | 1) {
+    this.commitDoc(moveFilament(this.store.doc, id, by), "Print Order");
+  }
+  removeFilament(id: string, into: string) {
+    const r = removeFilament(this.store.doc, id, into);
+    if (r.error) return this.flash(r.error, "error");
+    this.commitDoc(r.doc!, "Remove Filament");
+  }
+  setBaseFilament(id: string) {
+    this.commitDoc(setBaseFilament(this.store.doc, id), "Base Filament");
+  }
+  setInkFilament(id: string) {
+    this.commitDoc(setInkFilament(this.store.doc, id), "Default Filament");
+  }
+  setPartOutline(key: Id | undefined) {
+    this.commitDoc(setPartOutline(this.store.doc, key), "Part Outline");
+  }
+  /** Preview choices are not undo steps. */
+  setPrintView(patch: Pick<Partial<PrintSettings>, "preview" | "side">) {
+    this.store.amendDoc(setPrintView(this.store.doc, patch));
+    this.scheduleAutosave();
+  }
+  /** Zoom to a notice's spot. */
+  showSpot(at: Vec2) {
+    const doc = this.store.doc;
+    const m = this.printMirror(doc);
+    const x = m === undefined || this.store.state.viewMode !== "print" ? at.x : 2 * m - at.x;
+    this.view.cx = x;
+    this.view.cy = at.y;
+    this.view.scale = Math.max(this.view.scale, 40);
+    this.requestRender();
+  }
+  /** Print view: x about which the As printed preview is mirrored (bed side), if it is. */
+  printMirror(doc: Doc): number | undefined {
+    const pr = doc.print;
+    if (!pr || pr.preview === "drawn" || pr.side === "top") return undefined;
+    const b = buildRegions(doc).bounds;
+    return boxValid(b) ? (b.minX + b.maxX) / 2 : undefined;
   }
 
   // ---- pen
@@ -1184,10 +1328,11 @@ export class App implements ToolHost, ArtHost {
         return this.store.set({ panel: "auto" });
       case "view:sketch":
       case "view:art":
-      case "view:split": {
-        const mode = action.slice(5) as "sketch" | "art" | "split";
-        // Art view hides the sketch: abandon a half-drawn entity rather than leave it waiting unseen.
-        if (mode === "art") this.tool.cancel();
+      case "view:split":
+      case "view:print": {
+        const mode = action.slice(5) as "sketch" | "art" | "split" | "print";
+        // Art and Print view hide the sketch: abandon a half-drawn entity rather than leave it waiting unseen.
+        if (mode === "art" || mode === "print") this.tool.cancel();
         this.store.set({ viewMode: mode, artHover: null });
         this.layoutViews();
         return this.requestRender();
@@ -1265,6 +1410,7 @@ export class App implements ToolHost, ArtHost {
     ctx.rect(0, 0, v.width, v.height);
     ctx.clip();
     if (mode === "art") this.drawArt(ctx, v);
+    else if (mode === "print") this.drawPrint(ctx, v);
     else {
       ctx.fillStyle = theme.bg;
       ctx.fillRect(0, 0, v.width, v.height);
@@ -1312,6 +1458,89 @@ export class App implements ToolHost, ArtHost {
       { k: k * v.scale, ox: k * (offsetX + v.width / 2 - v.cx * v.scale), oy: k * (v.height / 2 + v.cy * v.scale), unit: v.px(1) },
       { selected, hover },
     );
+  }
+
+  /**
+   * Print view: the regions in filament colors as drawn, or the first layer as printed (on the
+   * sheet, mirrored for the bed side). Rule breaks are hatched red; a refused edit's spot is outlined.
+   */
+  private drawPrint(ctx: CanvasRenderingContext2D, v: View) {
+    const doc = this.store.doc;
+    ctx.fillStyle = theme.printBackdrop;
+    ctx.fillRect(0, 0, v.width, v.height);
+    const pr = doc.print;
+    if (!pr) return;
+    const reg = buildRegions(doc);
+    const printed = pr.preview !== "drawn";
+    const m = this.printMirror(doc);
+    const color = (id: string) => pr.filaments.find((f) => f.id === id)?.color ?? "#ff00ff";
+    const k = v.dpr;
+    ctx.save();
+    ctx.setTransform(k * v.scale, 0, 0, k * v.scale, k * (v.width / 2 - v.cx * v.scale), k * (v.height / 2 + v.cy * v.scale));
+    const fill = (a: Parameters<typeof pathData>[0], c: string) => {
+      if (!a.length) return;
+      ctx.fillStyle = c;
+      ctx.fill(new Path2D(pathData(a, m)), "nonzero");
+    };
+    if (printed) {
+      const fl = firstLayer(doc);
+      fill(reg.part, pr.printer.sheetColor);
+      for (const l of fl.laid) fill(l.area, color(l.filament));
+    } else {
+      for (const r of reg.regions) fill(r.area, color(r.filament));
+      ctx.globalAlpha = 0.25;
+      fill(reg.outside, theme.printOutside);
+      ctx.globalAlpha = 1;
+    }
+    // Part edge, so a white part shows on a light backdrop.
+    if (reg.part.length) {
+      ctx.strokeStyle = theme.printEdge;
+      ctx.lineWidth = v.px(1);
+      ctx.stroke(new Path2D(pathData(reg.part, m)));
+    }
+    const red = theme.printBreak;
+    const report = checkRules(doc);
+    for (const b of report.breaks) {
+      const p = new Path2D(pathData(b.area, m));
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = red;
+      ctx.fill(p, "nonzero");
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = red;
+      ctx.lineWidth = v.px(1.5);
+      ctx.stroke(p);
+    }
+    const marker = this.store.state.printMarker;
+    if (marker?.length) {
+      ctx.strokeStyle = red;
+      ctx.lineWidth = v.px(2.5);
+      ctx.setLineDash([v.px(4), v.px(3)]);
+      ctx.stroke(new Path2D(pathData(marker, m)));
+      ctx.setLineDash([]);
+    }
+    // Selected chains: their line in blue.
+    const sel = this.selectedChains();
+    if (sel.length) {
+      ctx.strokeStyle = theme.selected;
+      ctx.lineWidth = v.px(2);
+      for (const c of sel) {
+        const pts = samplePolyline(c.segs, c.closed, v.px(0.3)).pts;
+        const path = new Path2D();
+        pts.forEach((q, i) => (i ? path.lineTo(m === undefined ? q.x : 2 * m - q.x, -q.y) : path.moveTo(m === undefined ? q.x : 2 * m - q.x, -q.y)));
+        if (c.closed) path.closePath();
+        ctx.stroke(path);
+      }
+    }
+    ctx.restore();
+    // Pinholes: a ring around each so they are easy to find.
+    if (printed) {
+      const p = new Painter(ctx, v);
+      for (const h of components(firstLayer(doc).pinholes)) {
+        const b = boundsOf(h);
+        const c = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
+        p.ring({ x: m === undefined ? c.x : 2 * m - c.x, y: c.y }, 6, theme.printPinhole, 1.5);
+      }
+    }
   }
 
   private drawPicture(ctx: CanvasRenderingContext2D, v: View, s: Sketch) {

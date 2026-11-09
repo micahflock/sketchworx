@@ -92,6 +92,15 @@ function VarRow(props: {
     if (expr !== null && expr.trim() && expr !== props.v.expr) props.onExpr(expr.trim());
     setExpr(null);
   };
+  if (props.v.locked)
+    return (
+      <div class={css.varRow} title="Follows the printer profile (Print view → Printer)">
+        <input value={props.v.name} readOnly />
+        <input value={props.v.expr} readOnly />
+        <span class={css.varVal}>{props.value === undefined ? "?" : fmt(props.value)}</span>
+        <span class={css.ovrTag}>printer</span>
+      </div>
+    );
   const commitName = () => {
     if (name !== null && name !== props.v.name && !props.onRename(name.trim())) {
       /* invalid rename: revert */

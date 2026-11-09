@@ -72,6 +72,7 @@ export const actionLabels: Record<string, string> = {
   "tool:fillet": "Sketch Fillet",
   "view:sketch": "Sketch View",
   "view:art": "Art View",
+  "view:print": "Print View",
   "tool:line": "Line",
   "tool:circle": "Circle",
   "tool:arc": "Centerpoint Arc",

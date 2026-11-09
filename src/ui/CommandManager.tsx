@@ -71,6 +71,7 @@ export const groups: Group[] = [
       a("sketchView", "Sketch View", "sketchView", "view:sketch"),
       a("artView", "Art View", "artView", "view:art"),
       a("splitView", "Split View", "splitView", "view:split"),
+      a("printView", "Print View", "printView", "view:print"),
     ],
   },
   {

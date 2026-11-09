@@ -237,6 +237,13 @@ export const icons: Record<string, () => JSX.Element> = {
       <path d="M4 18L12 5l8 13z" fill="currentColor" />
     </S>
   ),
+  printView: () => (
+    <S>
+      <path d="M8 3h8v5l-2.5 3.5h-3L8 8z" />
+      <path d="M12 11.5V14" />
+      <path d="M4 17h16M6 20.5h12" />
+    </S>
+  ),
   splitView: () => (
     <S>
       <rect x="3" y="5" width="18" height="14" />

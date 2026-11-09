@@ -253,7 +253,7 @@ describe("rules", () => {
 
   it("an edit is worse when it adds a break", () => {
     const ok = checkRules(badge().doc);
-    const bad = { breaks: [{} as never], lost: 1 };
+    const bad = { breaks: [{ kind: "thin" as const, filament: WHITE, width: 0.5, area: [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }]], at: { x: 0, y: 0 } }] };
     expect(isWorse(ok, bad)).toBe(true);
     expect(isWorse(bad, ok)).toBe(false);
   });

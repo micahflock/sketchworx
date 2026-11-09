@@ -79,6 +79,10 @@ export class SolverService {
   private session = 0;
   /** Post-process one solved sketch (recompute driven offsets). */
   postSolve: ((doc: Doc, featureId: Id) => Doc) | null = null;
+  /** Called with the document once it is solved and published (Print mode checks it). */
+  onSettled: ((doc: Doc) => void) | null = null;
+  /** Vets each drag frame: return null to keep showing the previous frame. */
+  dragFilter: ((doc: Doc) => Doc | null) | null = null;
   /** The last doc this service fully rebuilt, and the status of each sketch in it. */
   private solved: Doc | null = null;
   private statuses = new Map<Id, SketchStatus>();
@@ -142,6 +146,7 @@ export class SolverService {
       if (from >= doc.features.length) {
         this.inFlight = false;
         this.publish(doc);
+        this.onSettled?.(doc);
         continue;
       }
       this.store.set({ status: { ...this.store.state.status, solving: true } });
@@ -157,6 +162,7 @@ export class SolverService {
         if (next !== doc) this.store.amendDoc(next);
         this.solved = next;
         this.publish(next);
+        this.onSettled?.(next);
       } catch (e) {
         console.error("solve failed", e);
         this.store.set({ status: { ...this.store.state.status, solving: false, state: "failed" } });
@@ -169,6 +175,11 @@ export class SolverService {
       this.waiters = [];
       for (const f of w) f();
     }
+  }
+
+  /** Rebuild every sketch of `doc` without touching the store (trial edits). */
+  async solveDoc(doc: Doc): Promise<Doc> {
+    return this.rebuild(doc, 0, new Map());
   }
 
   /** Solve arbitrary input without touching the store. */
@@ -220,8 +231,11 @@ export class SolverService {
     let next = applySolved(d.base, p);
     if (this.postSolve) next = this.postSolve(next, next.active);
     if (d.below) next = withBelow(next, d.below);
-    this.store.updateTransient(next);
-    this.rebuildBelow(d);
+    const vetted = this.dragFilter ? this.dragFilter(next) : next;
+    if (vetted) {
+      this.store.updateTransient(vetted);
+      this.rebuildBelow(d);
+    }
     if (d.pending) {
       const t = d.pending;
       d.pending = null;

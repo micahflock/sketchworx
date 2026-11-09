@@ -67,6 +67,12 @@ export interface CanvasTheme {
   fill: string;
   /** Tint of closed profiles in Sketch view. */
   profileTint: string;
+  /** Print view: behind the part, art outside the part, the part's edge, rule breaks, pinhole rings. */
+  printBackdrop: string;
+  printOutside: string;
+  printEdge: string;
+  printBreak: string;
+  printPinhole: string;
   boxWindow: string;
   boxWindowLine: string;
   boxCrossing: string;
@@ -132,6 +138,11 @@ export const lightTheme: CanvasTheme = {
   openEnd: "#e8600f",
   fill: "#141414",
   profileTint: "rgba(40,35,25,0.07)",
+  printBackdrop: "#d9d5cc",
+  printOutside: "#6b675f",
+  printEdge: "rgba(40,35,25,0.45)",
+  printBreak: "#e0201b",
+  printPinhole: "#e8600f",
   boxWindow: "rgba(232,96,15,0.10)",
   boxWindowLine: "#e8600f",
   boxCrossing: "rgba(40,35,25,0.06)",
@@ -190,6 +201,11 @@ export const darkTheme: CanvasTheme = {
   openEnd: "#f2b705",
   fill: "#141414",
   profileTint: "rgba(236,233,226,0.06)",
+  printBackdrop: "#2b2a28",
+  printOutside: "#9a958a",
+  printEdge: "rgba(236,233,226,0.45)",
+  printBreak: "#ff4a3d",
+  printPinhole: "#f2b705",
   boxWindow: "rgba(242,183,5,0.12)",
   boxWindowLine: "#f2b705",
   boxCrossing: "rgba(255,255,255,0.05)",
@@ -279,6 +295,11 @@ export function hellPalette(accent: HellAccent = "red"): CanvasTheme {
     openEnd: C,
     fill: "#141414",
     profileTint: rgba(C, 0.06),
+    printBackdrop: "#000000",
+    printOutside: DIM,
+    printEdge: edge,
+    printBreak: C,
+    printPinhole: C,
     boxWindow: rgba(C, 0.1),
     boxWindowLine: C,
     boxCrossing: rgba(C, 0.05),
