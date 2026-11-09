@@ -1,16 +1,20 @@
 import type { Vec2 } from "../geom/vec";
 import type { InferGlyph, SnapResult } from "../inference/snap";
 import type { Editor } from "../model/editor";
+import { relationIcons, type RelationIcon } from "../model/relations";
 import type { Id } from "../model/types";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
 
-/** Add the relations a snap implies for a newly created point. */
+/**
+ * Add the relations a snap implies for a newly created point. Drawing only adds coincident (on a point or
+ * a curve) here, and horizontal/vertical in applyHV. Other snaps (midpoint, tangent, perpendicular) place
+ * the geometry exactly but add no relation.
+ */
 export function applySnap(ed: Editor, pointId: Id, sn: SnapResult | undefined) {
   if (!sn) return;
   if (sn.point && sn.point !== pointId && ed.s.entities[sn.point]) ed.addRelation({ type: "coincident", refs: [pointId, sn.point] });
   else if (sn.curve && ed.s.entities[sn.curve]) ed.addRelation({ type: "coincident", refs: [pointId, sn.curve] });
-  else if (sn.midpointOf && ed.s.entities[sn.midpointOf]) ed.addRelation({ type: "midpoint", refs: [pointId, sn.midpointOf] });
 }
 
 /** Add H/V to a line created from a snap that inferred it. */
@@ -43,15 +47,16 @@ export function addArc(ed: Editor, c: Vec2, a: Vec2, b: Vec2, construction = fal
   return { arc, c: cp, s: sp, e: ep };
 }
 
-const glyphText: Record<InferGlyph, string> = {
-  coincident: "◉",
-  midpoint: "M",
-  on: "◌",
-  H: "—",
-  V: "|",
-  tangent: "◠",
-  perpendicular: "⊥",
-  grid: "#",
+/** Inference previews use the icon of the relation they will create. */
+const glyphIcon: Record<InferGlyph, RelationIcon> = {
+  coincident: relationIcons.coincident,
+  midpoint: relationIcons.midpoint,
+  on: relationIcons.coincident,
+  H: relationIcons.horizontal,
+  V: relationIcons.vertical,
+  tangent: relationIcons.tangent,
+  perpendicular: relationIcons.perpendicular,
+  grid: { stroke: "M3.5 1.5V8.5M6.5 1.5V8.5M1.5 3.5H8.5M1.5 6.5H8.5" },
 };
 
 /** Dotted inference lines and the yellow relation-preview glyphs near the cursor. */
@@ -63,7 +68,7 @@ export function drawSnap(p: Painter, sn: SnapResult | undefined, extra: InferGly
   if (sn.midpointOf) p.ring(sn.pos, 6, theme.hover, 2);
   const glyphs = [...sn.glyphs.filter((g) => g !== "grid"), ...extra];
   const s = p.s(sn.pos);
-  glyphs.forEach((g, i) => p.badge(glyphText[g], s.x + 18 + i * 18, s.y + 18, theme.inferGlyphBg, theme.inferGlyphFg, theme.inferGlyphBorder));
+  glyphs.forEach((g, i) => p.badge(glyphIcon[g], s.x + 18 + i * 18, s.y + 18, theme.inferGlyphBg, theme.inferGlyphFg, theme.inferGlyphBorder));
 }
 
 export function screenDist(a: Vec2, b: Vec2) {
@@ -71,3 +76,12 @@ export function screenDist(a: Vec2, b: Vec2) {
 }
 
 export const DRAG_THRESHOLD_PX = 5;
+
+/**
+ * Mouse clicks wobble: a press and release closer than this is a click, not a drag, and a clicked
+ * segment shorter than this is ignored (unless it ends on an existing point).
+ */
+export const MOUSE_SLOP_PX = 10;
+
+/** Movement that turns a press into a drag for this pointer. */
+export const dragThreshold = (pointerType?: string) => (pointerType === "mouse" ? MOUSE_SLOP_PX : DRAG_THRESHOLD_PX);

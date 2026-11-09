@@ -287,13 +287,32 @@ export function orientNested(loops: Loop[]): Loop[] {
   return loops;
 }
 
+/** Points that have a coincident relation to a curve (they sit on it, usually mid-span). */
+function curveJoints(s: Sketch): Vec2[] {
+  const out: Vec2[] = [];
+  for (const r of Object.values(s.relations ?? {})) {
+    if (r.type !== "coincident" || r.refs.length !== 2) continue;
+    const [a, b] = r.refs.map((id) => s.entities[id]);
+    if (!a || !b) continue;
+    const pt = a.type === "point" && b.type !== "point" ? a : b.type === "point" && a.type !== "point" ? b : null;
+    if (pt?.type === "point") out.push({ x: pt.x, y: pt.y });
+  }
+  return out;
+}
+
 /** Build closed loops; orient them so nested loops alternate direction (holes render with nonzero). */
 export function buildOutline(s: Sketch, diagnostics = true): Outline {
   const { segs, circles } = collect(s);
   const { bounds, tol } = sizeTol(segs, circles);
   const g = graphOf(segs, tol);
+  const joints = curveJoints(s);
   const openEnds: Vec2[] = [];
-  for (const [n, l] of g.adj) if (l.length % 2 === 1) openEnds.push(g.nodes[n]);
+  for (const [n, l] of g.adj) {
+    if (l.length % 2 === 0) continue;
+    const q = g.nodes[n];
+    // An end made coincident with another line or curve (a T-junction) is meant to stop there.
+    if (!joints.some((j) => dist(j, q) <= tol)) openEnds.push(q);
+  }
   const loops: Loop[] = [...circles];
   for (const path of findLoops(g)) loops.push({ segs: path, area: polyArea(loopPolygon({ segs: path, area: 0 })) });
   orientNested(loops);

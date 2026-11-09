@@ -22,6 +22,7 @@ import {
 } from "../src/model/art";
 import { applyCommand } from "../src/model/editor";
 import { createDoc } from "../src/model/sketch";
+import { addFeature } from "../src/model/features";
 import type { Doc } from "../src/model/types";
 import { addCircle, addLine } from "../src/tools/common";
 import { buildLoop } from "../src/tools/shapes";
@@ -368,5 +369,81 @@ describe("art export", () => {
     expect(svg).toContain('fill="#000000" fill-rule="nonzero"');
     // Construction stays out.
     expect(svg).not.toContain("M0 -20");
+  });
+});
+
+describe("round ends keep the drawn length", () => {
+  // A round cap reaches half the weight past the end of its path, so the path stops half the weight short.
+  const w = 10;
+  const lineDoc = () =>
+    setArtDefaults(
+      applyCommand(createDoc(), (ed) => {
+        addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 });
+      }),
+      { weight: w, roundEnds: true },
+    );
+  const strokeD = (doc: Doc) => (exportSvg(doc).match(/<path d="([^"]+)" fill="none" stroke="#000000" stroke-width="10"[^>]*stroke-linecap="round"/) ?? [])[1];
+
+  it("exports a centered line shortened by half the weight at each end", () => {
+    expect(strokeD(lineDoc())).toBe("M5 0L95 0");
+  });
+
+  it("shortens side strokes the same way", () => {
+    const d = lineDoc();
+    expect(strokeD(setChainStyle(d, docChains(d), { side: "left" }))).toBe("M5 -5L95 -5");
+    expect(strokeD(setChainStyle(d, docChains(d), { side: "right" }))).toBe("M5 5L95 5");
+  });
+
+  it("keeps square ends at full length", () => {
+    const d = setArtDefaults(lineDoc(), { roundEnds: false });
+    expect(exportSvg(d)).toContain('d="M0 0L100 0"');
+  });
+});
+
+describe("sketches layer in tree order", () => {
+  // Sketch1: a small red square. Sketch2 (below it in the tree): a big blue square over it.
+  const layered = () => {
+    let doc = applyCommand(createDoc(), (ed) => {
+      buildLoop(ed, square(40, 40, 20), false);
+    });
+    doc = addFeature(doc);
+    doc = applyCommand(doc, (ed) => {
+      buildLoop(ed, square(0, 0, 100), false);
+    });
+    const [s1, s2] = doc.features;
+    const chains = docChains(doc);
+    doc = setChainStyle(doc, chains.filter((c) => c.feature === s1.id), { fill: true, color: "#ff0000" });
+    doc = setChainStyle(doc, docChains(doc).filter((c) => c.feature === s2.id), { fill: true, color: "#0000ff" });
+    return { doc, s1, s2 };
+  };
+
+  it("paints the top sketch first and each later sketch over it", () => {
+    const { doc, s1, s2 } = layered();
+    const scene = buildArtScene(doc, 0.01);
+    expect(scene.layers.map((l) => l.feature)).toEqual([s1.id, s2.id]);
+    expect(scene.layers.map((l) => l.fills.map((f) => f.color))).toEqual([["#ff0000"], ["#0000ff"]]);
+  });
+
+  it("does not cut holes across sketches", () => {
+    const { doc } = layered();
+    for (const f of buildArtScene(doc, 0.01).fills) expect(f.loops).toHaveLength(1);
+  });
+
+  it("writes SVG in the same order: each sketch's fill, then its stroke", () => {
+    const { doc } = layered();
+    const svg = exportSvg(doc);
+    const red = svg.indexOf('fill="#ff0000"');
+    const redStroke = svg.indexOf('stroke="#ff0000" stroke-width');
+    const blue = svg.indexOf('fill="#0000ff"');
+    const blueStroke = svg.indexOf('stroke="#0000ff" stroke-width');
+    expect(red).toBeGreaterThan(0);
+    expect(red).toBeLessThan(redStroke);
+    expect(redStroke).toBeLessThan(blue);
+    expect(blue).toBeLessThan(blueStroke);
+  });
+
+  it("clicking where they overlap picks the sketch painted on top", () => {
+    const { doc, s2 } = layered();
+    expect(hitChain(buildArtScene(doc, 0.01), { x: 50, y: 50 }, 0.5)?.feature).toBe(s2.id);
   });
 });

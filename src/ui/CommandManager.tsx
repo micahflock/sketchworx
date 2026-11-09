@@ -4,6 +4,16 @@ import { Icon } from "./icons";
 import { searchCommands } from "./commandSearch";
 import type { Command } from "./commandSearch";
 import css from "./ui.module.css";
+import { isMac, keyFor, keyLegend } from "./shortcuts";
+import { nextTheme } from "../app/themePref";
+import { HELL_ACCENTS } from "../render/theme";
+import type { HellAccent, ThemeName } from "../render/theme";
+
+const themeToggleLabel: Record<ThemeName, string> = {
+  light: "Switch to light theme",
+  dark: "Switch to dark theme",
+  hell: "Switch to HELL MODE",
+};
 
 interface Btn {
   id: string;
@@ -114,6 +124,7 @@ const keywords: Record<string, string[]> = {
   themeDark: ["night", "appearance", "colors"],
   themeLight: ["day", "appearance", "colors"],
   themeSystem: ["auto", "appearance", "colors", "os"],
+  themeHell: ["666", "red", "appearance", "colors"],
   delete: ["remove", "erase"],
   shortcutBar: ["menu", "tools"],
 };
@@ -130,6 +141,8 @@ const extraCommands: Command[] = [
   { id: "themeLight", label: "Light Theme", action: "theme:light", icon: "sun", group: "Appearance" },
   { id: "themeDark", label: "Dark Theme", action: "theme:dark", icon: "moon", group: "Appearance" },
   { id: "themeSystem", label: "Match System Theme", action: "theme:system", icon: "sun", group: "Appearance" },
+  // Listed only once unlocked (see App.setDimensionText).
+  { id: "themeHell", label: "666 HELL MODE", action: "theme:hell", icon: "hell", group: "Appearance" },
 ];
 
 export function allCommands(): Command[] {
@@ -141,23 +154,7 @@ export function allCommands(): Command[] {
   return out;
 }
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const mod = isMac ? "⌘" : "Ctrl+";
-const fixedKeys: Record<string, string> = {
-  undo: `${mod}Z`,
-  redo: isMac ? "⇧⌘Z" : "Ctrl+Y",
-  save: `${mod}S`,
-  open: `${mod}O`,
-  delete: "Del",
-};
-
-/** The key that runs an action: the user's keymap first, then the fixed Ctrl shortcuts. */
-function keyFor(keymap: Record<string, string>, action: string): string | undefined {
-  const k = Object.keys(keymap).find((x) => keymap[x] === action);
-  return k ? k.toUpperCase() : fixedKeys[action];
-}
-
-function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boolean; onPick: () => void; caret?: () => void; keyHint?: string }) {
+function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boolean; onPick: () => void; caret?: (e: MouseEvent) => void; keyHint?: string }) {
   const app = useApp();
   const avail = !b.action.startsWith("tool:") || !!app.getTool(b.action.slice(5));
   return (
@@ -170,6 +167,11 @@ function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boo
         disabled={!avail}
         onClick={onPick}
       >
+        {keyHint && (
+          <span class={css.keyHint} aria-hidden="true">
+            {keyLegend(keyHint)}
+          </span>
+        )}
         <Icon name={b.icon} />
       </button>
       {caret && (
@@ -186,7 +188,36 @@ function ToolButton({ b, active, onPick, caret, keyHint }: { b: Btn; active: boo
 export function CommandManager() {
   const app = useApp();
   const ui = useUi();
-  const [open, setOpen] = useState<string | null>(null);
+  // The open flyout and where it sits (it is position: fixed so the scrolling toolbar can't clip it).
+  const [open, setOpen] = useState<{ id: string; top: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(null);
+    // A press anywhere but this flyout (or its button) closes it. Leaving it with the pointer does not.
+    const down = (e: PointerEvent) => {
+      const host = (e.target as Element | null)?.closest?.("[data-flyout]");
+      if (host?.getAttribute("data-flyout") !== open.id) close();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open?.id]);
+  const toggleFlyout = (id: string, e: MouseEvent) => {
+    if (open?.id === id) return setOpen(null);
+    // Below the button pair (the CSS margin adds the gap).
+    const r = ((e.currentTarget as HTMLElement).parentElement ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
+    setOpen({ id, top: r.bottom, left: r.left });
+  };
   const isActive = (b: Btn) =>
     (b.action.startsWith("tool:") && ui.toolId === b.action.slice(5)) ||
     (b.action === "view:" + ui.viewMode) ||
@@ -198,18 +229,23 @@ export function CommandManager() {
     (b.action === "combs" && ui.combs) ||
     (b.action === "convertEntities" && ui.toolId === "convert") ||
     (b.action === "exportSvg" && ui.panel === "export");
+  const next = nextTheme(ui.theme, ui.hellUnlocked);
   return (
     <div class={`${css.toolbar} ${ui.touchUi ? css.touchBar : ""}`}>
-      <div class={css.cmdmgr} onPointerLeave={() => setOpen(null)}>
+      <div class={css.cmdmgr}>
         {groups.map((g) => (
           <div class={css.group} key={g.title} role="group" aria-label={g.title}>
+            <span class={css.groupLegend} aria-hidden="true">
+              {g.title}
+            </span>
+            <div class={css.groupKeys}>
             {g.items.map((it) => {
               if ("flyout" in it) {
                 const lastId = app.flyoutLast[it.flyout] ?? it.items[0].id;
                 const cur = it.items.find((x) => x.id === lastId) ?? it.items[0];
                 const anyActive = it.items.some(isActive);
                 return (
-                  <div class={css.flyoutHost} key={it.flyout}>
+                  <div class={css.flyoutHost} key={it.flyout} data-flyout={it.flyout}>
                     <ToolButton
                       b={cur}
                       active={anyActive}
@@ -218,10 +254,10 @@ export function CommandManager() {
                         app.runAction(cur.action);
                         setOpen(null);
                       }}
-                      caret={() => setOpen(open === it.flyout ? null : it.flyout)}
+                      caret={(e) => toggleFlyout(it.flyout, e)}
                     />
-                    {open === it.flyout && (
-                      <div class={css.flyout}>
+                    {open?.id === it.flyout && (
+                      <div class={css.flyout} style={{ top: open.top, left: open.left }}>
                         {it.items.map((b) => (
                           <button
                             key={b.id}
@@ -244,20 +280,60 @@ export function CommandManager() {
               }
               return <ToolButton key={it.id} b={it} active={isActive(it)} keyHint={keyFor(app.keymap, it.action)} onPick={() => app.runAction(it.action)} />;
             })}
+            </div>
           </div>
         ))}
       </div>
       <div class={css.toolbarEnd}>
         <CommandBox />
-        <button
-          class={css.tbtn}
-          title={ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          aria-label={ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          onClick={() => app.runAction("toggleTheme")}
-        >
-          <Icon name={ui.theme === "dark" ? "sun" : "moon"} />
+        {ui.theme === "hell" && <HellPalette />}
+        <button class={css.tbtn} title={themeToggleLabel[next]} aria-label={themeToggleLabel[next]} onClick={() => app.runAction("toggleTheme")}>
+          <Icon name={next === "light" ? "sun" : next === "dark" ? "moon" : "hell"} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/** HELL MODE color picker: a swatch of the current color that opens the eight choices. */
+function HellPalette() {
+  const app = useApp();
+  const ui = useUi();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", close, true);
+    return () => window.removeEventListener("pointerdown", close, true);
+  }, [open]);
+  return (
+    <div class={css.flyoutHost} ref={ref}>
+      <button class={css.tbtn} title="HELL MODE color" aria-label="HELL MODE color" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span class={css.swatch} style={{ background: HELL_ACCENTS[ui.hellAccent] }} />
+      </button>
+      {open && (
+        <div class={css.palette} role="listbox" aria-label="HELL MODE color">
+          {(Object.keys(HELL_ACCENTS) as HellAccent[]).map((k) => (
+            <button
+              key={k}
+              role="option"
+              aria-selected={k === ui.hellAccent}
+              title={k}
+              aria-label={k}
+              class={`${css.paletteItem} ${k === ui.hellAccent ? css.active : ""}`}
+              onClick={() => {
+                app.setHellAccent(k);
+                setOpen(false);
+              }}
+            >
+              <span class={css.swatch} style={{ background: HELL_ACCENTS[k] }} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -272,7 +348,9 @@ function CommandBox() {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const cmds = useMemo(allCommands, []);
-  const results = open ? searchCommands(cmds, q).filter((c) => !c.action.startsWith("tool:") || !!app.getTool(c.action.slice(5))) : [];
+  const results = open
+    ? searchCommands(cmds, q).filter((c) => (!c.action.startsWith("tool:") || !!app.getTool(c.action.slice(5))) && (c.action !== "theme:hell" || ui.hellUnlocked))
+    : [];
   const sel = Math.min(hi, Math.max(results.length - 1, 0));
 
   useEffect(() => {

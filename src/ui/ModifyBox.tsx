@@ -98,7 +98,7 @@ export function ConfirmDialog() {
   if (!c) return null;
   return (
     <div style={{ position: "absolute", inset: "0px", background: "var(--sw-scrim)", zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "var(--sw-surface)", color: "var(--sw-text)", borderRadius: "8px", boxShadow: "0 10px 30px var(--sw-shadow)", padding: "16px", maxWidth: "380px", border: "1px solid var(--sw-border-strong)" }}>
+      <div style={{ background: "var(--sw-surface)", color: "var(--sw-text)", borderRadius: "var(--sw-radius)", padding: "16px", maxWidth: "380px", border: "1px solid var(--sw-border-strong)" }}>
         <div style={{ fontWeight: 600, marginBottom: "8px" }}>{c.title}</div>
         <div style={{ marginBottom: "14px", color: "var(--sw-text-2)" }}>{c.message}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>

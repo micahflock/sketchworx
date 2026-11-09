@@ -1,10 +1,14 @@
 import type { Vec2 } from "../geom/vec";
+import type { RelationIcon } from "../model/relations";
+import { theme } from "./theme";
 import type { View } from "./view";
 
 export interface StrokeStyle {
   color: string;
   width?: number;
   dash?: number[];
+  /** Draw as a zigzag along the path (HELL MODE over defined). */
+  jagged?: boolean;
 }
 
 /** Thin wrapper over Canvas 2D that takes sketch coordinates. */
@@ -83,6 +87,48 @@ export class Painter {
     this.stroke(st);
   }
 
+  /** A polyline (sketch coordinates) drawn as a small even zigzag in screen space. */
+  zigzag(pts: Vec2[], st: StrokeStyle, step = 4, amp = 2) {
+    if (pts.length < 2) return;
+    const P = pts.map((q) => this.s(q));
+    const c = this.ctx;
+    c.beginPath();
+    c.moveTo(P[0].x, P[0].y);
+    let side = 1;
+    let carry = 0; // distance walked since the last zig
+    for (let i = 1; i < P.length; i++) {
+      const a = P[i - 1];
+      const b = P[i];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1e-9) continue;
+      const ux = (b.x - a.x) / len;
+      const uy = (b.y - a.y) / len;
+      let t = step - carry;
+      for (; t < len; t += step) {
+        c.lineTo(a.x + ux * t - uy * amp * side, a.y + uy * t + ux * amp * side);
+        side = -side;
+      }
+      carry = len - (t - step);
+    }
+    c.lineTo(P[P.length - 1].x, P[P.length - 1].y);
+    this.stroke({ ...st, dash: undefined });
+  }
+
+  /** ✕ mark at a screen position. */
+  crossScreen(x: number, y: number, size: number, color: string, width = 2) {
+    const c = this.ctx;
+    const h = size / 2;
+    c.beginPath();
+    c.moveTo(x - h, y - h);
+    c.lineTo(x + h, y + h);
+    c.moveTo(x + h, y - h);
+    c.lineTo(x - h, y + h);
+    c.strokeStyle = color;
+    c.lineWidth = width;
+    c.setLineDash([]);
+    c.stroke();
+  }
+
   dot(p: Vec2, radiusPx: number, color: string) {
     const P = this.s(p);
     const c = this.ctx;
@@ -113,14 +159,13 @@ export class Painter {
     c.fillText(text, x, y);
   }
 
-  /** Rounded glyph badge at a screen position; returns its rect. */
-  badge(text: string, x: number, y: number, bg: string, fg: string, border?: string) {
+  /** A square tag centered at (x, y) with a relation icon (10×10 box, see RelationIcon); returns its rect. */
+  badge(icon: RelationIcon, x: number, y: number, bg: string, fg: string, border?: string) {
     const c = this.ctx;
-    c.font = "bold 10px system-ui, sans-serif";
-    const w = Math.max(14, c.measureText(text).width + 6);
+    const w = 14;
     const h = 14;
     c.beginPath();
-    c.roundRect(x - w / 2, y - h / 2, w, h, 3);
+    c.roundRect(x - w / 2, y - h / 2, w, h, theme.glyphRadius);
     c.fillStyle = bg;
     c.fill();
     if (border) {
@@ -129,10 +174,19 @@ export class Painter {
       c.setLineDash([]);
       c.stroke();
     }
-    c.fillStyle = fg;
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillText(text, x, y + 0.5);
+    c.save();
+    c.translate(x - 5, y - 5);
+    c.strokeStyle = fg;
+    c.lineWidth = 1.1;
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    c.setLineDash([]);
+    c.stroke(new Path2D(icon.stroke));
+    if (icon.fill) {
+      c.fillStyle = fg;
+      c.fill(new Path2D(icon.fill));
+    }
+    c.restore();
     return { x: x - w / 2, y: y - h / 2, w, h };
   }
 }

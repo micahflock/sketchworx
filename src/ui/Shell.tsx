@@ -5,6 +5,7 @@ import { PropertyManager, toolTitle } from "./PropertyManager";
 import { FeatureTree } from "./FeatureTree";
 import { StatusBar } from "./StatusBar";
 import { Overlays } from "./Overlays";
+import { ContextBar } from "./ContextBar";
 import css from "./ui.module.css";
 
 export function Shell() {
@@ -49,22 +50,25 @@ function TouchKeys() {
   const selecting = ui.toolId === "select";
   const drawTool = app.drawToolId();
   return (
-    <div class={css.touchKeys}>
-      <div class={css.fingerMode} title="What one finger does. Two fingers always pan and zoom">
-        <button class={selecting ? css.active : ""} onClick={() => app.setFingerMode("select")}>
-          Select
+    <div class={css.touchDock}>
+      <ContextBar docked />
+      <div class={css.touchKeys}>
+        <div class={css.fingerMode} title="What one finger does. Two fingers always pan and zoom">
+          <button class={selecting ? css.active : ""} onClick={() => app.setFingerMode("select")}>
+            Select
+          </button>
+          <button class={selecting ? "" : css.active} title={toolTitle(drawTool)} onClick={() => app.setFingerMode("draw")}>
+            Draw
+          </button>
+        </div>
+        <button onClick={() => app.escape()}>Esc</button>
+        <button class={ui.touchCtrl ? css.active : ""} onClick={() => app.store.set({ touchCtrl: !ui.touchCtrl })}>
+          Ctrl
         </button>
-        <button class={selecting ? "" : css.active} onClick={() => app.setFingerMode("draw")}>
-          {toolTitle(drawTool)}
-        </button>
+        <button onClick={() => app.undo()}>Undo</button>
+        <button onClick={() => app.redo()}>Redo</button>
+        <button onClick={() => app.deleteSelection()}>Delete</button>
       </div>
-      <button onClick={() => app.escape()}>Esc</button>
-      <button class={ui.touchCtrl ? css.active : ""} onClick={() => app.store.set({ touchCtrl: !ui.touchCtrl })}>
-        Ctrl
-      </button>
-      <button onClick={() => app.undo()}>Undo</button>
-      <button onClick={() => app.redo()}>Redo</button>
-      <button onClick={() => app.deleteSelection()}>Delete</button>
     </div>
   );
 }

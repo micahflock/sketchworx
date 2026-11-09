@@ -117,25 +117,30 @@ function viewBoxOf(box: Box, pad = 0.02) {
   return { x: box.minX - m, y: -box.maxY - m, w: box.maxX - box.minX + 2 * m, h: box.maxY - box.minY + 2 * m };
 }
 
-/** Art view as SVG elements: a filled path per filled profile (holes cut out), then one path per chain. */
+/**
+ * Art view as SVG elements, sketch by sketch in tree order (later sketches paint over earlier ones):
+ * a filled path per filled profile (holes cut out), then one path per chain.
+ */
 function artElements(doc: Doc, arcs: "arc" | "cubic"): { paths: string[]; box: Box } {
   const box0 = artScene(doc, 1).bounds;
   const size = boxValid(box0) ? Math.max(box0.maxX - box0.minX, box0.maxY - box0.minY) : 100;
   const scene = artScene(doc, size * 2e-4);
   const paths: string[] = [];
   const styleOf = new Map(scene.strokes.map((s) => [s.chain.key, s.style]));
-  for (const f of scene.fills) {
-    // Under an outside stroke, a hairline in the fill color closes the anti-aliasing seam at the edge.
-    const st = styleOf.get(f.chain.key);
-    const seam = st && st.side === "right" && st.weight > 0 ? ` stroke="${f.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"` : "";
-    paths.push(`  <path d="${loopsToPathData(f.loops, arcs)}" fill="${f.color}" fill-rule="nonzero"${seam}/>`);
-  }
-  for (const s of scene.strokes) {
-    if (s.style.weight <= 0) continue;
-    const d = s.segs ? segsToPathData(s.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
-    const ends = s.cap === "round" ? ' stroke-linecap="round"' : "";
-    const join = s.join === "round" ? ' stroke-linejoin="round"' : ` stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"`;
-    paths.push(`  <path d="${d}" fill="none" stroke="${s.style.color}" stroke-width="${n(s.style.weight)}"${join}${ends}/>`);
+  for (const layer of scene.layers) {
+    for (const f of layer.fills) {
+      // Under an outside stroke, a hairline in the fill color closes the anti-aliasing seam at the edge.
+      const st = styleOf.get(f.chain.key);
+      const seam = st && st.side === "right" && st.weight > 0 ? ` stroke="${f.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"` : "";
+      paths.push(`  <path d="${loopsToPathData(f.loops, arcs)}" fill="${f.color}" fill-rule="nonzero"${seam}/>`);
+    }
+    for (const s of layer.strokes) {
+      if (s.style.weight <= 0) continue;
+      const d = s.segs ? segsToPathData(s.segs, s.chain.closed, arcs) : polylineData(s.path, s.chain.closed);
+      const ends = s.cap === "round" ? ' stroke-linecap="round"' : "";
+      const join = s.join === "round" ? ' stroke-linejoin="round"' : ` stroke-linejoin="miter" stroke-miterlimit="${MITER_LIMIT}"`;
+      paths.push(`  <path d="${d}" fill="none" stroke="${s.style.color}" stroke-width="${n(s.style.weight)}"${join}${ends}/>`);
+    }
   }
   return { paths, box: scene.bounds };
 }

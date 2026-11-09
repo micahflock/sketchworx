@@ -2,6 +2,7 @@ import { render } from "preact";
 import { App } from "./app/app";
 import { AppContext } from "./ui/hooks";
 import { Shell } from "./ui/Shell";
+import "./ui/fonts.css";
 import "./ui/global.css";
 import { ovalSample, slotSample } from "./io/samples";
 

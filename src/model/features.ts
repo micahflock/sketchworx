@@ -2,6 +2,7 @@
  * Feature tree: an ordered list of sketches. A sketch may reference (relate and dimension to)
  * geometry of the sketches above it, which is locked while it solves. Pure functions over a Doc.
  */
+import { applyCommand } from "./editor";
 import { createSketch, featureIndex, ORIGIN } from "./sketch";
 import type { Doc, Id, Sketch, SketchFeature } from "./types";
 
@@ -88,27 +89,96 @@ export function setVisible(doc: Doc, id: Id, visible: boolean): Doc {
   return patchFeature(doc, id, { visible });
 }
 
-/** Delete a sketch. Refused (with the reason) while later sketches reference it, or for the last sketch. */
-export function deleteFeature(doc: Doc, id: Id): Doc | string {
+/** Sketches that use `id`'s geometry, each with what it would lose if `id` were deleted. */
+export function deleteConflict(doc: Doc, id: Id): { feature: SketchFeature; refs: CrossRefs }[] {
+  const target = doc.features.find((f) => f.id === id);
+  if (!target) return [];
+  return doc.features
+    .filter((f) => f.id !== id)
+    .map((f) => ({ feature: f, refs: crossRefs(f.sketch, target.sketch) }))
+    .filter((x) => crossRefCount(x.refs) > 0);
+}
+
+/**
+ * Delete a sketch. Refused for the last sketch, and (with the reason) while other sketches reference
+ * it unless `removeRefs` is set: then their references to it are removed first, in the same step.
+ */
+export function deleteFeature(doc: Doc, id: Id, removeRefs = false): Doc | string {
   const i = doc.features.findIndex((f) => f.id === id);
   if (i < 0) return doc;
   if (doc.features.length === 1) return "A document needs at least one sketch";
-  const deps = dependents(doc, id);
-  if (deps.length) return `${doc.features[i].name} is referenced by ${deps.map((f) => f.name).join(", ")}. Delete those references first`;
-  const features = doc.features.filter((f) => f.id !== id);
-  const active = doc.active === id ? features[Math.max(0, i - 1)].id : doc.active;
-  return { ...doc, features, active };
+  const deps = deleteConflict(doc, id);
+  if (deps.length && !removeRefs) return `${doc.features[i].name} is referenced by ${deps.map((d) => d.feature.name).join(", ")}. Delete those references first`;
+  let next = doc;
+  for (const d of deps) next = removeCrossRefs(next, d.feature.id, d.refs);
+  const features = next.features.filter((f) => f.id !== id);
+  const active = next.active === id ? features[Math.max(0, i - 1)].id : next.active;
+  return { ...next, features, active };
 }
 
-/** Move a sketch one place up or down. Refused when it would put a sketch above geometry it references. */
-export function moveFeature(doc: Doc, id: Id, dir: -1 | 1): Doc | string {
+/** What `lower` uses of `upper`'s geometry: relations and dimensions, and offsets linked to it. */
+export interface CrossRefs {
+  relations: Id[];
+  dimensions: Id[];
+  offsets: Id[];
+}
+
+export function crossRefs(lower: Sketch, upper: Sketch): CrossRefs {
+  const theirs = (x: Id) => x !== ORIGIN && !!upper.entities[x] && !lower.entities[x];
+  return {
+    relations: Object.values(lower.relations).filter((r) => r.refs.some(theirs)).map((r) => r.id),
+    dimensions: Object.values(lower.dimensions)
+      .filter((d) => d.refs.some(theirs) || (d.align ?? []).some((p) => p.some(theirs)))
+      .map((d) => d.id),
+    offsets: Object.values(lower.entities)
+      .filter((e) => e.type === "spline" && !!e.derived && theirs(e.derived.source))
+      .map((e) => e.id),
+  };
+}
+
+export const crossRefCount = (c: CrossRefs) => c.relations.length + c.dimensions.length + c.offsets.length;
+
+/** Delete a sketch's relations and dimensions listed in `refs` and unlink its offsets (they keep their shape). */
+function removeCrossRefs(doc: Doc, featureId: Id, refs: CrossRefs): Doc {
+  return applyCommand(
+    doc,
+    (ed) => {
+      for (const r of refs.relations) ed.deleteRelation(r);
+      for (const d of refs.dimensions) ed.deleteDimension(d);
+      for (const o of refs.offsets) {
+        const e = ed.s.entities[o];
+        if (e?.type !== "spline") continue;
+        const { derived: _, ...free } = e;
+        ed.put(free);
+      }
+    },
+    featureId,
+  );
+}
+
+/** The two sketches a move would swap, and what the lower one would lose by ending up on top. */
+export function moveConflict(doc: Doc, id: Id, dir: -1 | 1): { upper: SketchFeature; lower: SketchFeature; refs: CrossRefs } | null {
+  const i = doc.features.findIndex((f) => f.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= doc.features.length) return null;
+  const [upper, lower] = dir < 0 ? [doc.features[j], doc.features[i]] : [doc.features[i], doc.features[j]];
+  const refs = crossRefs(lower.sketch, upper.sketch);
+  return crossRefCount(refs) ? { upper, lower, refs } : null;
+}
+
+/**
+ * Move a sketch one place up or down. A sketch may only reference sketches above it, so a move that
+ * would put it above geometry it uses is refused (with the reason), unless `removeRefs` is set: then
+ * those relations and dimensions are deleted and linked offsets become free curves, in the same step.
+ */
+export function moveFeature(doc: Doc, id: Id, dir: -1 | 1, removeRefs = false): Doc | string {
   const i = doc.features.findIndex((f) => f.id === id);
   const j = i + dir;
   if (i < 0 || j < 0 || j >= doc.features.length) return doc;
-  const [upper, lower] = dir < 0 ? [doc.features[j], doc.features[i]] : [doc.features[i], doc.features[j]];
-  if (dependents(doc, upper.id).some((f) => f.id === lower.id))
-    return `${lower.name} references ${upper.name}, so it has to stay below it`;
-  const features = [...doc.features];
+  const conflict = moveConflict(doc, id, dir);
+  if (conflict && !removeRefs) return `${conflict.lower.name} references ${conflict.upper.name}, so it has to stay below it`;
+  const next = conflict ? removeCrossRefs(doc, conflict.lower.id, conflict.refs) : doc;
+  const features = [...next.features];
   [features[i], features[j]] = [features[j], features[i]];
-  return { ...doc, features };
+  return { ...next, features };
 }

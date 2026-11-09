@@ -2,6 +2,157 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Toolbar icons: redrawn from a CAD survey ✅
+
+- 19 icons in `src/ui/icons.tsx` redrawn after comparing each command with SolidWorks, Fusion, Creo, NX and
+  Onshape. They keep the house style (24 grid, 1.6 stroke, round caps, monochrome) and borrow the structure:
+  - Draw tools mark the clicked points with filled dots, as Line already did: Corner, Center, 3 Point and
+    3 Point Center rectangles, Circle (center and rim), Centerpoint Arc (center and ends), 3 Point Arc and
+    Tangent Arc (a line with an arc leaving it).
+  - Centerline is a vertical dash-dot line; Construction is a solid line beside its dashed twin.
+  - Trim is scissors, Fillet is an arc between two lines, Global Variables is Σ, New Sketch is a dashed frame
+    with a plus, Add Relation is an equal sign with a plus, and Extend's dashes are spaced to read as dashes.
+  - Convert and Offset show the source dashed and the result solid (a projected square, an offset corner).
+  - The check (OK / Finish) is a little heavier.
+- HELL MODE draws dashed toolbar strokes with flat caps, so its square caps no longer close the gaps.
+
+## Relation tags: line icons for every relation ✅
+
+- 11 of the 15 tag glyphs (◉ ∥ ⊥ ≡ ◠ ◎ ⊚ ⫼ κ ⊡ and the old ⚓) weren't in the bundled IBM Plex Mono subset, so
+  each system drew them with its own fallback font. Every relation tag now draws a monochrome line icon from
+  `relationIcons` in `src/model/relations.ts`: a stroked path plus an optional filled path (dots), in a 10×10
+  box, on the canvas (`Painter.badge`) and in the panels (`Glyph`). The text glyphs are gone.
+- Shapes follow a survey of SolidWorks, Fusion, Creo, NX, Onshape and Shapr3D: coincident is a line ending on a
+  line at a dot, collinear two segments on one diagonal, parallel two strokes slanted up-right, perpendicular ⊥
+  with a right-angle box, tangent a line touching a circle, concentric two rings, coradial one dashed ring,
+  midpoint dashes either side of a dot, symmetric brackets around a dashed centerline, equal curvature two curves
+  joining at a dot. Horizontal, vertical, equal, the Fix anchor and the On Edge square keep their shapes.
+- The yellow inference previews while sketching use the icon of the relation they will create.
+## Context bar docked on phones ✅
+
+- On a phone-width screen (≤ 600 px) with the touch keys showing, the relations context bar always opens in
+  the same place, just above the Select/Draw keys (stacked with them in `.touchDock`), and wraps instead of
+  running off the screen. Elsewhere it still floats by the cursor, now flipped to the other side when it
+  would leave the canvas.
+
+## Drawing adds only coincident, horizontal and vertical ✅
+
+- Snapping is unchanged (midpoint, tangent and perpendicular still place the point or direction exactly and
+  show their tag while drawing), but drawing no longer adds midpoint, tangent or perpendicular relations
+  for those snaps. Inferred relations are now only coincident (point on point, point on curve) and
+  horizontal/vertical.
+- Relations that define a tool's shape stay: rectangle sides (H/V, parallel, perpendicular, center
+  diagonals), the tangent of Tangent Arc and the line chain's tangent-arc mode, the midpoint of Midpoint
+  Line. Editing tools (trim, fillet, mirror, offset, ...) are unchanged.
+
+## Fix relation tag: line anchor instead of the ⚓ emoji ✅
+
+- ⚓ has emoji presentation, so iOS and others drew it as a color picture. The Fix tag now draws a stroked
+  anchor in the tag's text color (`relationIcons` in `src/model/relations.ts`), on the canvas
+  (`Painter.badge` icon argument) and in the panels (inline SVG), like the text glyphs of the other tags.
+- Conflicting relation tags in the panels use `--sw-glyph-bad-fg` (as the canvas does), so the glyph is no
+  longer red on red in HELL MODE.
+
+## Pencil + fingers, Draw key, HELL MODE touch keys ✅
+
+- **Pencil + fingers** (tap the ✎ Pencil flag): the pencil only draws and one finger only selects. A pencil
+  press while Select is on switches back to the last drawing tool; a finger tap, drag or long-press while a
+  drawing tool is on switches to Select. Two fingers still pan and zoom. (Pencil only, the default once a
+  pen is seen, is unchanged: the pencil does both, following the Select/Draw key.)
+- The touch key beside Select reads **Draw** instead of the drawing tool's name (the name is its tooltip).
+- HELL MODE: the "on" touch key (Select or Draw, latched Ctrl) is inverted, since the theme has no fill
+  for active state.
+
+## Apple Pencil, drag-to-draw on touch, HELL MODE colors ✅
+
+- **Pencil and palm rejection:** pen input (Apple Pencil reports `pointerType: "pen"`) was handled like a
+  mouse, but a resting palm was still read as touch: one contact drove the tool, two panned. Now the first
+  pen press turns on "pencil only": a single finger does nothing on the canvas, two fingers still pan,
+  pinch-zoom and tap-undo. While the pen is down, within 0.5 s of it lifting or hovering, or for a broad
+  contact patch, touches are ignored as the palm until they lift. A pen press also drops any palm touch that
+  had already started a pinch. The status bar shows **✎ Pencil** next to the version once a pen is seen;
+  tapping it lets fingers draw and select too ("✎ Pencil + fingers").
+- **Touch/pen drawing is drag only:** in the Line tool each press-drag-lift draws one segment. A drag that
+  starts within 34 px (22 px for the pen) of the chain's last end point continues the chain (coincident
+  joint, tangent/perpendicular inference from the previous segment); a drag anywhere else starts a new line.
+  A tap draws nothing and ends the chain. Between strokes the end point shows its enlarged target ring and
+  there is no rubber band. Circles, rectangles and arcs also ignore a tap as a first point (drag places the
+  first two points; three-point shapes take the third by tap). The mouse keeps click-click chains.
+- **HELL MODE colors:** a swatch button beside the theme toggle (only in HELL MODE) opens eight accents: red,
+  green, pink, orange, yellow, blue, purple, white. The canvas palette is built from the accent
+  (`hellPalette` in `src/render/theme.ts`); the interface reads `--hell*` variables that the app sets on
+  `<html>`. The choice is saved in `sketchworx.hellAccent`.
+
+## Reskin: Test bench, Sequencer and HELL MODE ✅
+
+Interface and canvas restyled; layout, behavior and the solver are unchanged.
+
+- **Light (Test bench):** warm gray instrument panel, hairline rules instead of cards, IBM Plex Sans/Mono,
+  2 px corners, no shadows, Braun orange `#E8600F` as the only interaction color. Canvas `#F4F2ED` with a
+  graticule (minor lines every grid step, major every fifth).
+- **Dark (Sequencer):** `#141414` chrome, Archivo + JetBrains Mono, square corners, bordered toolbar keys,
+  amber `#F2B705` accent and amber parameter values. Canvas `#0C0C0C` with a dot grid; fully defined is bone
+  white.
+- **Color meaning:** blue, ink and red belong to constraint state. Hover, active, selection and focus in the
+  chrome use the accent (also native checkboxes and text selection); the selected entity on the canvas is
+  the accent instead of cyan. Only state indicators (DOF readout, sketch state icon, conflict tags) carry
+  the geometry colors. Input errors use a deep accent, not red. The origin arrows are muted ink.
+- **Toolbar:** group titles as small legends; each button shows its current shortcut in a corner, read from
+  the keymap (`keyFor` in `src/ui/shortcuts.ts`), so rebinding updates it. Ctrl is printed as `^`.
+- **Status bar:** DOF readout, label plus a boxed tabular count (DOF, or conflicts when over defined).
+- **Relation tags:** square monochrome tags on the canvas and in the panels.
+- **HELL MODE (hidden):** set any dimension to **666** (a number or an expression that evaluates to it). The
+  first time unlocks it (saved in `sketchworx.hell`) and switches to it. After that the theme button cycles
+  light → dark → HELL MODE, and the command box lists "666 HELL MODE". Everything is `#000` and `#FF1F1F`,
+  so state is shown by line shape: under defined dashed with hollow points, fully defined solid, over defined
+  zigzag with ✕ points and ✕ marks beside conflicting relations and dimensions; the readout is dashed,
+  filled or blinking (struck through with reduced motion). Bare heavy glyphs, no legends or shortcut keys,
+  bracket bars on the active tool, inverted selected sketch row, Silkscreen labels.
+- Fonts are self-hosted (`@fontsource`, Latin subsets only, `src/ui/fonts.css`) so the offline service
+  worker caches them. Tokens: `src/ui/global.css`; canvas palettes and per-state line shapes
+  (`stateStyle`): `src/render/theme.ts`.
+
+## Art view: sketches layer in tree order ✅
+
+Art view, PNG and SVG paint sketch by sketch in tree order: the top sketch first, and each sketch below it
+over the ones above (its fills, then its strokes). Before, every fill was painted first and every stroke on
+top, so an earlier sketch's lines showed through a later sketch's fill. Filled profiles now cut holes only
+within their own sketch; a later sketch's shape covers an earlier fill instead of punching through it.
+Clicking where filled profiles of different sketches overlap picks the one on top (the later sketch).
+`ArtScene.layers` in `src/model/art.ts`; tests in `tests/art.test.ts`.
+
+## Version label ✅
+
+The right end of the status bar shows `v<package version> · <short commit>` (phones: the commit only); the
+tooltip adds the build date. The values are set at build time in `vite.config.ts` (`__APP_VERSION__`,
+`__APP_COMMIT__`, `__APP_BUILT__`); the commit comes from git, else `GITHUB_SHA`, and the dev server shows
+"dev". Comparing the commit with the latest one on `main` tells whether the browser is still running an
+older cached copy of the offline app.
+
+## Reordering and deleting sketches that reference each other ✅
+
+A sketch may only reference sketches above it. Moving one above geometry it uses no longer refuses: the move
+button opens a confirmation right under it ("Sketch2 uses Sketch1. Moving Sketch2 up removes 1 relation and
+1 dimension in Sketch2.") with **Remove and move** and **Cancel** (Esc also cancels; any document change
+closes it). Confirming deletes the relations and dimensions that use the other sketch and unlinks offsets
+that follow it (they stay where they are as free curves), then moves, as one undo step. Nothing is left
+dangling. Moves that break nothing happen at once, as before. Model: `crossRefs`, `moveConflict` and
+`moveFeature(doc, id, dir, removeRefs)` in `src/model/features.ts`.
+
+Deleting a sketch that others use works the same way: the ✕ button opens the confirmation under it ("Sketch2
+and Sketch3 use Sketch1. Deleting Sketch1 removes 1 relation in Sketch2, and 1 relation and 1 dimension in
+Sketch3."), and **Remove and delete** removes only the references to that sketch (a sketch using two others
+keeps its ties to the one that stays), then deletes it, as one undo step. Model: `deleteConflict` and
+`deleteFeature(doc, id, removeRefs)`. The last sketch still cannot be deleted.
+
+Round line ends in Art view were checked again: every case (centered and side strokes, rounded corners, arcs)
+stops the path half the weight short of each end, so the round cap ends exactly at the sketch endpoint in Art
+view and in SVG. Only a line shorter than its weight cannot be shortened enough. Regression tests in
+`tests/art.test.ts`.
+
+Tests: `tests/features.test.ts` (conflict detection, remove-and-move up and down, remove-and-delete with a
+sketch that uses two others, the shared origin is kept, offsets unlinked, plain moves).
+
 ## Toolbar, command search and theme plumbing ✅
 
 The interface keeps the SolidWorks color meanings (blue under defined, black fully defined, red over defined)

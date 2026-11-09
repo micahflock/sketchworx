@@ -22,7 +22,7 @@ export const icons: Record<string, () => JSX.Element> = {
   ),
   centerline: () => (
     <S>
-      <path d="M4 19L20 5" stroke-dasharray="5 2 1 2" />
+      <path d="M12 3v18" stroke-dasharray="5 2.5 0.5 2.5" />
     </S>
   ),
   midline: () => (
@@ -34,23 +34,32 @@ export const icons: Record<string, () => JSX.Element> = {
   rect: () => (
     <S>
       <rect x="4" y="6" width="16" height="12" />
+      {dot(4, 18)}
+      {dot(20, 6)}
     </S>
   ),
   rectCenter: () => (
     <S>
       <rect x="4" y="6" width="16" height="12" />
-      <path d="M4 6l16 12M20 6L4 18" stroke-dasharray="2 2" stroke-width="1" />
+      {dot(12, 12)}
+      {dot(20, 6)}
     </S>
   ),
   rect3: () => (
     <S>
       <path d="M3 14l7-9 11 7-7 9z" />
+      {dot(3, 14)}
+      {dot(10, 5)}
+      {dot(21, 12)}
     </S>
   ),
   rect3Center: () => (
     <S>
       <path d="M3 14l7-9 11 7-7 9z" />
-      {dot(12, 12)}
+      {dot(12, 13)}
+      {dot(3, 14)}
+      {dot(10, 5)}
+      {dot(21, 12)}
     </S>
   ),
   parallelogram: () => (
@@ -61,7 +70,8 @@ export const icons: Record<string, () => JSX.Element> = {
   circle: () => (
     <S>
       <circle cx="12" cy="12" r="8" />
-      <path d="M10.5 12h3M12 10.5v3" />
+      {dot(12, 12)}
+      {dot(17.66, 6.34)}
     </S>
   ),
   circle3: () => (
@@ -74,21 +84,25 @@ export const icons: Record<string, () => JSX.Element> = {
   ),
   arc: () => (
     <S>
-      <path d="M5 17A9 9 0 0 1 19 9" />
-      <path d="M11 17h1M11.5 16.5v1" />
+      <path d="M18 18A12 12 0 0 0 6 6" />
+      {dot(6, 18)}
+      {dot(18, 18)}
+      {dot(6, 6)}
     </S>
   ),
   arc3: () => (
     <S>
-      <path d="M4 18A10 10 0 0 1 20 18" />
-      {dot(4, 18)}
-      {dot(20, 18)}
-      {dot(12, 8)}
+      <path d="M18 20A14 14 0 0 0 4 6" />
+      {dot(18, 20)}
+      {dot(13.9, 10.1)}
+      {dot(4, 6)}
     </S>
   ),
   tangentArc: () => (
     <S>
-      <path d="M3 17h8a6 6 0 0 0 6-6V5" />
+      <path d="M3 8h7a9 9 0 0 1 9 9" />
+      {dot(10, 8)}
+      {dot(19, 17)}
     </S>
   ),
   spline: () => (
@@ -118,44 +132,46 @@ export const icons: Record<string, () => JSX.Element> = {
   ),
   addRelation: () => (
     <S>
-      <path d="M4 8h12M4 16h12" />
-      <path d="M19 5v6M16 8h6" />
+      <path d="M3 11h12M3 16h12" />
+      <path d="M19 3v6M16 6h6" />
     </S>
   ),
   variables: () => (
     <S>
-      <path d="M4 7h4M6 5v4M4 17h4M14 6l6 12M20 6l-6 12" />
+      <path d="M17.5 5H6.5l5.5 7-5.5 7h11" />
     </S>
   ),
   trim: () => (
     <S>
-      <path d="M4 12h6M14 12h6M12 4v16" />
-      <path d="M8 6l8 12" stroke-dasharray="2 2" />
+      <circle cx="6.5" cy="6.5" r="2.7" />
+      <circle cx="6.5" cy="17.5" r="2.7" />
+      <path d="M8.7 8.2L20 18M8.7 15.8L20 6" />
     </S>
   ),
   extend: () => (
     <S>
-      <path d="M4 12h8" />
-      <path d="M12 12h6" stroke-dasharray="2 2" />
-      <path d="M19 4v16" />
+      <path d="M3 12h6" />
+      <path d="M12 12h1.2M16 12h1.2" />
+      <path d="M20 4v16" />
     </S>
   ),
   fillet: () => (
     <S>
-      <path d="M5 4v8a7 7 0 0 0 7 7h8" />
+      <path d="M3 5h7.5" />
+      <path d="M12.5 5a7 7 0 0 1 7 7" />
+      <path d="M19.5 14v7" />
     </S>
   ),
   convert: () => (
     <S>
-      <path d="M4 17c3-7 9-9 16-9" stroke-dasharray="3 2" />
-      <path d="M4 20c3-7 9-9 16-9" />
-      <path d="M15 4l3 4-4 2" />
+      <rect x="4" y="8" width="12" height="12" />
+      <path d="M8 8V4h12v12h-4" stroke-dasharray="2.2 2.4" />
     </S>
   ),
   offset: () => (
     <S>
-      <path d="M4 18c4-10 12-10 16 0" />
-      <path d="M4 12c4-8 12-8 16 0" stroke-dasharray="3 2" />
+      <rect x="9" y="3" width="12" height="12" stroke-dasharray="2.2 2.4" />
+      <path d="M5 7v12h12" />
     </S>
   ),
   mirror: () => (
@@ -172,8 +188,8 @@ export const icons: Record<string, () => JSX.Element> = {
   ),
   construction: () => (
     <S>
-      <path d="M4 18L20 6" stroke-dasharray="6 2 1 2" />
-      <path d="M14 18h6" />
+      <path d="M7 4v16" />
+      <path d="M17 4.5v15" stroke-dasharray="2.4 2.8" />
     </S>
   ),
   fit: () => (
@@ -236,7 +252,7 @@ export const icons: Record<string, () => JSX.Element> = {
   ),
   check: () => (
     <S>
-      <path d="M5 12l5 5 9-10" />
+      <path d="M5 12l5 5 9-10" stroke-width="2.2" />
     </S>
   ),
   combs: () => (
@@ -281,10 +297,16 @@ export const icons: Record<string, () => JSX.Element> = {
       <path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z" />
     </S>
   ),
+  hell: () => (
+    <S>
+      <path d="M12 21c-3.9 0-6.5-2.6-6.5-6.1 0-3.3 2.4-5.2 3.4-8.4 1.4 1.4 2 2.9 2 4.5 1.3-1 2.2-3 2-6 3.2 2.3 5.6 5.8 5.6 9.9 0 3.5-2.6 6.1-6.5 6.1z" />
+      <path d="M12 21c-1.6 0-2.7-1.1-2.7-2.6 0-1.6 1.3-2.6 2.7-4.4 1.4 1.8 2.7 2.8 2.7 4.4 0 1.5-1.1 2.6-2.7 2.6z" />
+    </S>
+  ),
   newSketch: () => (
     <S>
-      <path d="M4 19l5-12 4 7 3-4 4 9z" />
-      <path d="M18 3v6M15 6h6" />
+      <path d="M11 17H3V3h14v8" stroke-dasharray="3 2.4" />
+      <path d="M18 14v8M14 18h8" />
     </S>
   ),
 };

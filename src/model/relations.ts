@@ -20,23 +20,54 @@ export const relationNames: Record<RelationType, string> = {
   onEdge: "On Edge",
 };
 
-/** Short glyph text drawn in the green relation badges. */
-export const relationGlyphs: Record<RelationType, string> = {
-  coincident: "◉",
-  horizontal: "—",
-  vertical: "|",
-  parallel: "∥",
-  perpendicular: "⊥",
-  collinear: "≡",
-  equal: "=",
-  tangent: "◠",
-  concentric: "◎",
-  coradial: "⊚",
-  midpoint: "M",
-  symmetric: "⫼",
-  fix: "⚓",
-  equalCurvature: "κ",
-  onEdge: "⊡",
+/**
+ * A relation tag icon: SVG path data in a 10×10 box. `stroke` is stroked and `fill` (the dots) is filled, both in
+ * the tag's text color, on the canvas (Path2D) and in the panels (inline SVG). Drawn as line icons rather than
+ * Unicode glyphs so they look the same on every system: most of the old symbols weren't in the app font.
+ */
+export interface RelationIcon {
+  stroke: string;
+  fill?: string;
+}
+
+/** Dot path: a filled circle of radius r at (cx, cy). */
+const dot = (cx: number, cy: number, r: number) => `M${cx + r} ${cy}A${r} ${r} 0 1 1 ${cx - r} ${cy}A${r} ${r} 0 1 1 ${cx + r} ${cy}Z`;
+/** Ring path: a circle of radius r at (cx, cy), for stroking. */
+const ring = dot;
+
+/** Tag icons, monochrome. Shapes follow the common CAD conventions (SolidWorks, Fusion, Creo, NX, Onshape). */
+export const relationIcons: Record<RelationType, RelationIcon> = {
+  // A line, and a second line ending on it at a dot.
+  coincident: { stroke: "M1.5 8.5L8.5 1.5M5 5L8.5 8.5", fill: dot(5, 5, 1.35) },
+  horizontal: { stroke: "M1.5 5H8.5" },
+  vertical: { stroke: "M5 1.5V8.5" },
+  // Two strokes slanted up-right.
+  parallel: { stroke: "M1.5 6.5L6.5 1.5M3.5 8.5L8.5 3.5" },
+  // An upright on a base, with a right-angle box.
+  perpendicular: { stroke: "M1.5 8.5H8.5M4.5 8.5V1.5M4.5 6.2H6.8V8.5" },
+  // Two segments on one diagonal with a gap.
+  collinear: { stroke: "M1.5 8.5L4.1 5.9M5.9 4.1L8.5 1.5" },
+  equal: { stroke: "M2 3.7H8M2 6.3H8" },
+  // A slanted line touching a circle.
+  tangent: { stroke: "M1.16 7.16L7.16 1.16" + ring(6, 6, 2.6) },
+  // Two nested rings.
+  concentric: { stroke: ring(5, 5, 3.6) + ring(5, 5, 1.5) },
+  // One dashed circle: four arcs on the axes.
+  coradial: {
+    stroke: "M8.29 6.46A3.6 3.6 0 0 0 8.29 3.54M6.46 1.71A3.6 3.6 0 0 0 3.54 1.71M1.71 3.54A3.6 3.6 0 0 0 1.71 6.46M3.54 8.29A3.6 3.6 0 0 0 6.46 8.29",
+  },
+  // Dashes either side of a dot.
+  midpoint: { stroke: "M1 5H3.1M6.9 5H9", fill: dot(5, 5, 1.35) },
+  // Brackets around a dashed centerline.
+  symmetric: { stroke: "M3.4 2H1.5V8H3.4M6.6 2H8.5V8H6.6M5 1V2.4M5 4.3V5.7M5 7.6V9" },
+  // Anchor: ring, shank, stock, and curved arms with barbs.
+  fix: {
+    stroke: "M5 3V8.9M3.1 4.4H6.9M1.5 6.2C1.8 8 3.2 8.9 5 8.9S8.2 8 8.5 6.2M1 7.1L1.5 6.2L2.4 6.7M9 7.1L8.5 6.2L7.6 6.7M6.1 1.9A1.1 1.1 0 1 1 3.9 1.9A1.1 1.1 0 1 1 6.1 1.9",
+  },
+  // Two curves joining smoothly at a dot.
+  equalCurvature: { stroke: "M1 8.6Q3 5 5 5T9 1.4", fill: dot(5, 5, 1.2) },
+  // A square with a center dot.
+  onEdge: { stroke: "M1.5 1.5H8.5V8.5H1.5Z", fill: dot(5, 5, 1.2) },
 };
 
 /** Display order in Add Relations (most common first, as in SolidWorks). */

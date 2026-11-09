@@ -4,7 +4,7 @@ import type { History } from "../model/history";
 import type { Doc, Id } from "../model/types";
 import type { SketchStatus } from "../solver/types";
 import { emptyStatus } from "../solver/types";
-import type { ThemeName } from "../render/theme";
+import type { HellAccent, ThemeName } from "../render/theme";
 import type { ThemePref } from "./themePref";
 
 export type ViewMode = "sketch" | "art" | "split";
@@ -46,6 +46,14 @@ export interface UiState {
   /** Light/dark choice, and the theme it resolves to. */
   themePref: ThemePref;
   theme: ThemeName;
+  /** HELL MODE has been unlocked (a dimension was set to 666), so the theme toggle and command box offer it. */
+  hellUnlocked: boolean;
+  /** HELL MODE color. */
+  hellAccent: HellAccent;
+  /** A pen (Apple Pencil) has been used on the canvas. */
+  penSeen: boolean;
+  /** Only the pen draws and selects; fingers pan and zoom (palm rejection). On once a pen is seen. */
+  pencilOnly: boolean;
 }
 
 type Listener = () => void;
@@ -86,6 +94,10 @@ export class Store {
       artHover: null,
       themePref: "system",
       theme: "light",
+      hellUnlocked: false,
+      hellAccent: "red",
+      penSeen: false,
+      pencilOnly: false,
     };
   }
 
