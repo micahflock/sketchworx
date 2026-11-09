@@ -60,8 +60,10 @@ export function NumField({ value, onCommit, label, readOnly }: { value: number; 
   );
 }
 
-function ToolOptions({ options }: { options: ToolOption[] }) {
+/** Options are read from the tool on every render, so a change shows as soon as it is made. */
+function ToolOptions({ read }: { read: () => ToolOption[] }) {
   const [, force] = useState(0);
+  const options = read();
   return (
     <div>
       {options.map((o) => {
@@ -188,7 +190,7 @@ export function PropertyManager() {
         <div class={css.prompt}>{ui.prompt}</div>
         {opts.length > 0 && (
           <Section title="Options">
-            <ToolOptions options={opts} />
+            <ToolOptions read={() => tool.options?.() ?? []} />
           </Section>
         )}
       </div>

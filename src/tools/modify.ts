@@ -8,7 +8,7 @@ import { entitySamples } from "../render/hit";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
 import { applySnap, drawSnap } from "./common";
-import { addSpline, cornerAt, entityCurve, extendAt, extendTarget, filletCorner, findChain, mirrorEntities, offsetChain, sideOf, trimAt, trimPreview } from "./edits";
+import { addSpline, cornerAt, entityCurve, extendAt, extendTarget, filletCorner, findChain, mirrorEntities, offsetChain, sideOf, trimAt, trimPreview, trimToConstruction } from "./edits";
 import { fmt } from "./line";
 import type { PEvent, Tool, ToolHost, ToolOption } from "./tool";
 
@@ -128,6 +128,8 @@ export class TrimTool implements Tool {
   private trimmedAny = false;
   /** The piece a click would remove (hover preview). */
   private piece: Vec2[] | null = null;
+  /** Keep trimmed pieces as construction instead of deleting them. */
+  private keepConstruction = false;
 
   constructor(private host: EditHost) {}
   activate() {
@@ -173,7 +175,7 @@ export class TrimTool implements Tool {
     }
     if (crossings.length) {
       this.host.editApply((ed) => {
-        for (const c of crossings) if (ed.s.entities[c.id]) trimAt(ed, c.id, c.p);
+        for (const c of crossings) if (ed.s.entities[c.id]) this.trim(ed, c.id, c.p);
       });
       this.trimmedAny = true;
     }
@@ -186,7 +188,7 @@ export class TrimTool implements Tool {
       if (h) {
         let msg: string | undefined;
         this.host.editApply((ed) => {
-          msg = trimAt(ed, h.id, e.world).message;
+          msg = this.trim(ed, h.id, e.world).message;
         });
         this.trimmedAny = true;
         if (msg) this.host.flash(msg, "error");
@@ -199,6 +201,20 @@ export class TrimTool implements Tool {
     this.stroke = null;
     this.host.editEnd("Trim");
     this.host.requestRender();
+  }
+  private trim(ed: Parameters<typeof trimAt>[0], id: Id, at: Vec2) {
+    return this.keepConstruction ? trimToConstruction(ed, id, at) : trimAt(ed, id, at);
+  }
+  options(): ToolOption[] {
+    return [
+      {
+        kind: "check",
+        key: "keepConstruction",
+        label: "Keep trimmed pieces as construction",
+        value: this.keepConstruction,
+        set: (v) => (this.keepConstruction = v),
+      },
+    ];
   }
   cancel(): boolean {
     return false;
