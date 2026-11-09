@@ -8,6 +8,7 @@ import { snap } from "../src/inference/snap";
 import { buildOutline } from "../src/model/outline";
 import { CHAIN_TARGET_PX, LineTool } from "../src/tools/line";
 import { CircleTool } from "../src/tools/shapes";
+import { addLine } from "../src/tools/common";
 import { HELL_ACCENTS, hellPalette, lightTheme } from "../src/render/theme";
 
 /** A host with a real document and snapping, viewed at 1 px per unit with the origin at the screen's center. */
@@ -256,5 +257,40 @@ describe("T-junctions and path vertices", () => {
     const added = relations().slice(before).filter((r) => r.type === "coincident");
     expect(added).toHaveLength(1);
     expect(added[0].refs.every((id) => s.entities[id]?.type === "point")).toBe(true);
+  });
+});
+
+describe("Snap: a segment under the finger beats direction inference", () => {
+  const sketchWith = (...lines: [number, number, number, number][]) => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      for (const [ax, ay, bx, by] of lines) addLine(ed, { x: ax, y: ay }, { x: bx, y: by });
+    });
+    return activeSketch(doc);
+  };
+
+  it("drops a perpendicular inference that doesn't cross the segment near the finger", () => {
+    const s = sketchWith([-300, 300, 300, 300]);
+    const from = { x: 200, y: 100 };
+    const u = { x: -1, y: 2 }; // perpendicular to a previous segment along (2, 1)
+    const sn = snap(s, { x: 125, y: 295 }, { tol: 22, from, dirRefs: [{ dir: u, type: "perpendicular", ref: "prev" }] });
+    expect(sn.curve).toBeTruthy();
+    expect(sn.dirRel).toBeUndefined();
+    expect(sn.pos.y).toBeCloseTo(300);
+  });
+
+  it("keeps a perpendicular inference that crosses the segment near the finger", () => {
+    const s = sketchWith([-300, 300, 300, 300]);
+    const sn = snap(s, { x: 108, y: 296 }, { tol: 22, from: { x: 200, y: 100 }, dirRefs: [{ dir: { x: -1, y: 2 }, type: "perpendicular", ref: "prev" }] });
+    expect(sn.curve).toBeTruthy();
+    expect(sn.dirRel?.type).toBe("perpendicular");
+    expect(sn.pos.x).toBeCloseTo(100);
+    expect(sn.pos.y).toBeCloseTo(300);
+  });
+
+  it("drops H/V when the horizontal can't reach a shallow segment near the finger", () => {
+    const s = sketchWith([0, 0, 400, 40]); // shallow diagonal
+    const sn = snap(s, { x: 160, y: 18 }, { tol: 22, from: { x: -200, y: 10 } });
+    expect(sn.hv).toBeUndefined();
+    expect(sn.curve).toBeTruthy();
   });
 });
