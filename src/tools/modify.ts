@@ -8,7 +8,7 @@ import { entitySamples } from "../render/hit";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
 import { applySnap, drawSnap } from "./common";
-import { addSpline, cornerAt, entityCurve, extendAt, extendTarget, filletCorner, findChain, mirrorEntities, offsetChain, sideOf, trimAt } from "./edits";
+import { addSpline, cornerAt, entityCurve, extendAt, extendTarget, filletCorner, findChain, mirrorEntities, offsetChain, sideOf, trimAt, trimPreview } from "./edits";
 import { fmt } from "./line";
 import type { PEvent, Tool, ToolHost, ToolOption } from "./tool";
 
@@ -126,7 +126,8 @@ export class TrimTool implements Tool {
   readonly cursor = "crosshair";
   private stroke: Vec2[] | null = null;
   private trimmedAny = false;
-  private hover: Id | null = null;
+  /** The piece a click would remove (hover preview). */
+  private piece: Vec2[] | null = null;
 
   constructor(private host: EditHost) {}
   activate() {
@@ -134,18 +135,22 @@ export class TrimTool implements Tool {
   }
   deactivate() {
     this.finishStroke();
+    this.piece = null;
   }
   onDown(e: PEvent) {
     if (e.button !== 0) return;
+    this.piece = null;
     this.stroke = [e.world];
     this.trimmedAny = false;
     this.host.editBegin();
   }
   onMove(e: PEvent) {
     if (!this.stroke) {
+      // Highlight only the piece a click here would remove, not the whole entity.
       const h = this.host.hit(e.world, e.pointerType, { points: false, own: true });
-      this.hover = h?.id ?? null;
-      this.host.setHover(this.hover);
+      this.piece = h ? trimPreview(this.host.sketch(), h.id, e.world) : null;
+      this.host.setHover(null);
+      this.host.requestRender();
       return;
     }
     const prev = this.stroke[this.stroke.length - 1];
@@ -199,6 +204,7 @@ export class TrimTool implements Tool {
     return false;
   }
   draw(p: Painter) {
+    if (this.piece) p.polyline(this.piece, { color: theme.hover, width: theme.emphWidth + 2 });
     if (this.stroke && this.stroke.length > 1) p.polyline(this.stroke, { color: theme.trimStroke, width: 1.5, dash: [3, 3] });
   }
 }

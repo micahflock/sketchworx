@@ -104,6 +104,58 @@ export interface TrimResult {
 }
 
 /** Power Trim at a point on an entity: remove the piece between the nearest intersections. */
+interface TrimCut {
+  t: number;
+  p: Vec2;
+  by: Id;
+}
+
+/**
+ * What a trim at `at` removes from e: the whole entity, or the span between the nearest cuts on either side
+ * (an open curve's missing cut means "to that end"; a circle's span may wrap past t = 0).
+ */
+function trimSpan(s: Sketch, e: Entity, at: Vec2): { cv: Curve; all: true } | { cv: Curve; all: false; lo?: TrimCut; hi?: TrimCut } {
+  const cv = entityCurve(s, e)!;
+  const tP = curveParam(cv, at);
+  const hits: TrimCut[] = [];
+  for (const c of cutters(s, e.id)) for (const h of intersect(cv, c.cv)) hits.push({ t: h.t1, p: h.p, by: c.id });
+  if (e.type === "circle") {
+    const ts = hits.filter((h) => h.t >= 0 && h.t < 1);
+    if (ts.length < 2) return { cv, all: true };
+    const hi = ts.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0] ?? ts.sort((a, b) => a.t - b.t)[0];
+    const lo = ts.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0] ?? ts.sort((a, b) => b.t - a.t)[0];
+    return { cv, all: false, lo, hi };
+  }
+  const eps = 1e-6;
+  const inner = hits.filter((h) => h.t > eps && h.t < 1 - eps);
+  const lo = inner.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0];
+  const hi = inner.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0];
+  if (!lo && !hi) return { cv, all: true };
+  return { cv, all: false, lo, hi };
+}
+
+/** The piece a trim at `at` would remove, as a polyline (null where the entity can't be trimmed). */
+export function trimPreview(s: Sketch, id: Id, at: Vec2, n = 48): Vec2[] | null {
+  const e = s.entities[id];
+  if (!e || e.type === "point" || (e.type === "line" && e.owner) || (e.type === "spline" && e.derived)) return null;
+  if (!entityCurve(s, e)) return null;
+  const span = trimSpan(s, e, at);
+  let t0 = 0;
+  let t1 = 1;
+  if (!span.all) {
+    t0 = span.lo?.t ?? 0;
+    t1 = span.hi?.t ?? 1;
+    if (e.type === "circle" && t1 <= t0) t1 += 1; // wraps past t = 0
+  }
+  const steps = e.type === "line" ? 1 : n;
+  const out: Vec2[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = t0 + ((t1 - t0) * i) / steps;
+    out.push(curvePoint(span.cv, e.type === "circle" ? t % 1 : t));
+  }
+  return out;
+}
+
 export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
   const s = ed.s;
   const e = s.entities[id];
@@ -111,19 +163,16 @@ export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
   if (e.type === "line" && e.owner) return { ok: false, message: "Polygon sides cannot be trimmed" };
   if (e.type === "spline" && e.derived) return { ok: false, message: "Driven offsets follow their source" };
   loosenOnEdge(ed, id);
-  const cv = entityCurve(s, e)!;
-  const tP = curveParam(cv, at);
-  const hits: { t: number; p: Vec2; by: Id }[] = [];
-  for (const c of cutters(s, id)) for (const h of intersect(cv, c.cv)) hits.push({ t: h.t1, p: h.p, by: c.id });
+  const span = trimSpan(s, e, at);
+  if (span.all) {
+    ed.deleteEntities([id]);
+    return { ok: true };
+  }
+  const { lo, hi } = span;
   if (e.type === "circle") {
-    const ts = hits.filter((h) => h.t >= 0 && h.t < 1);
-    if (ts.length < 2) {
-      ed.deleteEntities([id]);
-      return { ok: true };
-    }
-    // The kept arc runs CCW from the first cut after tP around to the last cut before it.
-    const after = ts.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0] ?? ts.sort((a, b) => a.t - b.t)[0];
-    const before = ts.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0] ?? ts.sort((a, b) => b.t - a.t)[0];
+    // The kept arc runs CCW from the first cut after the click around to the last cut before it.
+    const after = hi!;
+    const before = lo!;
     const sId = ed.addPoint(after.p.x, after.p.y, id);
     const eId = ed.addPoint(before.p.x, before.p.y, id);
     ed.put({ id, type: "arc", c: e.c, s: sId, e: eId, ...(e.construction ? { construction: true } : {}) });
@@ -131,20 +180,13 @@ export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
     attach(ed, eId, before.p, before.by, id);
     return { ok: true };
   }
-  const eps = 1e-6;
-  const inner = hits.filter((h) => h.t > eps && h.t < 1 - eps);
-  const lo = inner.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0];
-  const hi = inner.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0];
-  if (!lo && !hi) {
-    ed.deleteEntities([id]);
-    return { ok: true };
-  }
   const [startId, endId] = endPoints(e);
   if (!lo) {
     // Remove [0, hi]: the start moves to hi.
+    const cut = hi!; // trimSpan returns at least one cut when not removing everything
     detachEnd(ed, id, startId);
-    reshape(ed, e, hi.t, 1);
-    attach(ed, startId, hi.p, hi.by, id);
+    reshape(ed, e, cut.t, 1);
+    attach(ed, startId, cut.p, cut.by, id);
     return { ok: true };
   }
   if (!hi) {

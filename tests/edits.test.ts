@@ -9,7 +9,7 @@ import type { Doc, Id, Sketch, SplineEntity } from "../src/model/types";
 import { buildSolverInput } from "../src/solver/build";
 import { GcsCore } from "../src/solver/gcs";
 import { addArc, addLine } from "../src/tools/common";
-import { addSpline, cornerAt, extendAt, filletCorner, findChain, fitOffsetCubic, mirrorEntities, offsetChain, trimAt } from "../src/tools/edits";
+import { addSpline, cornerAt, extendAt, filletCorner, findChain, fitOffsetCubic, mirrorEntities, offsetChain, trimAt, trimPreview } from "../src/tools/edits";
 import { refreshExpressions } from "../src/model/dimensions";
 
 let core: GcsCore;
@@ -29,6 +29,29 @@ function solveDoc(doc: Doc): Doc {
     for (const p of r.params.points) ed.movePoint(p.id, p.x, p.y);
   });
 }
+
+describe("trim preview", () => {
+  const r = (pts: Vec2[] | null) => pts && [pts[0], pts[pts.length - 1]].map((p) => [Math.round(p.x), Math.round(p.y)]);
+  it("covers only the piece a click would remove", () => {
+    let h = "";
+    const d = applyCommand(createDoc(), (ed) => {
+      h = addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 }).line;
+      addLine(ed, { x: 30, y: -50 }, { x: 30, y: 50 });
+      addLine(ed, { x: 70, y: -50 }, { x: 70, y: 50 });
+    });
+    const s = activeSketch(d);
+    expect(r(trimPreview(s, h, { x: 50, y: 0 }))).toEqual([[30, 0], [70, 0]]);
+    expect(r(trimPreview(s, h, { x: 10, y: 0 }))).toEqual([[0, 0], [30, 0]]);
+    expect(r(trimPreview(s, h, { x: 90, y: 0 }))).toEqual([[70, 0], [100, 0]]);
+  });
+  it("covers the whole entity when nothing cuts it", () => {
+    let h = "";
+    const d = applyCommand(createDoc(), (ed) => {
+      h = addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 }).line;
+    });
+    expect(r(trimPreview(activeSketch(d), h, { x: 50, y: 0 }))).toEqual([[0, 0], [100, 0]]);
+  });
+});
 
 describe("trim", () => {
   it("removes the clicked piece of a crossed line and keeps the rest", () => {
