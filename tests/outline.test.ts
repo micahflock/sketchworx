@@ -3,7 +3,7 @@ import { exportSvg, arcToCubics } from "../src/io/svg";
 import { applyCommand } from "../src/model/editor";
 import { buildOutline } from "../src/model/outline";
 import { activeSketch, createDoc } from "../src/model/sketch";
-import { addCircle, addLine } from "../src/tools/common";
+import { addArc, addCircle, addLine } from "../src/tools/common";
 import { buildLoop } from "../src/tools/shapes";
 import { slotSample } from "../src/io/samples";
 
@@ -71,5 +71,37 @@ describe("svg", () => {
     const x = u ** 3 * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t ** 3 * p3.x;
     const y = u ** 3 * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t ** 3 * p3.y;
     expect(Math.abs(Math.hypot(x, y) - 100)).toBeLessThan(0.03);
+  });
+
+  describe("open ends: only hanging ends", () => {
+    const ends = (d: ReturnType<typeof createDoc>) =>
+      buildOutline(activeSketch(d))
+        .openEnds.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`)
+        .sort();
+
+    it("skips a point shared by three lines", () => {
+      const d = applyCommand(createDoc(), (ed) => {
+        addLine(ed, { x: 0, y: 0 }, { x: 10, y: 0 });
+        addLine(ed, { x: 0, y: 0 }, { x: 0, y: 10 });
+        addLine(ed, { x: 0, y: 0 }, { x: -10, y: -10 });
+      });
+      expect(ends(d)).toEqual(["-10,-10", "0,10", "10,0"]);
+    });
+
+    it("skips an end resting on a line's middle, even without a relation", () => {
+      const d = applyCommand(createDoc(), (ed) => {
+        addLine(ed, { x: 0, y: 0 }, { x: 20, y: 0 });
+        addLine(ed, { x: 7, y: 0 }, { x: 7, y: 10 });
+      });
+      expect(ends(d)).toEqual(["0,0", "20,0", "7,10"]);
+    });
+
+    it("skips an end resting on an arc", () => {
+      const d = applyCommand(createDoc(), (ed) => {
+        addArc(ed, { x: 0, y: 0 }, { x: 10, y: 0 }, { x: -10, y: 0 }); // upper half, CCW
+        addLine(ed, { x: 0, y: 10 }, { x: 0, y: 30 });
+      });
+      expect(ends(d)).toEqual(["-10,0", "0,30", "10,0"]);
+    });
   });
 });
