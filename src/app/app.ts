@@ -273,9 +273,15 @@ export class App implements ToolHost, ArtHost {
         mirrorEntities(ed, fresh, axis);
       };
     }
-    const next = applyCommand(this.store.doc, fn);
+    let tentative: Id[] = [];
+    const inner = fn;
+    const next = applyCommand(this.store.doc, (ed) => {
+      inner(ed);
+      tentative = [...ed.tentative];
+    });
     if (next !== this.store.doc) {
       this.store.commitDoc(next, label);
+      this.solver.markTentative(tentative);
       this.afterChange();
     }
     return next;
