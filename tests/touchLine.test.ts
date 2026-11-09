@@ -5,6 +5,7 @@ import { activeSketch, createDoc } from "../src/model/sketch";
 import type { Doc } from "../src/model/types";
 import { View } from "../src/render/view";
 import { snap } from "../src/inference/snap";
+import { buildOutline } from "../src/model/outline";
 import { CHAIN_TARGET_PX, LineTool } from "../src/tools/line";
 import { CircleTool } from "../src/tools/shapes";
 import { HELL_ACCENTS, hellPalette, lightTheme } from "../src/render/theme";
@@ -218,5 +219,42 @@ describe("Line tool by mouse: wobbly clicks", () => {
     expect(count("line")).toBe(1);
     click(tool, ev(150, 200, "mouse"));
     expect(count("line")).toBe(2);
+  });
+});
+
+describe("T-junctions and path vertices", () => {
+  const click = (tool: LineTool, at: object) => {
+    type E = Parameters<LineTool["onDown"]>[0];
+    tool.onDown(at as E);
+    tool.onMove(at as E);
+    tool.onUp(at as E);
+  };
+
+  it("does not flag an end made coincident with another line as open", () => {
+    const { host, ev } = setup();
+    const tool = new LineTool(host as never);
+    drag(tool, ev(-200, 0, "mouse"), ev(200, 0, "mouse"));
+    // From below, ending on the middle stretch of that line (away from its midpoint).
+    drag(tool, ev(80, 150, "mouse"), ev(83, 3, "mouse"));
+    const o = buildOutline(host.sketch());
+    const key = (p: { x: number; y: number }) => `${Math.round(p.x)},${Math.round(p.y)}`;
+    const ends = o.openEnds.map(key).sort();
+    const w = (sx: number, sy: number) => key(host.view.toWorld({ x: sx, y: sy }));
+    expect(ends).toEqual([w(-200, 0), w(200, 0), w(80, 150)].sort());
+  });
+
+  it("snaps a new line's end coincident with a path vertex", () => {
+    const { host, ev, relations } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"));
+    click(tool, ev(150, 40, "mouse"));
+    click(tool, ev(260, -60, "mouse"));
+    tool.onDoubleClick();
+    const before = relations().length;
+    drag(tool, ev(150, 200, "mouse"), ev(153, 44, "mouse"));
+    const s = host.sketch();
+    const added = relations().slice(before).filter((r) => r.type === "coincident");
+    expect(added).toHaveLength(1);
+    expect(added[0].refs.every((id) => s.entities[id]?.type === "point")).toBe(true);
   });
 });
