@@ -771,6 +771,14 @@
   font: 600 11px/1 var(--sw-font-num);
   border: 1px solid var(--sw-glyph-border);
 }
+/* A toolbar icon shrunk to fit a glyph badge. */
+.glyphIcon {
+  padding: 0;
+}
+.glyphIcon svg {
+  width: 16px;
+  height: 16px;
+}
 .glyphBad {
   background: var(--sw-glyph-bad-bg);
   color: var(--sw-glyph-bad-fg);
