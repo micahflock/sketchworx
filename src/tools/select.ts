@@ -19,7 +19,12 @@ export class SelectTool implements Tool {
   readonly id = "select";
   readonly cursor = "default";
   private pending: Pending | null = null;
-  private dragging: { base: { point?: Id; radiusOf?: Id; x: number; y: number; r?: number }[]; startWorld: Vec2 } | null = null;
+  private dragging: {
+    base: { point?: Id; radiusOf?: Id; x: number; y: number; r?: number }[];
+    startWorld: Vec2;
+    /** Dragging a line moves it only across itself: the pointer's motion is projected onto this unit normal. */
+    across?: Vec2;
+  } | null = null;
   private dimDrag: { id: Id; offset: Vec2 } | null = null;
   private box: { a: Vec2; b: Vec2 } | null = null;
 
@@ -149,13 +154,24 @@ export class SelectTool implements Tool {
       const r = dist(c, ptv(s, e.s));
       base.push({ radiusOf: id, x: c.x, y: c.y, r });
     } else for (const pid of definingPoints(e)) base.push({ point: pid, ...ptv(s, pid) });
-    this.dragging = { base, startWorld };
+    let across: Vec2 | undefined;
+    if (e.type === "line") {
+      // Dragging along the line would only stretch it (or nothing): drag its end points for that.
+      const d = sub(ptv(s, e.p2), ptv(s, e.p1));
+      const l = Math.hypot(d.x, d.y);
+      if (l > 1e-12) across = { x: -d.y / l, y: d.x / l };
+    }
+    this.dragging = { base, startWorld, across };
     this.host.dragBegin(this.targets(startWorld));
   }
 
   private targets(w: Vec2): DragTarget[] {
     const d = this.dragging!;
-    const delta = sub(w, d.startWorld);
+    let delta = sub(w, d.startWorld);
+    if (d.across) {
+      const k = delta.x * d.across.x + delta.y * d.across.y;
+      delta = { x: d.across.x * k, y: d.across.y * k };
+    }
     const s = this.host.sketch();
     return d.base.map((b) => {
       if (b.radiusOf) {
