@@ -76,3 +76,12 @@ export function screenDist(a: Vec2, b: Vec2) {
 }
 
 export const DRAG_THRESHOLD_PX = 5;
+
+/**
+ * Mouse clicks wobble: a press and release closer than this is a click, not a drag, and a clicked
+ * segment shorter than this is ignored (unless it ends on an existing point).
+ */
+export const MOUSE_SLOP_PX = 10;
+
+/** Movement that turns a press into a drag for this pointer. */
+export const dragThreshold = (pointerType?: string) => (pointerType === "mouse" ? MOUSE_SLOP_PX : DRAG_THRESHOLD_PX);

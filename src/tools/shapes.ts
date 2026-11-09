@@ -5,7 +5,7 @@ import type { Editor } from "../model/editor";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
 import { arcFrom3 } from "./arcmath";
-import { addArc, addCircle, addLine, applySnap, drawSnap, DRAG_THRESHOLD_PX, screenDist } from "./common";
+import { addArc, addCircle, addLine, applySnap, drawSnap, dragThreshold, screenDist } from "./common";
 import { fmt } from "./line";
 import type { PEvent, Tool, ToolHost, ToolOption } from "./tool";
 
@@ -69,7 +69,7 @@ abstract class ClickTool implements Tool {
   }
   onUp(e: PEvent) {
     // Press-drag-release from the first point places the second.
-    if (this.pts.length === 1 && this.downScreen && screenDist(e.screen, this.downScreen) > DRAG_THRESHOLD_PX) {
+    if (this.pts.length === 1 && this.downScreen && screenDist(e.screen, this.downScreen) > dragThreshold(e.pointerType)) {
       this.push(this.snapAt(e));
     } else if (this.pts.length === 1 && this.need > 1 && e.pointerType !== "mouse") {
       // Touch and pen draw by dragging only: a tap does not start a shape.

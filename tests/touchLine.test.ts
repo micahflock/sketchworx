@@ -182,3 +182,41 @@ describe("Snap: horizontal/vertical onto a curve", () => {
     expect(added).toEqual(["coincident", "horizontal"]);
   });
 });
+
+describe("Line tool by mouse: wobbly clicks", () => {
+  const click = (tool: LineTool, down: object, up: object = down) => {
+    type E = Parameters<LineTool["onDown"]>[0];
+    tool.onDown(down as E);
+    tool.onMove(up as E);
+    tool.onUp(up as E);
+  };
+
+  it("treats a small wobble on the first click as a click, not a tiny drag-line", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"), ev(7, 2, "mouse"));
+    expect(count("line")).toBe(0);
+    click(tool, ev(150, 0, "mouse"));
+    click(tool, ev(150, 120, "mouse"));
+    expect(count("line")).toBe(2);
+  });
+
+  it("still places a single line from a real click-drag", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"), ev(80, 30, "mouse"));
+    expect(count("line")).toBe(1);
+  });
+
+  it("ignores a click just off the last end point, even with snapping off", () => {
+    const { host, ev, count } = setup();
+    const tool = new LineTool(host as never);
+    click(tool, ev(0, 0, "mouse"));
+    click(tool, ev(150, 40, "mouse"));
+    const nudge = { ...ev(156, 44, "mouse"), ctrl: true };
+    click(tool, nudge);
+    expect(count("line")).toBe(1);
+    click(tool, ev(150, 200, "mouse"));
+    expect(count("line")).toBe(2);
+  });
+});
