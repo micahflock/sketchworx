@@ -5,12 +5,15 @@ import type { Id } from "../model/types";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
 
-/** Add the relations a snap implies for a newly created point. */
+/**
+ * Add the relations a snap implies for a newly created point. Drawing only adds coincident (on a point or
+ * a curve) here, and horizontal/vertical in applyHV. Other snaps (midpoint, tangent, perpendicular) place
+ * the geometry exactly but add no relation.
+ */
 export function applySnap(ed: Editor, pointId: Id, sn: SnapResult | undefined) {
   if (!sn) return;
   if (sn.point && sn.point !== pointId && ed.s.entities[sn.point]) ed.addRelation({ type: "coincident", refs: [pointId, sn.point] });
   else if (sn.curve && ed.s.entities[sn.curve]) ed.addRelation({ type: "coincident", refs: [pointId, sn.curve] });
-  else if (sn.midpointOf && ed.s.entities[sn.midpointOf]) ed.addRelation({ type: "midpoint", refs: [pointId, sn.midpointOf] });
 }
 
 /** Add H/V to a line created from a snap that inferred it. */

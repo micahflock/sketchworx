@@ -13,3 +13,17 @@ export function useUi(): UiState {
   useEffect(() => app.store.subscribe(() => setV(app.store.version)), [app]);
   return app.store.state;
 }
+
+/** Phone-sized screen (matches the max-width: 600px rules in ui.module.css). */
+const PHONE_QUERY = "(max-width: 600px)";
+export function usePhone(): boolean {
+  const mq = typeof matchMedia === "function" ? matchMedia(PHONE_QUERY) : null;
+  const [phone, setPhone] = useState(!!mq?.matches);
+  useEffect(() => {
+    if (!mq) return;
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  return phone;
+}
