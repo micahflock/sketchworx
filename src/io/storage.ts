@@ -1,6 +1,7 @@
 /** IndexedDB autosave + File System Access save/open with download/upload fallback (iPad). */
 
-const DB_NAME = "sketchworx";
+// A test copy served beside the main site keeps its own autosave.
+const DB_NAME = typeof __APP_CHANNEL__ !== "undefined" && __APP_CHANNEL__ ? `sketchworx-${__APP_CHANNEL__}` : "sketchworx";
 const STORE = "autosave";
 
 function openDb(): Promise<IDBDatabase> {
