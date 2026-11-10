@@ -49,8 +49,21 @@ function TouchKeys() {
   const ui = useUi();
   const selecting = ui.toolId === "select";
   const drawTool = app.drawToolId();
+  // Publish the dock's height so the PropertyManager (which it covers on a phone) can scroll clear of it.
+  const dock = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = dock.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() => root.style.setProperty("--touch-dock-h", `${el.offsetHeight + 16}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--touch-dock-h");
+    };
+  }, []);
   return (
-    <div class={css.touchDock}>
+    <div class={css.touchDock} ref={dock}>
       <ContextBar docked />
       <div class={css.touchKeys}>
         <div class={css.fingerMode} title="What one finger does. Two fingers always pan and zoom">
