@@ -8,8 +8,8 @@ import { activeSketch, createDoc, ptv } from "../src/model/sketch";
 import type { Doc, Id, Sketch, SplineEntity } from "../src/model/types";
 import { buildSolverInput } from "../src/solver/build";
 import { GcsCore } from "../src/solver/gcs";
-import { addArc, addLine } from "../src/tools/common";
-import { addSpline, cornerAt, extendAt, filletCorner, findChain, fitOffsetCubic, mirrorEntities, offsetChain, trimAt } from "../src/tools/edits";
+import { addArc, addCircle, addLine } from "../src/tools/common";
+import { addSpline, cornerAt, extendAt, filletCorner, findChain, fitOffsetCubic, mirrorEntities, offsetChain, trimAt, trimPreview, trimToConstruction } from "../src/tools/edits";
 import { refreshExpressions } from "../src/model/dimensions";
 
 let core: GcsCore;
@@ -29,6 +29,101 @@ function solveDoc(doc: Doc): Doc {
     for (const p of r.params.points) ed.movePoint(p.id, p.x, p.y);
   });
 }
+
+describe("trim preview", () => {
+  const r = (pts: Vec2[] | null) => pts && [pts[0], pts[pts.length - 1]].map((p) => [Math.round(p.x), Math.round(p.y)]);
+  it("covers only the piece a click would remove", () => {
+    let h = "";
+    const d = applyCommand(createDoc(), (ed) => {
+      h = addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 }).line;
+      addLine(ed, { x: 30, y: -50 }, { x: 30, y: 50 });
+      addLine(ed, { x: 70, y: -50 }, { x: 70, y: 50 });
+    });
+    const s = activeSketch(d);
+    expect(r(trimPreview(s, h, { x: 50, y: 0 }))).toEqual([[30, 0], [70, 0]]);
+    expect(r(trimPreview(s, h, { x: 10, y: 0 }))).toEqual([[0, 0], [30, 0]]);
+    expect(r(trimPreview(s, h, { x: 90, y: 0 }))).toEqual([[70, 0], [100, 0]]);
+  });
+  it("covers the whole entity when nothing cuts it", () => {
+    let h = "";
+    const d = applyCommand(createDoc(), (ed) => {
+      h = addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 }).line;
+    });
+    expect(r(trimPreview(activeSketch(d), h, { x: 50, y: 0 }))).toEqual([[0, 0], [100, 0]]);
+  });
+});
+
+describe("trim to construction", () => {
+  const check = (doc: Doc) => {
+    const inp = buildSolverInput(activeSketch(doc));
+    return core.solve(inp.params, inp.constraints);
+  };
+  const crossed = () => {
+    const ids: Record<string, Id> = {};
+    const d = applyCommand(createDoc(), (ed) => {
+      const h = addLine(ed, { x: 0, y: 0 }, { x: 100, y: 0 });
+      ids.h = h.line;
+      ids.p1 = h.p1;
+      ids.v1 = addLine(ed, { x: 30, y: -50 }, { x: 30, y: 50 }).line;
+      ids.v2 = addLine(ed, { x: 70, y: -50 }, { x: 70, y: 50 }).line;
+      ed.addRelation({ type: "horizontal", refs: [ids.h] });
+      ed.addRelation({ type: "vertical", refs: [ids.v1] });
+      ed.addDimension({ type: "distance", refs: [h.p1, h.p2], expr: "100", value: 100, driven: false, label: { x: 50, y: 10 } });
+    });
+    return { d, ids };
+  };
+
+  for (const [name, at, pieces] of [
+    ["middle", { x: 50, y: 0 }, 2],
+    ["end", { x: 90, y: 0 }, 1],
+  ] as const) {
+    it(`keeps the original as construction with its relations (${name})`, () => {
+      const { d, ids } = crossed();
+      const before = check(d);
+      const d1 = applyCommand(d, (ed) => trimToConstruction(ed, ids.h, at));
+      const s1 = activeSketch(d1);
+      const h = s1.entities[ids.h] as { construction?: boolean; p1: Id; p2: Id };
+      expect(h.construction).toBe(true);
+      expect(P(d1, h.p1)).toEqual({ x: 0, y: 0 });
+      expect(P(d1, h.p2)).toEqual({ x: 100, y: 0 });
+      expect(Object.values(s1.relations).some((r) => r.type === "horizontal" && r.refs[0] === ids.h)).toBe(true);
+      expect(Object.values(s1.dimensions)).toHaveLength(1);
+      const solid = lines(d1).filter((l) => !(s1.entities[l.id] as { construction?: boolean }).construction && l.id !== ids.v1 && l.id !== ids.v2);
+      expect(solid).toHaveLength(pieces);
+      const after = check(d1);
+      expect(after.ok).toBe(true);
+      expect(after.conflicts).toEqual([]);
+      expect(after.redundant).toEqual([]);
+      expect(after.dof).toBe(before.dof); // the pieces add no freedom
+    });
+  }
+
+  it("trims a circle to a solid arc over the construction circle", () => {
+    let c = "";
+    const d = applyCommand(createDoc(), (ed) => {
+      c = addCircle(ed, { x: 0, y: 0 }, 50).circle;
+      addLine(ed, { x: -100, y: 0 }, { x: 100, y: 0 });
+    });
+    const before = check(d);
+    const d1 = applyCommand(d, (ed) => trimToConstruction(ed, c, { x: 0, y: 50 }));
+    const s1 = activeSketch(d1);
+    expect(s1.entities[c].construction).toBe(true);
+    expect(ents(d1).filter((e) => e.type === "arc")).toHaveLength(1);
+    const after = check(d1);
+    expect(after.conflicts).toEqual([]);
+    expect(after.redundant).toEqual([]);
+    expect(after.dof).toBe(before.dof);
+  });
+
+  it("then trims a piece without stopping at its construction original", () => {
+    const { d, ids } = crossed();
+    const d1 = applyCommand(d, (ed) => trimToConstruction(ed, ids.h, { x: 90, y: 0 }));
+    const s1 = activeSketch(d1);
+    const piece = lines(d1).find((l) => !(s1.entities[l.id] as { construction?: boolean }).construction && ![ids.v1, ids.v2].includes(l.id))!;
+    // The piece runs 0..70; trimming its middle (between the cutters at 30 and 70 it ends at) removes 30..70.
+    expect(trimPreview(s1, piece.id, { x: 50, y: 0 })!.map((p) => Math.round(p.x))).toEqual([30, 70]);
+  });
+});
 
 describe("trim", () => {
   it("removes the clicked piece of a crossed line and keeps the rest", () => {

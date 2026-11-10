@@ -84,6 +84,32 @@ export class SolverService {
   private statuses = new Map<Id, SketchStatus>();
 
   private waiters: (() => void)[] = [];
+  /** Automatic relations from the last command: removed again if they over-define the sketch. */
+  private tentative = new Set<Id>();
+
+  markTentative(ids: Id[]) {
+    this.tentative = new Set(ids);
+  }
+
+  /**
+   * When the solve of `doc` shows more conflicts in the active sketch than before, try it without the last
+   * command's automatic relations; returns that solve when it removes the new conflicts.
+   */
+  private async withoutTentative(doc: Doc, from: number, statuses: Map<Id, SketchStatus>): Promise<{ doc: Doc; statuses: Map<Id, SketchStatus> } | null> {
+    const tent = this.tentative;
+    this.tentative = new Set();
+    const ids = [...tent].filter((id) => activeSketch(doc).relations[id]);
+    if (!ids.length) return null;
+    const before = this.statuses.get(doc.active)?.conflicts.length ?? 0;
+    const now = statuses.get(doc.active)?.conflicts.length ?? 0;
+    if (now <= before) return null;
+    const trimmed = applyCommand(doc, (ed) => {
+      for (const id of ids) ed.deleteRelation(id);
+    });
+    const trial = new Map(this.statuses);
+    const solved = await this.rebuild(trimmed, from, trial);
+    return (trial.get(doc.active)?.conflicts.length ?? 0) < now ? { doc: solved, statuses: trial } : null;
+  }
 
   constructor(private store: Store, private solver: Solver) {}
 
@@ -146,8 +172,10 @@ export class SolverService {
       }
       this.store.set({ status: { ...this.store.state.status, solving: true } });
       try {
-        const statuses = new Map(this.statuses);
-        const next = await this.rebuild(doc, from, statuses);
+        let statuses = new Map(this.statuses);
+        let next = await this.rebuild(doc, from, statuses);
+        const better = this.tentative.size ? await this.withoutTentative(doc, from, statuses) : null;
+        if (better) ({ doc: next, statuses } = better);
         if (this.store.doc !== doc || this.drag) {
           if (!this.drag) this.dirty = true; // the doc changed meanwhile: solve the new one
           continue;

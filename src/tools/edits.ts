@@ -104,6 +104,141 @@ export interface TrimResult {
 }
 
 /** Power Trim at a point on an entity: remove the piece between the nearest intersections. */
+/** Two curves lying on the same line or circle (they overlap rather than cross). */
+function overlaps(a: Curve, b: Curve): boolean {
+  if (a.kind === "line" && b.kind === "line") {
+    const d = sub(a.b, a.a);
+    const l = len(d) || 1;
+    const off = (p: Vec2) => Math.abs(cross(d, sub(p, a.a))) / l;
+    return off(b.a) < 1e-7 * l && off(b.b) < 1e-7 * l;
+  }
+  const round = (c: Curve) => (c.kind === "circle" || c.kind === "arc" ? c : null);
+  const ra = round(a);
+  const rb = round(b);
+  return !!ra && !!rb && dist(ra.c, rb.c) < 1e-7 * Math.max(1, ra.r) && Math.abs(ra.r - rb.r) < 1e-7 * Math.max(1, ra.r);
+}
+
+interface TrimCut {
+  t: number;
+  p: Vec2;
+  by: Id;
+}
+
+/**
+ * What a trim at `at` removes from e: the whole entity, or the span between the nearest cuts on either side
+ * (an open curve's missing cut means "to that end"; a circle's span may wrap past t = 0).
+ */
+function trimSpan(s: Sketch, e: Entity, at: Vec2): { cv: Curve; all: true } | { cv: Curve; all: false; lo?: TrimCut; hi?: TrimCut } {
+  const cv = entityCurve(s, e)!;
+  const tP = curveParam(cv, at);
+  const hits: TrimCut[] = [];
+  for (const c of cutters(s, e.id)) {
+    if (overlaps(cv, c.cv)) continue; // e.g. a trimmed piece lying on its construction original
+    for (const h of intersect(cv, c.cv)) hits.push({ t: h.t1, p: h.p, by: c.id });
+  }
+  if (e.type === "circle") {
+    const ts = hits.filter((h) => h.t >= 0 && h.t < 1);
+    if (ts.length < 2) return { cv, all: true };
+    const hi = ts.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0] ?? ts.sort((a, b) => a.t - b.t)[0];
+    const lo = ts.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0] ?? ts.sort((a, b) => b.t - a.t)[0];
+    return { cv, all: false, lo, hi };
+  }
+  const eps = 1e-6;
+  const inner = hits.filter((h) => h.t > eps && h.t < 1 - eps);
+  const lo = inner.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0];
+  const hi = inner.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0];
+  if (!lo && !hi) return { cv, all: true };
+  return { cv, all: false, lo, hi };
+}
+
+/** The piece a trim at `at` would remove, as a polyline (null where the entity can't be trimmed). */
+export function trimPreview(s: Sketch, id: Id, at: Vec2, n = 48): Vec2[] | null {
+  const e = s.entities[id];
+  if (!e || e.type === "point" || (e.type === "line" && e.owner) || (e.type === "spline" && e.derived)) return null;
+  if (!entityCurve(s, e)) return null;
+  const span = trimSpan(s, e, at);
+  let t0 = 0;
+  let t1 = 1;
+  if (!span.all) {
+    t0 = span.lo?.t ?? 0;
+    t1 = span.hi?.t ?? 1;
+    if (e.type === "circle" && t1 <= t0) t1 += 1; // wraps past t = 0
+  }
+  const steps = e.type === "line" ? 1 : n;
+  const out: Vec2[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = t0 + ((t1 - t0) * i) / steps;
+    out.push(curvePoint(span.cv, e.type === "circle" ? t % 1 : t));
+  }
+  return out;
+}
+
+/**
+ * Trim that keeps the removed piece as construction: the original entity turns into construction geometry
+ * untouched (every relation and dimension on it stays), and solid copies of the kept pieces are laid over it,
+ * tied to it (collinear / coradial, shared end points) and to the cutting entities. Spline pieces are tied at
+ * their ends only. Trimming geometry that is already construction is an ordinary trim.
+ */
+export function trimToConstruction(ed: Editor, id: Id, at: Vec2): TrimResult {
+  const s = ed.s;
+  const e = s.entities[id];
+  if (!e || e.type === "point") return { ok: false };
+  if (e.construction) return trimAt(ed, id, at);
+  if (e.type === "line" && e.owner) return { ok: false, message: "Polygon sides cannot be trimmed" };
+  if (e.type === "spline" && e.derived) return { ok: false, message: "Driven offsets follow their source" };
+  const span = trimSpan(s, e, at);
+  ed.put({ ...e, construction: true });
+  if (span.all) return { ok: true };
+  const { cv, lo, hi } = span;
+  const coincide = (a: Id, b: Id) => ed.addRelation({ type: "coincident", refs: [a, b] });
+  if (e.type === "circle") {
+    // Solid arc CCW from the cut after the click around to the cut before it: same center, start on the circle.
+    const arc = addArc(ed, ptv(s, e.c), hi!.p, lo!.p);
+    coincide(arc.c, e.c);
+    coincide(arc.s, id);
+    attach(ed, arc.s, hi!.p, hi!.by, arc.arc);
+    attach(ed, arc.e, lo!.p, lo!.by, arc.arc);
+    return { ok: true };
+  }
+  const [startId, endId] = endPoints(e);
+  // Kept pieces [0, lo] and [hi, 1]: each has one end of e and one cut.
+  const pieces: { t0: number; t1: number; cut: TrimCut; cutAtStart: boolean }[] = [];
+  if (lo) pieces.push({ t0: 0, t1: lo.t, cut: lo, cutAtStart: false });
+  if (hi) pieces.push({ t0: hi.t, t1: 1, cut: hi, cutAtStart: true });
+  for (const pc of pieces) {
+    let ends: [Id, Id];
+    let pieceId: Id;
+    if (e.type === "line") {
+      const r = addLine(ed, curvePoint(cv, pc.t0), curvePoint(cv, pc.t1));
+      [pieceId, ends] = [r.line, [r.p1, r.p2]];
+    } else if (e.type === "arc") {
+      const r = addArc(ed, arcGeom(s, e).c, curvePoint(cv, pc.t0), curvePoint(cv, pc.t1));
+      coincide(r.c, e.c);
+      [pieceId, ends] = [r.arc, [r.s, r.e]];
+    } else {
+      const r = addSpline(ed, subBezier(e.cps.map((q) => ptv(s, q)), pc.t0, pc.t1));
+      [pieceId, ends] = [r.spline, [r.cps[0], r.cps[r.cps.length - 1]]];
+    }
+    const [cutEnd, outerEnd] = pc.cutAtStart ? ends : [ends[1], ends[0]];
+    coincide(outerEnd, pc.cutAtStart ? endId : startId);
+    // The cut end sits on the original (an arc piece is already on it through its center and outer end)
+    // and on the cutter.
+    if (e.type !== "arc" && !cutterEndOn(ed, pc.cut, id)) coincide(cutEnd, id);
+    attach(ed, cutEnd, pc.cut.p, pc.cut.by, pieceId);
+  }
+  return { ok: true };
+}
+
+/** The cut is at an end point of the cutter that is already tied onto `id` (so tying it again is redundant). */
+function cutterEndOn(ed: Editor, cut: TrimCut, id: Id): boolean {
+  const s = ed.s;
+  const cutter = s.entities[cut.by];
+  if (!cutter) return false;
+  const tol = 1e-7 * Math.max(1, len(cut.p));
+  const end = endPoints(cutter).find((q) => dist(ptv(s, q), cut.p) < tol);
+  return !!end && Object.values(s.relations).some((r) => r.type === "coincident" && r.refs.includes(end) && r.refs.includes(id));
+}
+
 export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
   const s = ed.s;
   const e = s.entities[id];
@@ -111,19 +246,16 @@ export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
   if (e.type === "line" && e.owner) return { ok: false, message: "Polygon sides cannot be trimmed" };
   if (e.type === "spline" && e.derived) return { ok: false, message: "Driven offsets follow their source" };
   loosenOnEdge(ed, id);
-  const cv = entityCurve(s, e)!;
-  const tP = curveParam(cv, at);
-  const hits: { t: number; p: Vec2; by: Id }[] = [];
-  for (const c of cutters(s, id)) for (const h of intersect(cv, c.cv)) hits.push({ t: h.t1, p: h.p, by: c.id });
+  const span = trimSpan(s, e, at);
+  if (span.all) {
+    ed.deleteEntities([id]);
+    return { ok: true };
+  }
+  const { lo, hi } = span;
   if (e.type === "circle") {
-    const ts = hits.filter((h) => h.t >= 0 && h.t < 1);
-    if (ts.length < 2) {
-      ed.deleteEntities([id]);
-      return { ok: true };
-    }
-    // The kept arc runs CCW from the first cut after tP around to the last cut before it.
-    const after = ts.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0] ?? ts.sort((a, b) => a.t - b.t)[0];
-    const before = ts.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0] ?? ts.sort((a, b) => b.t - a.t)[0];
+    // The kept arc runs CCW from the first cut after the click around to the last cut before it.
+    const after = hi!;
+    const before = lo!;
     const sId = ed.addPoint(after.p.x, after.p.y, id);
     const eId = ed.addPoint(before.p.x, before.p.y, id);
     ed.put({ id, type: "arc", c: e.c, s: sId, e: eId, ...(e.construction ? { construction: true } : {}) });
@@ -131,20 +263,13 @@ export function trimAt(ed: Editor, id: Id, at: Vec2): TrimResult {
     attach(ed, eId, before.p, before.by, id);
     return { ok: true };
   }
-  const eps = 1e-6;
-  const inner = hits.filter((h) => h.t > eps && h.t < 1 - eps);
-  const lo = inner.filter((h) => h.t < tP).sort((a, b) => b.t - a.t)[0];
-  const hi = inner.filter((h) => h.t > tP).sort((a, b) => a.t - b.t)[0];
-  if (!lo && !hi) {
-    ed.deleteEntities([id]);
-    return { ok: true };
-  }
   const [startId, endId] = endPoints(e);
   if (!lo) {
     // Remove [0, hi]: the start moves to hi.
+    const cut = hi!; // trimSpan returns at least one cut when not removing everything
     detachEnd(ed, id, startId);
-    reshape(ed, e, hi.t, 1);
-    attach(ed, startId, hi.p, hi.by, id);
+    reshape(ed, e, cut.t, 1);
+    attach(ed, startId, cut.p, cut.by, id);
     return { ok: true };
   }
   if (!hi) {

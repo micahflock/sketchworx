@@ -8,7 +8,7 @@ import { entitySamples } from "../render/hit";
 import type { Painter } from "../render/painter";
 import { theme } from "../render/theme";
 import { applySnap, drawSnap } from "./common";
-import { addSpline, cornerAt, entityCurve, extendAt, extendTarget, filletCorner, findChain, mirrorEntities, offsetChain, sideOf, trimAt } from "./edits";
+import { addSpline, cornerAt, entityCurve, extendAt, extendTarget, filletCorner, findChain, mirrorEntities, offsetChain, sideOf, trimAt, trimPreview, trimToConstruction } from "./edits";
 import { fmt } from "./line";
 import type { PEvent, Tool, ToolHost, ToolOption } from "./tool";
 
@@ -126,7 +126,10 @@ export class TrimTool implements Tool {
   readonly cursor = "crosshair";
   private stroke: Vec2[] | null = null;
   private trimmedAny = false;
-  private hover: Id | null = null;
+  /** The piece a click would remove (hover preview). */
+  private piece: Vec2[] | null = null;
+  /** Keep trimmed pieces as construction instead of deleting them. */
+  private keepConstruction = false;
 
   constructor(private host: EditHost) {}
   activate() {
@@ -134,18 +137,22 @@ export class TrimTool implements Tool {
   }
   deactivate() {
     this.finishStroke();
+    this.piece = null;
   }
   onDown(e: PEvent) {
     if (e.button !== 0) return;
+    this.piece = null;
     this.stroke = [e.world];
     this.trimmedAny = false;
     this.host.editBegin();
   }
   onMove(e: PEvent) {
     if (!this.stroke) {
+      // Highlight only the piece a click here would remove, not the whole entity.
       const h = this.host.hit(e.world, e.pointerType, { points: false, own: true });
-      this.hover = h?.id ?? null;
-      this.host.setHover(this.hover);
+      this.piece = h ? trimPreview(this.host.sketch(), h.id, e.world) : null;
+      this.host.setHover(null);
+      this.host.requestRender();
       return;
     }
     const prev = this.stroke[this.stroke.length - 1];
@@ -168,7 +175,7 @@ export class TrimTool implements Tool {
     }
     if (crossings.length) {
       this.host.editApply((ed) => {
-        for (const c of crossings) if (ed.s.entities[c.id]) trimAt(ed, c.id, c.p);
+        for (const c of crossings) if (ed.s.entities[c.id]) this.trim(ed, c.id, c.p);
       });
       this.trimmedAny = true;
     }
@@ -181,7 +188,7 @@ export class TrimTool implements Tool {
       if (h) {
         let msg: string | undefined;
         this.host.editApply((ed) => {
-          msg = trimAt(ed, h.id, e.world).message;
+          msg = this.trim(ed, h.id, e.world).message;
         });
         this.trimmedAny = true;
         if (msg) this.host.flash(msg, "error");
@@ -195,10 +202,25 @@ export class TrimTool implements Tool {
     this.host.editEnd("Trim");
     this.host.requestRender();
   }
+  private trim(ed: Parameters<typeof trimAt>[0], id: Id, at: Vec2) {
+    return this.keepConstruction ? trimToConstruction(ed, id, at) : trimAt(ed, id, at);
+  }
+  options(): ToolOption[] {
+    return [
+      {
+        kind: "check",
+        key: "keepConstruction",
+        label: "Keep trimmed pieces as construction",
+        value: this.keepConstruction,
+        set: (v) => (this.keepConstruction = v),
+      },
+    ];
+  }
   cancel(): boolean {
     return false;
   }
   draw(p: Painter) {
+    if (this.piece) p.polyline(this.piece, { color: theme.hover, width: theme.emphWidth + 2 });
     if (this.stroke && this.stroke.length > 1) p.polyline(this.stroke, { color: theme.trimStroke, width: 1.5, dash: [3, 3] });
   }
 }

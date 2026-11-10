@@ -273,9 +273,15 @@ export class App implements ToolHost, ArtHost {
         mirrorEntities(ed, fresh, axis);
       };
     }
-    const next = applyCommand(this.store.doc, fn);
+    let tentative: Id[] = [];
+    const inner = fn;
+    const next = applyCommand(this.store.doc, (ed) => {
+      inner(ed);
+      tentative = [...ed.tentative];
+    });
     if (next !== this.store.doc) {
       this.store.commitDoc(next, label);
+      this.solver.markTentative(tentative);
       this.afterChange();
     }
     return next;
@@ -819,7 +825,10 @@ export class App implements ToolHost, ArtHost {
       (e) => {
         e.preventDefault();
         const pe = this.toEvent(e);
-        const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015));
+        // Wheel down zooms in. A trackpad pinch arrives as a wheel with ctrlKey and spreading the
+        // fingers gives negative deltaY, so it keeps the opposite sign (spread = zoom in).
+        const dir = e.ctrlKey ? -1 : 1;
+        const factor = Math.exp(dir * e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015));
         this.view.zoomAt(pe.screen, factor);
         this.requestRender();
       },

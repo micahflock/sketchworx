@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { relationNames } from "../model/relations";
 import { useApp, usePhone, useUi } from "./hooks";
+import { Icon } from "./icons";
 import { Glyph } from "./RelationsUi";
 import css from "./ui.module.css";
 
@@ -56,8 +57,8 @@ export function ContextBar({ docked = false }: { docked?: boolean }) {
       )}
       {hasCurves && (
         <button title="Construction Geometry" onClick={() => app.toggleConstruction()}>
-          <span class={css.glyph} style={{ background: "var(--sw-glyph-plain-bg)", color: "var(--sw-glyph-plain-fg)", borderColor: "var(--sw-glyph-plain-border)" }}>
-            ┄
+          <span class={`${css.glyph} ${css.glyphIcon}`} style={{ background: "var(--sw-glyph-plain-bg)", color: "var(--sw-glyph-plain-fg)", borderColor: "var(--sw-glyph-plain-border)" }}>
+            <Icon name="construction" />
           </span>
         </button>
       )}

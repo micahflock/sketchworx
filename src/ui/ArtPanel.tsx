@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { artBackground, artDefaults, chainStyle, docChains, effectiveCorner } from "../model/art";
 import type { Chain, Overridable, ResolvedStyle } from "../model/art";
 import type { ArtSide } from "../model/types";
@@ -37,8 +37,89 @@ function NumInput({ value, onCommit, title }: { value: number; onCommit: (v: num
   );
 }
 
+/**
+ * Color swatch that opens a picker with Apply / Cancel. Nothing changes until Apply (or Enter); a press
+ * anywhere else, Esc, scrolling or resizing cancels.
+ */
 function ColorInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
-  return <input type="color" value={value} onChange={(e) => onCommit((e.target as HTMLInputElement).value)} />;
+  const [open, setOpen] = useState<{ top: number; left: number } | null>(null);
+  const [draft, setDraft] = useState(value);
+  const pop = useRef<HTMLDivElement>(null);
+  const swatch = useRef<HTMLButtonElement>(null);
+  const cancel = () => setOpen(null);
+  const apply = () => {
+    setOpen(null);
+    if (draft.toLowerCase() !== value.toLowerCase()) onCommit(draft);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!pop.current?.contains(t) && !swatch.current?.contains(t)) cancel();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancel();
+    };
+    const away = (e: Event) => {
+      if (!pop.current?.contains(e.target as Node)) cancel();
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("resize", cancel);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("scroll", away, true);
+      window.removeEventListener("resize", cancel);
+    };
+  }, [!!open]);
+  return (
+    <>
+      <button
+        ref={swatch}
+        class={css.colorSwatch}
+        title={value}
+        aria-label={`Color ${value}`}
+        aria-expanded={!!open}
+        style={{ background: value }}
+        onClick={(e) => {
+          if (open) return cancel();
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setDraft(value);
+          setOpen({ top: r.bottom + 4, left: Math.max(8, Math.min(r.right - 196, window.innerWidth - 204)) });
+        }}
+      />
+      {open && (
+        <div
+          ref={pop}
+          class={css.colorPop}
+          role="dialog"
+          aria-label="Pick a color"
+          style={{ top: `${open.top}px`, left: `${open.left}px` }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              apply();
+            }
+          }}
+        >
+          <div class={css.colorPopRow}>
+            <input type="color" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} aria-label="Color" />
+            <code>{draft}</code>
+          </div>
+          <div class={css.colorPopRow}>
+            <button class={css.colorPopBtn} onClick={cancel}>
+              Cancel
+            </button>
+            <button class={`${css.colorPopBtn} ${css.colorPopApply}`} onClick={apply}>
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 /** A labelled value; `custom` shows a reset button back to the default, otherwise a "default" tag. */

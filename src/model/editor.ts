@@ -14,6 +14,8 @@ export class Editor {
   private sketch: Sketch;
   private readonly fi: number;
   private copied = { doc: false, sketch: false, entities: false, relations: false, dimensions: false, features: false };
+  /** Automatic relations added by this command that the app drops if they over-define the sketch. */
+  readonly tentative: Id[] = [];
 
   constructor(base: Doc, featureId: Id = base.active) {
     this.doc = base;

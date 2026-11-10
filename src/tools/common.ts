@@ -17,9 +17,9 @@ export function applySnap(ed: Editor, pointId: Id, sn: SnapResult | undefined) {
   else if (sn.curve && ed.s.entities[sn.curve]) ed.addRelation({ type: "coincident", refs: [pointId, sn.curve] });
 }
 
-/** Add H/V to a line created from a snap that inferred it. */
+/** Add H/V to a line created from a snap that inferred it (dropped later if it over-defines the sketch). */
 export function applyHV(ed: Editor, lineId: Id, sn: SnapResult | undefined) {
-  if (sn?.hv) ed.addRelation({ type: sn.hv, refs: [lineId] });
+  if (sn?.hv) ed.tentative.push(ed.addRelation({ type: sn.hv, refs: [lineId] }));
 }
 
 export function addLine(ed: Editor, a: Vec2, b: Vec2, construction = false): { line: Id; p1: Id; p2: Id } {

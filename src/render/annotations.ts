@@ -54,10 +54,14 @@ function glyphAnchor(p: Painter, s: Sketch, e: Entity): { at: Vec2; dir: Vec2 } 
   }
 }
 
+/** Spacing between glyph centers (glyphs are 14 px). */
+const GLYPH_STEP = 18;
+
 /** Draw relation glyphs; returns their hit rectangles. */
 export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, hover: Id | null, selection: Set<Id>): AnnotationHit[] {
   const hits: AnnotationHit[] = [];
   const count = new Map<Id, number>();
+  const placed: Vec2[] = [];
   for (const r of Object.values(s.relations)) {
     if (!relationHasGlyph(s, r)) continue;
     const bad = conflicts.has(r.id);
@@ -74,11 +78,16 @@ export function drawRelationGlyphs(p: Painter, s: Sketch, conflicts: Set<Id>, ho
     for (const id of targets) {
       const e = s.entities[id];
       if (!e || s.ext?.[id]?.hidden) continue;
-      const k = count.get(id) ?? 0;
-      count.set(id, k + 1);
       const { at, dir } = glyphAnchor(p, s, e);
-      const x = at.x + dir.x * k * 18;
-      const y = at.y + dir.y * k * 18;
+      // Next slot along the entity, skipping any taken by another glyph (e.g. two points at one corner).
+      let k = count.get(id) ?? 0;
+      const step = GLYPH_STEP / Math.max(Math.abs(dir.x), Math.abs(dir.y), 0.5); // boxes clear on diagonals too
+      const slot = (i: number) => ({ x: at.x + dir.x * i * step, y: at.y + dir.y * i * step });
+      const taken = (c: Vec2) => placed.some((q) => Math.abs(q.x - c.x) < GLYPH_STEP - 2 && Math.abs(q.y - c.y) < GLYPH_STEP - 2);
+      while (k < 24 && taken(slot(k))) k++;
+      count.set(id, k + 1);
+      const { x, y } = slot(k);
+      placed.push({ x, y });
       const bg = bad ? theme.relGlyphConflict : hot ? theme.relGlyphHotBg : theme.relGlyphBg;
       const fg = bad ? theme.relGlyphConflictFg : hot ? theme.relGlyphHotFg : theme.relGlyphFg;
       const rect = p.badge(relationIcons[r.type], x, y, bg, fg, bad ? theme.relGlyphConflictBorder : hot ? theme.hover : theme.relGlyphBorder);

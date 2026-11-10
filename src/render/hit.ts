@@ -47,8 +47,11 @@ export function hitTest(s: Sketch, p: Vec2, tol: number, skip?: Set<Id>, filter?
       const o = s.entities[e.owner];
       if (o?.type === "spline" && o.derived) continue;
     }
-    const d = distToEntity(s, e, p);
-    if (d > tol) continue;
+    const raw = distToEntity(s, e, p);
+    if (raw > tol) continue;
+    // Geometry borrowed from other sketches counts as a little farther, so where it overlaps the
+    // active sketch's own (collinear lines, shared points) the active sketch wins.
+    const d = s.ext?.[e.id] ? raw + tol * 0.5 : raw;
     if (e.type === "point") {
       // Ties: standalone points first, the origin last.
       const rank = (id: Id, owner?: Id) => (id === "origin" ? 2 : owner ? 1 : 0);

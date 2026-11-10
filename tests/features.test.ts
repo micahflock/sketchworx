@@ -11,7 +11,7 @@ import type { Doc, Id } from "../src/model/types";
 import { buildSolverInput } from "../src/solver/build";
 import { GcsCore } from "../src/solver/gcs";
 import type { Solver } from "../src/solver/types";
-import { addArc, addCircle, addLine } from "../src/tools/common";
+import { addArc, addCircle, addLine, applyHV } from "../src/tools/common";
 import { buildLoop } from "../src/tools/shapes";
 import { addSpline, convertEntities, convertible, mirrorEntities, offsetChain, recomputeDerived, trimAt } from "../src/tools/edits";
 import { missingKind, missingRefs, repairWith } from "../src/tools/repair";
@@ -618,5 +618,49 @@ describe("repair dangling references", () => {
     const rel = Object.values(s.relations).find((r) => r.type === "perpendicular")!;
     expect(repairWith(s, rel, ids.top, circle)).toBe("That does not fit this relation");
     expect(typeof repairWith(s, rel, ids.top, ids.bottom)).toBe("object");
+  });
+});
+
+describe("automatic H/V that would over-define", () => {
+  /** Commit like the app does: the command's tentative relations go to the solver service. */
+  function drawLine(store: Store, svc: SolverService, a: { x: number; y: number; to?: Id }, b: { x: number; y: number; to?: Id }) {
+    let tentative: Id[] = [];
+    let line = "";
+    const next = applyCommand(store.doc, (ed) => {
+      const r = addLine(ed, a, b);
+      line = r.line;
+      if (a.to) ed.addRelation({ type: "coincident", refs: [r.p1, a.to] });
+      if (b.to) ed.addRelation({ type: "coincident", refs: [r.p2, b.to] });
+      applyHV(ed, r.line, { hv: "horizontal", pos: b, guides: [], glyphs: [] });
+      tentative = [...ed.tentative];
+    });
+    store.commitDoc(next, "Line");
+    svc.markTentative(tentative);
+    return line;
+  }
+  const hasH = (doc: Doc, line: Id) => Object.values(activeSketch(doc).relations).some((r) => r.type === "horizontal" && r.refs.includes(line));
+
+  it("is dropped when both ends are already fixed", async () => {
+    const { doc, ids } = base();
+    const { store, svc } = service(doc);
+    await settle(store, svc);
+    expect(store.state.status.conflicts).toEqual([]);
+    const s = activeSketch(store.doc);
+    const tl = (s.entities[ids.top] as { p2: Id }).p2; // top-left corner
+    const line = drawLine(store, svc, { ...ptv(s, tl), to: tl }, { ...ptv(s, ids.corner), to: ids.corner });
+    const d = await settle(store, svc);
+    expect(hasH(d, line)).toBe(false);
+    expect(store.state.status.conflicts).toEqual([]);
+  });
+
+  it("is kept when it constrains the line", async () => {
+    const { doc, ids } = base();
+    const { store, svc } = service(doc);
+    await settle(store, svc);
+    const s = activeSketch(store.doc);
+    const line = drawLine(store, svc, { ...ptv(s, ids.corner), to: ids.corner }, { x: 200, y: 61 });
+    const d = await settle(store, svc);
+    expect(hasH(d, line)).toBe(true);
+    expect(store.state.status.conflicts).toEqual([]);
   });
 });

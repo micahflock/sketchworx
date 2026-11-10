@@ -2,11 +2,11 @@
  * Outline extraction: chains non-construction geometry into closed loops (fills) and open
  * chains (Art view strokes), and reports open ends and self-intersections.
  */
-import { toCubics } from "../geom/bezier";
+import { bezierClosest, toCubics } from "../geom/bezier";
 import type { Curve } from "../geom/curves";
 import { intersect } from "../geom/curves";
 import type { Box, Vec2 } from "../geom/vec";
-import { boxAdd, ccwSweep, dist, emptyBox } from "../geom/vec";
+import { boxAdd, ccwSweep, dist, distToSegment, emptyBox, normAngle } from "../geom/vec";
 import { arcGeom, ptv } from "./sketch";
 import type { Doc, Id, Sketch } from "./types";
 
@@ -287,6 +287,17 @@ export function orientNested(loops: Loop[]): Loop[] {
   return loops;
 }
 
+/** Distance from p to a segment. */
+function distToSeg(p: Vec2, sg: Seg): number {
+  if (sg.kind === "line") return distToSegment(p, sg.start, sg.end);
+  if (sg.kind === "arc") {
+    const lo = sg.sweep >= 0 ? sg.a0 : sg.a0 + sg.sweep;
+    if (normAngle(Math.atan2(p.y - sg.c.y, p.x - sg.c.x) - lo) > Math.abs(sg.sweep) + 1e-9) return Math.min(dist(p, sg.start), dist(p, sg.end));
+    return Math.abs(dist(p, sg.c) - sg.r);
+  }
+  return bezierClosest([sg.start, sg.c1, sg.c2, sg.end], p).d;
+}
+
 /** Points that have a coincident relation to a curve (they sit on it, usually mid-span). */
 function curveJoints(s: Sketch): Vec2[] {
   const out: Vec2[] = [];
@@ -306,12 +317,17 @@ export function buildOutline(s: Sketch, diagnostics = true): Outline {
   const { bounds, tol } = sizeTol(segs, circles);
   const g = graphOf(segs, tol);
   const joints = curveJoints(s);
+  // Hanging ends only: an end shared by no other segment, not made coincident with a curve, and not
+  // lying along another segment. Junctions (3+ ends at a point, T-junctions) are deliberate.
   const openEnds: Vec2[] = [];
+  const eps = tol * 10;
+  const curveSegs = [...segs, ...circles.flatMap((c) => c.segs)];
   for (const [n, l] of g.adj) {
-    if (l.length % 2 === 0) continue;
+    if (l.length !== 1) continue;
     const q = g.nodes[n];
-    // An end made coincident with another line or curve (a T-junction) is meant to stop there.
-    if (!joints.some((j) => dist(j, q) <= tol)) openEnds.push(q);
+    if (joints.some((j) => dist(j, q) <= tol)) continue;
+    if (curveSegs.some((sg) => dist(sg.start, q) > tol && dist(sg.end, q) > tol && distToSeg(q, sg) <= eps)) continue;
+    openEnds.push(q);
   }
   const loops: Loop[] = [...circles];
   for (const path of findLoops(g)) loops.push({ segs: path, area: polyArea(loopPolygon({ segs: path, area: 0 })) });

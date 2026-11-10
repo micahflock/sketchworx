@@ -257,7 +257,7 @@ export function CommandManager() {
                       caret={(e) => toggleFlyout(it.flyout, e)}
                     />
                     {open?.id === it.flyout && (
-                      <div class={css.flyout} style={{ top: open.top, left: open.left }}>
+                      <div class={css.flyout} style={{ top: `${open.top}px`, left: `${open.left}px` }}>
                         {it.items.map((b) => (
                           <button
                             key={b.id}
