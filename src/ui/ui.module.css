@@ -386,6 +386,11 @@
   .cmdHint {
     display: none;
   }
+  /* Collapsed to its icon: center the magnifying glass in the square. */
+  .cmdBox:not(.cmdBoxOpen) .cmdIcon {
+    left: 50%;
+    transform: translateX(-50%);
+  }
   .cmdBoxOpen {
     position: absolute;
     left: 6px;
