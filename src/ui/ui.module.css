@@ -255,9 +255,13 @@
 /* ---------------- Command box */
 .toolbarEnd {
   flex: none;
-  display: flex;
-  align-items: center;
+  border-right: none;
+}
+.toolbarEnd .groupKeys {
   gap: 4px;
+}
+.legendSpacer {
+  visibility: hidden;
 }
 .cmdBox {
   position: relative;
@@ -381,6 +385,11 @@
   }
   .cmdHint {
     display: none;
+  }
+  /* Collapsed to its icon: center the magnifying glass in the square. */
+  .cmdBox:not(.cmdBoxOpen) .cmdIcon {
+    left: 50%;
+    transform: translateX(-50%);
   }
   .cmdBoxOpen {
     position: absolute;
@@ -998,6 +1007,10 @@
   color: var(--sw-text);
     min-width: 44px !important;
     padding: 0 8px;
+  }
+  /* The touch keys float over the bottom of the PropertyManager: leave room to scroll past them. */
+  .pm {
+    padding-bottom: calc(8px + var(--touch-dock-h, 0px));
   }
   /* The PropertyManager slides over the canvas instead of taking its width. */
   .main {

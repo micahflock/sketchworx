@@ -284,12 +284,18 @@ export function CommandManager() {
           </div>
         ))}
       </div>
-      <div class={css.toolbarEnd}>
-        <CommandBox />
-        {ui.theme === "hell" && <HellPalette />}
-        <button class={css.tbtn} title={themeToggleLabel[next]} aria-label={themeToggleLabel[next]} onClick={() => app.runAction("toggleTheme")}>
-          <Icon name={next === "light" ? "sun" : next === "dark" ? "moon" : "hell"} />
-        </button>
+      {/* Laid out like a group (an empty legend line above the keys) so it lines up with the tool buttons. */}
+      <div class={`${css.group} ${css.toolbarEnd}`}>
+        <span class={`${css.groupLegend} ${css.legendSpacer}`} aria-hidden="true">
+          &nbsp;
+        </span>
+        <div class={css.groupKeys}>
+          <CommandBox />
+          {ui.theme === "hell" && <HellPalette />}
+          <button class={css.tbtn} title={themeToggleLabel[next]} aria-label={themeToggleLabel[next]} onClick={() => app.runAction("toggleTheme")}>
+            <Icon name={next === "light" ? "sun" : next === "dark" ? "moon" : "hell"} />
+          </button>
+        </div>
       </div>
     </div>
   );
