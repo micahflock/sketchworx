@@ -26,6 +26,23 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # A test copy of a work-in-progress branch at /print/ (Print mode). It keeps its own autosave and
+      # offline cache. Skipped when the branch is gone; remove this step once Print mode is merged.
+      - name: Build the Print mode preview into /print/
+        env:
+          PREVIEW_BRANCH: claude/hopeful-hypatia-ybc23w
+        run: |
+          if git ls-remote --exit-code --heads origin "$PREVIEW_BRANCH" > /dev/null; then
+            git fetch --depth=50 origin "$PREVIEW_BRANCH"
+            git worktree add ../preview FETCH_HEAD
+            cd ../preview
+            npm ci
+            npm test
+            SKETCHWORX_CHANNEL=print npm run build
+            cp -r dist "$GITHUB_WORKSPACE/dist/print"
+          else
+            echo "No branch $PREVIEW_BRANCH: no preview"
+          fi
       - uses: actions/configure-pages@v5
         with:
           enablement: true
