@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyCommand } from "../src/model/editor";
-import { addRelationCmd, relationIcons, relationNames, validRelations } from "../src/model/relations";
+import { addRelationCmd, quickRelations, relationIcons, relationNames, validRelations } from "../src/model/relations";
 import { activeSketch, createDoc } from "../src/model/sketch";
 import { addArc, addCircle, addLine } from "../src/tools/common";
 
@@ -39,6 +39,20 @@ describe("validRelations", () => {
   });
   it("two points", () => {
     expect(validRelations(s, [ids.p, ids.q])).toEqual(["horizontal", "vertical", "coincident", "fix"]);
+  });
+});
+
+describe("quickRelations", () => {
+  it("offers Fix after the top five", () => {
+    const { s, ids } = fixture();
+    expect(quickRelations(s, [ids.l1, ids.l2])).toEqual(["horizontal", "vertical", "equal", "parallel", "perpendicular", "fix"]);
+    expect(quickRelations(s, [ids.l1p1, ids.l1])).toEqual(["fix"]);
+  });
+  it("drops Fix once everything selected is Fixed", () => {
+    const { doc, ids } = fixture();
+    const s1 = activeSketch(applyCommand(doc, (ed) => addRelationCmd(ed, "fix", [ids.l1])));
+    expect(quickRelations(s1, [ids.l1])).not.toContain("fix");
+    expect(quickRelations(s1, [ids.l1, ids.l2])).toContain("fix");
   });
 });
 

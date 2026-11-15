@@ -12,6 +12,8 @@ Running log of the Constraint Sketcher build (see the build spec). Newest first 
 - A Fix still wins against a relation or dimension that would move it: an inconsistent pin is kept and the
   conflict is reported as before. A relation that agrees with Fixed geometry (Horizontal on a Fixed
   horizontal line) is accepted, with the Fix giving way.
+- The quick picker (context bar) offers Fix after the top five relations whenever it applies, unless every
+  selected entity is already Fixed (`quickRelations` in `src/model/relations.ts`).
 
 ## Toolbar icons: redrawn from a CAD survey ✅
 

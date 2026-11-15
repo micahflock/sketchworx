@@ -171,6 +171,18 @@ export function validRelations(s: Sketch, ids: Id[]): RelationType[] {
   return relationOrder.filter((r) => out.has(r));
 }
 
+/**
+ * Relations for the quick picker (context bar): the first few likely ones, plus Fix whenever it applies
+ * and some selected entity is not Fixed yet.
+ */
+export function quickRelations(s: Sketch, ids: Id[], max = 5): RelationType[] {
+  const valid = validRelations(s, ids);
+  const out: RelationType[] = valid.filter((t) => t !== "fix").slice(0, max);
+  const fixed = new Set(Object.values(s.relations).flatMap((r) => (r.type === "fix" ? r.refs : [])));
+  if (valid.includes("fix") && !ids.every((id) => fixed.has(id))) out.push("fix");
+  return out;
+}
+
 function sharesEndpoint(s: Sketch, a: Entity, b: Entity): boolean {
   const ea = endPoints(a);
   const eb = endPoints(b);

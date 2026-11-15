@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { relationNames } from "../model/relations";
+import { quickRelations, relationNames } from "../model/relations";
 import { useApp, usePhone, useUi } from "./hooks";
 import { Icon } from "./icons";
 import { Glyph } from "./RelationsUi";
@@ -31,7 +31,7 @@ export function ContextBar({ docked = false }: { docked?: boolean }) {
   });
   if (!ui.contextBar || app.tool.id !== "select") return null;
   if (docked !== (phone && ui.touchUi)) return null;
-  const valid = app.validRelations().filter((t) => t !== "fix").slice(0, 5);
+  const valid = quickRelations(app.sketch(), ui.selection);
   const s = app.sketch();
   const hasCurves = ui.selection.some((id) => s.entities[id] && s.entities[id].type !== "point" && !s.ext?.[id]);
   const canConvert = ui.selection.some((id) => s.ext?.[id]);
