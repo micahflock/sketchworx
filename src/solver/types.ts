@@ -26,8 +26,12 @@ export interface SolverParams {
   extras?: { id: SId; value: number }[];
 }
 
-/** Constraint vocabulary. `owner` is the relation or dimension id it came from. */
-export type SolverConstraint = { id: SId; owner: SId } & (
+/**
+ * Constraint vocabulary. `owner` is the relation or dimension id it came from. A `soft` constraint
+ * (Fix) gives way: when the others already pin what it pins and it holds, it is left out rather
+ * than reported as over-defining.
+ */
+export type SolverConstraint = { id: SId; owner: SId; soft?: boolean } & (
   | { kind: "coincident"; a: SId; b: SId }
   | { kind: "horizontal"; a: SId; b: SId }
   | { kind: "vertical"; a: SId; b: SId }

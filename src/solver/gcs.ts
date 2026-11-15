@@ -3,8 +3,8 @@
  * solver worker (or directly in tests).
  */
 import { Algorithm, DebugMode, GcsWrapper, init_planegcs_module } from "./planegcs/index";
-import { analyse } from "./analysis";
-import { buildResiduals, indexParams } from "./residuals";
+import { analyse, dependentSoft } from "./analysis";
+import { buildResiduals, indexParams, type ParamIndex, type Residual } from "./residuals";
 import type { DragTarget, EntityState, SolveResult, SolverConstraint, SolverParams } from "./types";
 
 type Prim = Record<string, unknown> & { id: string; type: string };
@@ -162,6 +162,32 @@ function dragPrims(targets: DragTarget[], params: SolverParams): { prims: Prim[]
 
 const ownerOf = (cid: string) => cid.split("#")[0];
 
+/** Locked parameters (geometry of earlier sketches) are known, not degrees of freedom. */
+function lockedResiduals(pi: ParamIndex, params: SolverParams): Residual[] {
+  const res: Residual[] = [];
+  const pin = (k: string) => {
+    const i = pi.index.get(k);
+    if (i === undefined) return;
+    const v0 = pi.values[i];
+    res.push({ owner: "#fixed", deps: [i], f: (x) => [x[i] - v0] });
+  };
+  for (const p of params.points) if (p.fixed) (pin(`${p.id}.x`), pin(`${p.id}.y`));
+  for (const g of params.geoms) if (g.kind === "circle" && g.fixed) pin(`${g.id}.r`);
+  return res;
+}
+
+/** Leave out soft constraints (Fix) that hold at the solved `params` and that the others already imply. */
+function withoutDependentSoft(params: SolverParams, cons: SolverConstraint[]): SolverConstraint[] {
+  if (!cons.some((c) => c.soft)) return cons;
+  const pi = indexParams(params);
+  const hard = [...buildResiduals(pi, cons.filter((c) => !c.soft)), ...lockedResiduals(pi, params)];
+  const soft = buildResiduals(pi, cons.filter((c) => c.soft)).filter((r) => r.id);
+  const dep = dependentSoft(pi, hard, soft);
+  const keep = new Set(soft.filter((_, i) => !dep[i]).map((r) => r.id));
+  const drop = new Set(soft.filter((r) => !keep.has(r.id)).map((r) => r.id));
+  return drop.size ? cons.filter((c) => !drop.has(c.id)) : cons;
+}
+
 /** Extra scalars are free solver parameters (not fixed like ordinary sketch params). */
 function pushExtras(w: GcsWrapper, params: SolverParams) {
   for (const e of params.extras ?? []) w.push_sketch_param(e.id, e.value, false);
@@ -221,6 +247,8 @@ export class GcsCore {
       }
       w.apply_solution();
       const solved1 = this.read(w, params);
+      // Fix gives way where the other relations already hold what it pins: not over-defining.
+      cons = withoutDependentSoft(solved1, cons);
       // Pass 2 at the solved geometry for an accurate redundancy diagnosis.
       w.clear_data();
       pushExtras(w, solved1);
@@ -239,17 +267,7 @@ export class GcsCore {
 
   private finish(params: SolverParams, cons: SolverConstraint[], ok: boolean, conflicts: string[], redundant: string[], t0: number): SolveResult {
     const pi = indexParams(params);
-    const res = buildResiduals(pi, cons);
-    // Locked parameters (geometry of earlier sketches) are known, not degrees of freedom.
-    const pin = (k: string) => {
-      const i = pi.index.get(k);
-      if (i === undefined) return;
-      const v0 = pi.values[i];
-      res.push({ owner: "#fixed", deps: [i], f: (x) => [x[i] - v0] });
-    };
-    for (const p of params.points) if (p.fixed) (pin(`${p.id}.x`), pin(`${p.id}.y`));
-    for (const g of params.geoms) if (g.kind === "circle" && g.fixed) pin(`${g.id}.r`);
-    const an = analyse(pi, res);
+    const an = analyse(pi, [...buildResiduals(pi, cons), ...lockedResiduals(pi, params)]);
     const entityStatus: Record<string, EntityState> = {};
     const det = (k: string) => an.determined[pi.index.get(k)!] === 1;
     const ptFull = (id: string) => det(`${id}.x`) && det(`${id}.y`);

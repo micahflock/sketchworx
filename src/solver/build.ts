@@ -259,10 +259,10 @@ function relationConstraints(s: Sketch, r: Relation, groups: CoincidenceGroups):
         const pts = e.type === "point" ? [e.id] : definingPoints(e);
         for (const pid of pts) {
           const p = ptv(s, pid);
-          add({ kind: "coordX", p: pid, v: vals[vi++] ?? p.x });
-          add({ kind: "coordY", p: pid, v: vals[vi++] ?? p.y });
+          add({ kind: "coordX", p: pid, v: vals[vi++] ?? p.x, soft: true });
+          add({ kind: "coordY", p: pid, v: vals[vi++] ?? p.y, soft: true });
         }
-        if (e.type === "circle") add({ kind: "radius", g: e.id, v: vals[vi++] ?? e.r });
+        if (e.type === "circle") add({ kind: "radius", g: e.id, v: vals[vi++] ?? e.r, soft: true });
       }
       return out;
     }

@@ -40,6 +40,8 @@ export function indexParams(p: SolverParams): ParamIndex {
 
 export interface Residual {
   owner: string;
+  /** The constraint it came from (absent for implicit rules). */
+  id?: string;
   /** Parameter indices this residual depends on. */
   deps: number[];
   /** Evaluate all components. */
@@ -90,6 +92,7 @@ export function buildResiduals(pi: ParamIndex, cons: SolverConstraint[]): Residu
 
   for (const c of cons) {
     const o = c.owner;
+    const first = out.length;
     switch (c.kind) {
       case "coincident": {
         const a = P(c.a);
@@ -327,6 +330,7 @@ export function buildResiduals(pi: ParamIndex, cons: SolverConstraint[]): Residu
         break;
       }
     }
+    for (let i = first; i < out.length; i++) out[i].id = c.id;
   }
   return out;
 }

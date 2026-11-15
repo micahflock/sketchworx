@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { applyCommand } from "../src/model/editor";
 import type { Editor } from "../src/model/editor";
+import { addRelationCmd } from "../src/model/relations";
 import { activeSketch, createDoc } from "../src/model/sketch";
 import type { Doc, Id } from "../src/model/types";
 import { buildSolverInput } from "../src/solver/build";
@@ -150,6 +151,56 @@ describe("solver fixtures", () => {
     const r = solve(doc);
     expect(r.ok).toBe(false);
     expect(r.conflicts.length).toBeGreaterThan(0);
+  });
+
+  it("Fix on geometry that is already defined is not over-defining", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      const lines = buildLoop(ed, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 60 },
+        { x: 0, y: 60 },
+      ], false);
+      ed.addRelation({ type: "horizontal", refs: [lines[0].line, lines[2].line] });
+      ed.addRelation({ type: "vertical", refs: [lines[1].line, lines[3].line] });
+      fixFirstCorner(ed, lines);
+      // The bottom edge is horizontal from a fixed corner: only its length is free. Fixing it,
+      // then the top edge (now fully determined), pins little or nothing new.
+      addRelationCmd(ed, "fix", [lines[0].line]);
+      addRelationCmd(ed, "fix", [lines[2].line]);
+    });
+    const r = solve(doc);
+    expect(r.ok).toBe(true);
+    expect(r.conflicts).toEqual([]);
+    expect(r.redundant).toEqual([]);
+    expect(r.dof).toBe(0);
+    expect(Object.values(r.entityStatus)).not.toContain("over");
+  });
+
+  it("a relation that agrees with Fixed geometry is not over-defining", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      const l = addLine(ed, { x: 10, y: 20 }, { x: 90, y: 20 });
+      addRelationCmd(ed, "fix", [l.line]);
+      ed.addRelation({ type: "horizontal", refs: [l.line] });
+    });
+    const r = solve(doc);
+    expect(r.ok).toBe(true);
+    expect([...r.conflicts, ...r.redundant]).toEqual([]);
+    expect(r.dof).toBe(0);
+  });
+
+  it("Fix still holds against a relation that would move it", () => {
+    const doc = applyCommand(createDoc(), (ed) => {
+      const l = addLine(ed, { x: 10, y: 20 }, { x: 90, y: 25 });
+      addRelationCmd(ed, "fix", [l.line]);
+      ed.addRelation({ type: "horizontal", refs: [l.line] });
+    });
+    const r = solve(doc);
+    expect(r.conflicts.length + r.redundant.length).toBeGreaterThan(0);
+    const byId = new Map(r.params.points.map((q) => [q.id, q]));
+    const l = Object.values(r.s.entities).find((e) => e.type === "line")! as { p1: Id; p2: Id };
+    expect(byId.get(l.p1)!.y).toBeCloseTo(20, 6);
+    expect(byId.get(l.p2)!.y).toBeCloseTo(25, 6);
   });
 
   it("is deterministic", () => {

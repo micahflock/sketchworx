@@ -2,6 +2,17 @@
 
 Running log of the Constraint Sketcher build (see the build spec). Newest first within each milestone.
 
+## Fix never over-defines ✅
+
+- Fixing geometry that other relations already define (a fully defined line, the top of a fixed H/V
+  rectangle) no longer turns the sketch Over Defined. Fix pins are soft solver constraints (`soft` in
+  `src/solver/types.ts`): after the first solve pass, each pin that holds and adds no rank to the other
+  constraints (and the pins kept before it) is left out (`dependentSoft` in `src/solver/analysis.ts`), so
+  the redundancy diagnosis in pass 2 never sees it. Fixing on top of other relations frees nothing.
+- A Fix still wins against a relation or dimension that would move it: an inconsistent pin is kept and the
+  conflict is reported as before. A relation that agrees with Fixed geometry (Horizontal on a Fixed
+  horizontal line) is accepted, with the Fix giving way.
+
 ## Toolbar icons: redrawn from a CAD survey ✅
 
 - 19 icons in `src/ui/icons.tsx` redrawn after comparing each command with SolidWorks, Fusion, Creo, NX and
